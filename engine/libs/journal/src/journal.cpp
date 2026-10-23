@@ -227,7 +227,7 @@ std::size_t prune(const std::filesystem::path& root, std::int64_t unix_seconds, 
         const std::string name = entry.path().filename().string();
         if (entry.is_directory() && name.size() == 10 && name[4] == '-' && name < oldest_kept) {
             std::filesystem::remove_all(entry.path(), ec);
-            removed += ec ? 0 : 1;
+            removed += ec ? 0U : 1U;
         }
     }
     return removed;

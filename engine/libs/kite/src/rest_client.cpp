@@ -347,7 +347,8 @@ asio::awaitable<std::expected<std::string, KiteError>> RestClient::request(http:
 
     beast::ssl_stream<beast::tcp_stream> stream(executor, *tls_);
     // SNI: the server needs the host name to pick its certificate.
-    if (SSL_set_tlsext_host_name(stream.native_handle(), host_.c_str()) != 1) {
+    if (SSL_ctrl(stream.native_handle(), SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name,
+                 const_cast<char*>(host_.c_str())) != 1) {
         co_return std::unexpected(error(Code::Tls, "could not set SNI host name"));
     }
     // Verify the certificate is for this host, not just signed by a trusted CA.

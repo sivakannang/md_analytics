@@ -159,7 +159,8 @@ asio::awaitable<KiteWebSocket::Outcome> KiteWebSocket::session_once(const Sessio
     }
 
     websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(executor_, *tls_);
-    if (SSL_set_tlsext_host_name(ws.next_layer().native_handle(), config_.host.c_str()) != 1) {
+    if (SSL_ctrl(ws.next_layer().native_handle(), SSL_CTRL_SET_TLSEXT_HOSTNAME,
+                 TLSEXT_NAMETYPE_host_name, const_cast<char*>(config_.host.c_str())) != 1) {
         handlers_.on_state(WsState::Disconnected, "cannot set SNI");
         co_return Outcome::Retry;
     }

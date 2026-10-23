@@ -57,8 +57,8 @@ TEST(LastQuoteStoreTest, KeepsTheLatestMessagePerInstrumentAndType) {
                     .load([&](std::uint32_t type, std::span<const std::byte> payload) {
                         depths +=
                             messages::decode<messages::DepthSnapshot>(type, payload).has_value()
-                                ? 1
-                                : 0;
+                                ? 1U
+                                : 0U;
                     })
                     .has_value());
     EXPECT_EQ(depths, 1u);

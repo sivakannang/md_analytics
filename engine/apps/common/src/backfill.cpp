@@ -1,5 +1,5 @@
 #include <chrono>
-#include <cstdio>
+#include <format>
 
 #include <mda/apps/backfill.hpp>
 
@@ -23,13 +23,9 @@ std::string ist_text(std::int64_t unix_seconds) {
     const auto day = std::chrono::floor<std::chrono::days>(local);
     const std::chrono::year_month_day ymd{day};
     const std::chrono::hh_mm_ss hms{local - day};
-    char text[32];
-    std::snprintf(text, sizeof text, "%04d-%02u-%02u %02ld:%02ld:%02ld",
-                  static_cast<int>(ymd.year()), static_cast<unsigned>(ymd.month()),
-                  static_cast<unsigned>(ymd.day()), static_cast<long>(hms.hours().count()),
-                  static_cast<long>(hms.minutes().count()),
-                  static_cast<long>(hms.seconds().count()));
-    return text;
+    return std::format("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", static_cast<int>(ymd.year()),
+                       static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()),
+                       hms.hours().count(), hms.minutes().count(), hms.seconds().count());
 }
 
 std::vector<bars::Bar> to_bars(core::InstrumentId id, const std::vector<kite::Candle>& candles,

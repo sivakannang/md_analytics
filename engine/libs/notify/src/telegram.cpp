@@ -84,7 +84,8 @@ asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(
         co_return network("resolve");
     }
     beast::ssl_stream<beast::tcp_stream> stream(executor, *tls_);
-    if (SSL_set_tlsext_host_name(stream.native_handle(), options_.host.c_str()) != 1) {
+    if (SSL_ctrl(stream.native_handle(), SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name,
+                 const_cast<char*>(options_.host.c_str())) != 1) {
         co_return std::unexpected(TelegramError{.description = "could not set SNI"});
     }
     stream.set_verify_callback(asio::ssl::host_name_verification(options_.host));

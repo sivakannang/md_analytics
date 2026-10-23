@@ -84,7 +84,7 @@ jobs:
         if: failure()
         run: |
           log=build/${{ matrix.preset }}/CMakeFiles/CMakeConfigureLog.yaml
-          [ -f "$log" ] && grep -n -B2 -A40 'result: [1-9]' "$log" | tail -200 || true
+          [ -f "$log" ] && grep -n -B60 'exitCode: [1-9]' "$log" | tail -200 || true
 
       - name: Build
         # -k 0: report every failing file, not just the first.

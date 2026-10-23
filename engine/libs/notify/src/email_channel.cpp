@@ -149,7 +149,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
         co_return network(Stage::Connect);
     }
     beast::ssl_stream<beast::tcp_stream> stream(executor, *tls_);
-    if (SSL_set_tlsext_host_name(stream.native_handle(), options_.host.c_str()) != 1) {
+    if (SSL_ctrl(stream.native_handle(), SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name,
+                 const_cast<char*>(options_.host.c_str())) != 1) {
         co_return SendResult{.outcome = SendOutcome::Retry,
                              .error = "smtp connect: could not set SNI"};
     }

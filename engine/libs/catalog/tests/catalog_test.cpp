@@ -89,7 +89,8 @@ protected:
 
     std::vector<std::string> symbols(std::string_view query, std::size_t limit = 20) {
         std::vector<std::string> out;
-        for (const auto& info : search(db_, query, limit).value()) {
+        const auto found = search(db_, query, limit);
+        for (const auto& info : found.value()) {
             out.push_back(info.exchange + ":" + info.trading_symbol);
         }
         return out;

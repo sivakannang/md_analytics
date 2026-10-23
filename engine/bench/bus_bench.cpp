@@ -31,6 +31,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -76,7 +77,11 @@ void prefer_performance_cores() {
 
 struct Pipe {
     int fds[2] = {-1, -1};
-    Pipe() { (void)::pipe(fds); }
+    Pipe() {
+        if (::pipe(fds) != 0) {
+            std::abort();
+        }
+    }
     ~Pipe() {
         ::close(fds[0]);
         ::close(fds[1]);
