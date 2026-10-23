@@ -13,6 +13,8 @@ project(md_analytics
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# No C++20 modules: skip the clang-scan-deps step CMake otherwise adds for Clang.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MDA_BUILD_TESTS "Build unit tests" ON)

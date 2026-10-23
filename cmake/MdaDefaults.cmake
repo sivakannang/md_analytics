@@ -22,13 +22,14 @@ set(_mda_warnings
 # GCC only:
 # - -Wextra flags designated initialisers that leave members out; we rely on those being
 #   value-initialised, and Clang doesn't warn about them.
-# - -Wnull-dereference and -Wfree-nonheap-object misfire at -O2 on code inlined from
-#   Boost.Asio/Beast and std::expected (GCC 14), so they can't be errors there.
+# - -Wnull-dereference, -Wfree-nonheap-object and -Wmismatched-new-delete misfire at -O2
+#   on code inlined from Boost.Asio/Beast (coroutine frames) and std::expected (GCC 14).
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     list(APPEND _mda_warnings
         -Wno-missing-field-initializers
         -Wno-null-dereference
-        -Wno-free-nonheap-object)
+        -Wno-free-nonheap-object
+        -Wno-mismatched-new-delete)
 endif()
 
 # Older libc++ (Xcode 16 and earlier) keeps std::jthread and std::stop_token behind
