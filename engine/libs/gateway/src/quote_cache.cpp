@@ -89,7 +89,8 @@ void QuoteCache::update_analytics(const options::OptionAnalyticsMessage& analyti
     Entry& entry = entries_[id];
     options::OptionAnalyticsMessage incoming = analytics;
     incoming.header.sequence = entry.quote.analytics.header.sequence;  // compare the payload only
-    if (entry.quote.has_analytics && std::memcmp(&incoming, &entry.quote.analytics, sizeof incoming) == 0) {
+    if (entry.quote.has_analytics &&
+        std::memcmp(&incoming, &entry.quote.analytics, sizeof incoming) == 0) {
         return;
     }
     entry.quote.analytics = analytics;

@@ -25,7 +25,8 @@ inline constexpr int kMaxBackfillDaysPerRequest = 60;
 /// Kite candles -> bars (source Kite), dropping candles that start at or after `before`
 /// (the minute still forming). OI updates: 1 when OI differs from the previous candle's
 /// (OI buildup design §5; Kite has no update counts).
-[[nodiscard]] std::vector<bars::Bar> to_bars(core::InstrumentId id, const std::vector<kite::Candle>& candles,
+[[nodiscard]] std::vector<bars::Bar> to_bars(core::InstrumentId id,
+                                             const std::vector<kite::Candle>& candles,
                                              std::int64_t before);
 
 /// Mon–Fri 09:15–15:40 IST: past-day backfills wait until after it (CLAUDE.md).
@@ -48,7 +49,7 @@ struct BackfillWindow {
 
 /// ADR-0025: during market hours, today's minutes if there are none; otherwise the past
 /// `days` up to now if there are no past bars; nothing when the instrument has them.
-[[nodiscard]] std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage,
-                                                                 int days);
+[[nodiscard]] std::optional<BackfillWindow> auto_backfill_window(std::int64_t now,
+                                                                 BarCoverage coverage, int days);
 
 }  // namespace mda::apps

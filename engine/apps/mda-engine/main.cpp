@@ -18,28 +18,28 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
-#include <unordered_map>
-#include <unordered_set>
 #include <limits>
 #include <map>
 #include <optional>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <spdlog/spdlog.h>
 
-#include <mda/bars/event_clock.hpp>
 #include <mda/bars/bar_builder.hpp>
 #include <mda/bars/bar_store.hpp>
 #include <mda/bars/day_snapshot.hpp>
+#include <mda/bars/event_clock.hpp>
 #include <mda/bus/bus.hpp>
 #include <mda/bus/wait_strategy.hpp>
 #include <mda/core/timestamp.hpp>
 #include <mda/instruments/registry.hpp>
-#include <mda/options/chain_analytics.hpp>
 #include <mda/messages/circuit_limits.hpp>
 #include <mda/messages/depth_snapshot.hpp>
 #include <mda/messages/market_snapshot.hpp>
+#include <mda/options/chain_analytics.hpp>
 #include <mda/quotestore/last_quote_store.hpp>
 #include <mda/runtime/config.hpp>
 #include <mda/runtime/logging.hpp>
@@ -66,8 +66,8 @@ std::int64_t ist_midnight(std::int64_t now) {
 }
 
 /// The configured chains' options (nearest expiries from today) from the permanent registry.
-std::vector<options::ChainDefinition> chain_definitions(const runtime::Config& config,
-                                                        const instruments::InstrumentRegistry& registry) {
+std::vector<options::ChainDefinition> chain_definitions(
+    const runtime::Config& config, const instruments::InstrumentRegistry& registry) {
     const std::chrono::year_month_day today{std::chrono::floor<std::chrono::days>(
         std::chrono::sys_seconds{std::chrono::seconds{unix_now() + 19'800}})};
     std::vector<options::ChainDefinition> chains;
@@ -83,9 +83,10 @@ std::vector<options::ChainDefinition> chain_definitions(const runtime::Config& c
             const auto& k = instrument.key;
             if (k.kind == instruments::Kind::Option && k.underlying == chain.underlying &&
                 k.expiry >= today) {
-                by_expiry[k.expiry].push_back({.id = instrument.id,
-                                               .strike = k.strike,
-                                               .call = k.option_type == instruments::OptionType::Call});
+                by_expiry[k.expiry].push_back(
+                    {.id = instrument.id,
+                     .strike = k.strike,
+                     .call = k.option_type == instruments::OptionType::Call});
             }
         }
         options::ChainDefinition definition{.underlying = chain.underlying, .spot = spot};
@@ -176,7 +177,8 @@ int run(const runtime::Config& config) {
         for (const auto& bar : *latest) {
             std::int64_t day_volume = 0;
             if (volumes) {
-                if (const auto found = volumes->find(bar.header.instrument_id.value()); found != volumes->end()) {
+                if (const auto found = volumes->find(bar.header.instrument_id.value());
+                    found != volumes->end()) {
                     day_volume = found->second;
                 }
             }
@@ -206,14 +208,16 @@ int run(const runtime::Config& config) {
     std::unordered_set<std::uint32_t> quoted;
     auto last_quotes = quotestore::LastQuoteStore::open(config.engine.last_quotes_db);
     if (!last_quotes) {
-        spdlog::warn("last quotes: cannot open {}: {}; not saving them", config.engine.last_quotes_db.string(),
-                     last_quotes.error().message);
-    } else if (const auto loaded_quotes = last_quotes->load([&](std::uint32_t type, std::span<const std::byte> payload) {
-                   if (auto snapshot = messages::decode<messages::MarketSnapshot>(type, payload)) {
-                       analytics.on_snapshot(*snapshot);
-                       quoted.insert(snapshot->header.instrument_id.value());
-                   }
-               })) {
+        spdlog::warn("last quotes: cannot open {}: {}; not saving them",
+                     config.engine.last_quotes_db.string(), last_quotes.error().message);
+    } else if (const auto loaded_quotes =
+                   last_quotes->load([&](std::uint32_t type, std::span<const std::byte> payload) {
+                       if (auto snapshot =
+                               messages::decode<messages::MarketSnapshot>(type, payload)) {
+                           analytics.on_snapshot(*snapshot);
+                           quoted.insert(snapshot->header.instrument_id.value());
+                       }
+                   })) {
         spdlog::info("last quotes: {} saved messages loaded from {}", *loaded_quotes,
                      config.engine.last_quotes_db.string());
     }
@@ -240,8 +244,8 @@ int run(const runtime::Config& config) {
                 continue;
             }
             const auto previous = store->latest_before(id, day);
-            const auto snapshot =
-                bars::day_snapshot(*minutes, previous && *previous ? (*previous)->close : core::Price{});
+            const auto snapshot = bars::day_snapshot(
+                *minutes, previous && *previous ? (*previous)->close : core::Price{});
             analytics.on_snapshot(snapshot);
             if (last_quotes) {
                 last_quotes->remember(snapshot);
@@ -274,31 +278,32 @@ int run(const runtime::Config& config) {
     std::uint64_t written = 0;
     std::uint64_t written_at_summary = 0;
     while (!g_stop.load()) {
-        const auto result =
-            reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
-                if (auto snapshot = messages::decode<messages::MarketSnapshot>(type, payload)) {
-                    event_clock.on_event(snapshot->receive_ts.ns());
-                    if (first_full_minute == std::numeric_limits<std::int64_t>::max()) {
-                        const bool exchange = (snapshot->fields & messages::kFieldExchangeTime) != 0 &&
-                                              snapshot->exchange_ts.is_set();
-                        const std::int64_t at =
-                            (exchange ? snapshot->exchange_ts : snapshot->receive_ts).ns() / 1'000'000'000;
-                        first_full_minute = at - at % 60 + 60;
-                    }
-                    builder.on_snapshot(*snapshot);
-                    analytics.on_snapshot(*snapshot);
-                    if (last_quotes) {
-                        last_quotes->remember(*snapshot);
-                    }
-                    ++snapshots;
-                } else if (last_quotes) {
-                    if (auto depth = messages::decode<messages::DepthSnapshot>(type, payload)) {
-                        last_quotes->remember(*depth);
-                    } else if (auto limits = messages::decode<messages::CircuitLimits>(type, payload)) {
-                        last_quotes->remember(*limits);
-                    }
+        const auto result = reader->poll([&](bus::MsgType type,
+                                             std::span<const std::byte> payload) {
+            if (auto snapshot = messages::decode<messages::MarketSnapshot>(type, payload)) {
+                event_clock.on_event(snapshot->receive_ts.ns());
+                if (first_full_minute == std::numeric_limits<std::int64_t>::max()) {
+                    const bool exchange = (snapshot->fields & messages::kFieldExchangeTime) != 0 &&
+                                          snapshot->exchange_ts.is_set();
+                    const std::int64_t at =
+                        (exchange ? snapshot->exchange_ts : snapshot->receive_ts).ns() /
+                        1'000'000'000;
+                    first_full_minute = at - at % 60 + 60;
                 }
-            });
+                builder.on_snapshot(*snapshot);
+                analytics.on_snapshot(*snapshot);
+                if (last_quotes) {
+                    last_quotes->remember(*snapshot);
+                }
+                ++snapshots;
+            } else if (last_quotes) {
+                if (auto depth = messages::decode<messages::DepthSnapshot>(type, payload)) {
+                    last_quotes->remember(*depth);
+                } else if (auto limits = messages::decode<messages::CircuitLimits>(type, payload)) {
+                    last_quotes->remember(*limits);
+                }
+            }
+        });
         if (result.status == bus::PollStatus::Empty) {
             wait.idle();
         } else {
@@ -326,7 +331,8 @@ int run(const runtime::Config& config) {
             }
             option_results.clear();
             chain_summaries.clear();
-            analytics.compute(event_clock.now_seconds(core::Timestamp::now().ns()), option_results, chain_summaries);
+            analytics.compute(event_clock.now_seconds(core::Timestamp::now().ns()), option_results,
+                              chain_summaries);
             if (now >= next_full_publish) {
                 next_full_publish = now + std::chrono::seconds(15);
                 last_sent.clear();

@@ -19,12 +19,11 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
-
-#include <mda/core/instrument_id.hpp>
 #include <unordered_map>
 #include <vector>
 
 #include <mda/bars/bar.hpp>
+#include <mda/core/instrument_id.hpp>
 #include <mda/messages/market_snapshot.hpp>
 
 namespace mda::bars {
@@ -67,12 +66,12 @@ private:
     struct State {
         Bar bar{};  // the forming bar (valid when open)
         bool open = false;
-        std::int64_t last_volume = -1;  // highest cumulative day volume seen; -1 unknown
+        std::int64_t last_volume = -1;    // highest cumulative day volume seen; -1 unknown
         std::int64_t seeded_volume = -1;  // from seed(), until the first volume tick
         int session_end = -1;             // minute of day; -1 until first seen
-        core::Price last_close;         // last traded price seen (carried into OI-only bars)
-        std::int64_t last_oi = -1;      // -1 unknown
-        bool priced = false;            // the forming bar has a price
+        core::Price last_close;           // last traded price seen (carried into OI-only bars)
+        std::int64_t last_oi = -1;        // -1 unknown
+        bool priced = false;              // the forming bar has a price
     };
 
     void close(State& state);

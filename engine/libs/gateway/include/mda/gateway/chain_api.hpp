@@ -42,7 +42,8 @@ public:
                                                              SeenVersions& seen) const;
 
     /// The latest summary for one spot and expiry, if any.
-    [[nodiscard]] std::optional<options::ChainSummary> get(std::uint32_t spot, std::int32_t expiry_days) const;
+    [[nodiscard]] std::optional<options::ChainSummary> get(std::uint32_t spot,
+                                                           std::int32_t expiry_days) const;
 
 private:
     struct Entry {

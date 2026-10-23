@@ -101,7 +101,8 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                     "numeric instrument id and interval 1m|3m|5m|15m|30m|1h|1d expected");
             }
             const std::string token = token_of(request);
-            const auto user = co_await run_on(db_executor, [&] { return auth.authenticate(token); });
+            const auto user =
+                co_await run_on(db_executor, [&] { return auth.authenticate(token); });
             if (!user) {
                 co_return from_error(user.error());
             }
@@ -112,7 +113,8 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                     return core::Quantity{};
                 }
                 lookup->bind(1, *id);
-                if (lookup->step().value_or(storage::StepResult::Done) != storage::StepResult::Row) {
+                if (lookup->step().value_or(storage::StepResult::Done) !=
+                    storage::StepResult::Row) {
                     return core::Quantity{};
                 }
                 return core::Quantity(lookup->column_int64(0));
@@ -137,9 +139,11 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                     series.back().header.flags = bars::kBarForming;
                 }
                 const auto points = bars::classify_buildup_points(series, lot_size);
-                const auto first = std::ranges::find_if(series, [&](const bars::Bar& b) { return b.start >= from; });
+                const auto first = std::ranges::find_if(
+                    series, [&](const bars::Bar& b) { return b.start >= from; });
                 std::size_t begin = static_cast<std::size_t>(first - series.begin());
-                begin = std::max(begin, series.size() > kMaxBars ? series.size() - kMaxBars : std::size_t{0});  // the latest
+                begin = std::max(begin, series.size() > kMaxBars ? series.size() - kMaxBars
+                                                                 : std::size_t{0});  // the latest
                 json::array rows;
                 rows.reserve(series.size() - begin);
                 for (std::size_t i = begin; i < series.size(); ++i) {

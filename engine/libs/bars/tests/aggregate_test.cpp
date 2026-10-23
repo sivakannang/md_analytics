@@ -93,8 +93,9 @@ TEST(AggregateTest, OneMinuteIsUnchanged) {
 }
 
 TEST(AggregateTest, OiUpdateTimeIsTheLastKnownOneInTheBucket) {
-    std::vector<Bar> minutes{minute(ist(10, 0), 1, 1, 1, 1, 0, 100), minute(ist(10, 1), 1, 1, 1, 1, 0, 110),
-                             minute(ist(10, 2), 1, 1, 1, 1, 0, 110), minute(ist(10, 4), 1, 1, 1, 1, 0, 120)};
+    std::vector<Bar> minutes{
+        minute(ist(10, 0), 1, 1, 1, 1, 0, 100), minute(ist(10, 1), 1, 1, 1, 1, 0, 110),
+        minute(ist(10, 2), 1, 1, 1, 1, 0, 110), minute(ist(10, 4), 1, 1, 1, 1, 0, 120)};
     minutes[0].oi_update_offset = 10;
     minutes[1].oi_update_offset = 20;  // the last known one in 10:00–10:02
     minutes[3].oi_update_offset = 5;   // alone in its bucket, which starts a minute earlier

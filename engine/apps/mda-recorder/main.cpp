@@ -19,9 +19,8 @@
 #include <optional>
 #include <thread>
 
-#include <unistd.h>
-
 #include <spdlog/spdlog.h>
+#include <unistd.h>
 
 #include <mda/bus/bus.hpp>
 #include <mda/bus/wait_strategy.hpp>
@@ -43,12 +42,14 @@ void on_signal(int) {
 }
 
 std::int64_t unix_now() {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
 std::int64_t unix_now_ns() {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
 
@@ -59,7 +60,8 @@ std::optional<bus::Reader> attach(const std::string& name) {
         if (auto reader = bus::Reader::attach(name, {.name = "mda-recorder"})) {
             return std::move(*reader);
         } else if (!reported) {
-            spdlog::warn("bus '{}' not available ({}); waiting for mda-feedd", name, bus::to_string(reader.error()));
+            spdlog::warn("bus '{}' not available ({}); waiting for mda-feedd", name,
+                         bus::to_string(reader.error()));
             reported = true;
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -77,8 +79,8 @@ void keep_instruments(const runtime::Config& config, const std::filesystem::path
     if (!std::filesystem::exists(source, ec)) {
         return;
     }
-    if (std::filesystem::exists(copy, ec) &&
-        std::filesystem::last_write_time(copy, ec) >= std::filesystem::last_write_time(source, ec)) {
+    if (std::filesystem::exists(copy, ec) && std::filesystem::last_write_time(copy, ec) >=
+                                                 std::filesystem::last_write_time(source, ec)) {
         return;
     }
     std::filesystem::create_directories(day, ec);
@@ -92,8 +94,9 @@ void keep_instruments(const runtime::Config& config, const std::filesystem::path
 
 /// The status file the gateway reads; written to a temporary name and renamed, so a reader
 /// never sees half a file.
-void write_status(const std::filesystem::path& path, std::uint64_t gaps_today, std::uint64_t records,
-                  std::uint64_t bytes, const std::filesystem::path& writing) {
+void write_status(const std::filesystem::path& path, std::uint64_t gaps_today,
+                  std::uint64_t records, std::uint64_t bytes,
+                  const std::filesystem::path& writing) {
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     const auto temporary = path.string() + ".tmp";
@@ -105,8 +108,9 @@ void write_status(const std::filesystem::path& path, std::uint64_t gaps_today, s
                  "{\"time\":%lld,\"pid\":%d,\"gaps_today\":%llu,\"records_last_minute\":%llu,"
                  "\"bytes_last_minute\":%llu,\"writing\":\"%s\"}\n",
                  static_cast<long long>(unix_now()), static_cast<int>(getpid()),
-                 static_cast<unsigned long long>(gaps_today), static_cast<unsigned long long>(records),
-                 static_cast<unsigned long long>(bytes), writing.filename().string().c_str());
+                 static_cast<unsigned long long>(gaps_today),
+                 static_cast<unsigned long long>(records), static_cast<unsigned long long>(bytes),
+                 writing.filename().string().c_str());
     std::fclose(file);
     std::filesystem::rename(temporary, path, ec);
 }
@@ -117,8 +121,10 @@ int run(const runtime::Config& config) {
         return 0;
     }
     const auto& root = config.recorder.journal_dir;
-    if (const std::size_t pruned = journal::prune(root, unix_now(), config.recorder.keep_days); pruned > 0) {
-        spdlog::info("journal: {} day folders older than {} days deleted", pruned, config.recorder.keep_days);
+    if (const std::size_t pruned = journal::prune(root, unix_now(), config.recorder.keep_days);
+        pruned > 0) {
+        spdlog::info("journal: {} day folders older than {} days deleted", pruned,
+                     config.recorder.keep_days);
     }
     auto reader = attach(config.md_bus.name);
     if (!reader) {
@@ -137,7 +143,8 @@ int run(const runtime::Config& config) {
             if (auto closed = writer->close(); !closed) {
                 spdlog::error("journal: {}", closed.error());
             }
-            spdlog::info("journal: {} closed ({} MB)", current.string(), writer->size() / (1024 * 1024));
+            spdlog::info("journal: {} closed ({} MB)", current.string(),
+                         writer->size() / (1024 * 1024));
             writer.reset();
         }
         auto opened = journal::Writer::open(path);
@@ -149,7 +156,8 @@ int run(const runtime::Config& config) {
         current = path;
         spdlog::info("journal: writing {}", path.string());
         keep_instruments(config, path.parent_path());
-        if (const std::size_t pruned = journal::prune(root, unix_now(), config.recorder.keep_days); pruned > 0) {
+        if (const std::size_t pruned = journal::prune(root, unix_now(), config.recorder.keep_days);
+            pruned > 0) {
             spdlog::info("journal: {} old day folders deleted", pruned);
         }
         return true;
@@ -171,21 +179,22 @@ int run(const runtime::Config& config) {
     auto next_second = Clock::now();
     auto next_minute = Clock::now() + std::chrono::minutes(1);
     while (!g_stop.load()) {
-        const auto result = reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
-            if ((type != raw && type != status) || !writer) {
-                return;
-            }
-            if (auto done = writer->append(type, payload); !done) {
-                if (!write_failed) {
-                    spdlog::error("journal: {}", done.error());
-                    write_failed = true;
+        const auto result =
+            reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+                if ((type != raw && type != status) || !writer) {
+                    return;
                 }
-                return;
-            }
-            write_failed = false;
-            ++records;
-            bytes += payload.size();
-        });
+                if (auto done = writer->append(type, payload); !done) {
+                    if (!write_failed) {
+                        spdlog::error("journal: {}", done.error());
+                        write_failed = true;
+                    }
+                    return;
+                }
+                write_failed = false;
+                ++records;
+                bytes += payload.size();
+            });
         if (result.status == bus::PollStatus::Empty) {
             wait.idle();
         } else {
@@ -193,9 +202,11 @@ int run(const runtime::Config& config) {
             if (result.status == bus::PollStatus::Lapped) {
                 ++gaps;
                 ++gaps_today;
-                spdlog::warn("journal: lapped on '{}'; {} bytes lost", config.md_bus.name, result.lost_bytes);
+                spdlog::warn("journal: lapped on '{}'; {} bytes lost", config.md_bus.name,
+                             result.lost_bytes);
                 if (writer) {
-                    (void)writer->append_gap({.time_ns = unix_now_ns(), .lost_bytes = result.lost_bytes});
+                    (void)writer->append_gap(
+                        {.time_ns = unix_now_ns(), .lost_bytes = result.lost_bytes});
                 }
             }
         }
@@ -212,7 +223,8 @@ int run(const runtime::Config& config) {
                 if (writer) {
                     keep_instruments(config, current.parent_path());
                 }
-                spdlog::info("summary: {} records, {} KB in the last minute; {} gaps", records, bytes / 1024, gaps);
+                spdlog::info("summary: {} records, {} KB in the last minute; {} gaps", records,
+                             bytes / 1024, gaps);
                 if (current.parent_path() != gaps_day) {
                     gaps_day = current.parent_path();  // a new IST day: its own gap count
                     gaps_today = 0;
@@ -239,7 +251,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     runtime::setup_logging("mda-recorder", config->logging);
-    spdlog::info("mda-recorder starting (config {}, log level {})", config->source.string(), config->logging.level);
+    spdlog::info("mda-recorder starting (config {}, log level {})", config->source.string(),
+                 config->logging.level);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     const int code = run(*config);

@@ -6,12 +6,11 @@
 #include <future>
 #include <string>
 
-#include <unistd.h>
-
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/use_future.hpp>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <mda/gateway/http.hpp>
 #include <mda/gateway/static_site.hpp>
@@ -52,7 +51,8 @@ TEST_F(StaticSiteTest, ServesPagesAndAssets) {
     EXPECT_EQ(index.body(), "<!doctype html><title>app</title>");
     EXPECT_EQ(index[http::field::content_type], "text/html; charset=utf-8");
     EXPECT_EQ(index[http::field::cache_control], "no-cache");
-    EXPECT_NE(index[http::field::content_security_policy].find("default-src 'self'"), std::string::npos);
+    EXPECT_NE(index[http::field::content_security_policy].find("default-src 'self'"),
+              std::string::npos);
     EXPECT_EQ(index["X-Frame-Options"], "DENY");
     EXPECT_EQ(index[http::field::x_content_type_options], "nosniff");
 
@@ -101,9 +101,10 @@ TEST_F(StaticSiteTest, AnswersHeadRefusesOtherMethodsAndExplainsAMissingBuild) {
 
 TEST(RouterFallbackTest, SendsOnlyNonApiPathsToTheFallback) {
     Router router;
-    router.add(http::verb::get, "/api/v1/ping", [](const Request&, const PathParams&) -> asio::awaitable<Response> {
-        co_return success("pong");
-    });
+    router.add(http::verb::get, "/api/v1/ping",
+               [](const Request&, const PathParams&) -> asio::awaitable<Response> {
+                   co_return success("pong");
+               });
     router.set_fallback([](const Request&, const PathParams&) -> asio::awaitable<Response> {
         Response response{http::status::ok, 11};
         response.body() = "page";
@@ -111,7 +112,8 @@ TEST(RouterFallbackTest, SendsOnlyNonApiPathsToTheFallback) {
     });
     asio::io_context io;
     const auto run = [&](std::string target) {
-        const Request request = get(std::move(target));  // dispatch keeps a reference: keep it alive
+        const Request request =
+            get(std::move(target));  // dispatch keeps a reference: keep it alive
         auto future = asio::co_spawn(io, router.dispatch(request), asio::use_future);
         io.restart();
         io.run();
@@ -121,7 +123,8 @@ TEST(RouterFallbackTest, SendsOnlyNonApiPathsToTheFallback) {
     EXPECT_EQ(run("/chain").body(), "page");
     const Response api_missing = run("/api/v1/nope");
     EXPECT_EQ(api_missing.result(), http::status::not_found);
-    EXPECT_NE(api_missing.body().find("NotFoundException"), std::string::npos);  // JSON, not the page
+    EXPECT_NE(api_missing.body().find("NotFoundException"),
+              std::string::npos);  // JSON, not the page
 }
 
 }  // namespace

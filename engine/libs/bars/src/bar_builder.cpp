@@ -10,7 +10,8 @@ constexpr std::int64_t kNanos = 1'000'000'000;
 
 // Receive time can trail the exchange-time minute by a little; it is never before it.
 std::uint16_t oi_update_offset(std::int64_t received, std::int64_t start) {
-    return static_cast<std::uint16_t>(std::clamp<std::int64_t>(received - start, 0, kNoOiUpdateTime - 1));
+    return static_cast<std::uint16_t>(
+        std::clamp<std::int64_t>(received - start, 0, kNoOiUpdateTime - 1));
 }
 
 }  // namespace
@@ -36,10 +37,12 @@ void BarBuilder::on_snapshot(const messages::MarketSnapshot& s) {
 
     State& state = states_[id];
     if (state.session_end < 0) {
-        const bool derivative = options_.is_derivative && options_.is_derivative(s.header.instrument_id);
+        const bool derivative =
+            options_.is_derivative && options_.is_derivative(s.header.instrument_id);
         state.session_end = derivative ? options_.derivatives_session_end : options_.session_end;
     }
-    const bool in_session = minute_of_day >= options_.session_start && minute_of_day < state.session_end;
+    const bool in_session =
+        minute_of_day >= options_.session_start && minute_of_day < state.session_end;
     if (state.open && minute != state.bar.start) {
         if (minute < state.bar.start) {
             return;  // a late tick from a minute already closed: ignored

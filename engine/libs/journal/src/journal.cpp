@@ -30,14 +30,16 @@ std::array<std::byte, kHeaderSize> file_header() {
 }
 
 /// Offset just past the last complete record (the file must start with a valid header).
-std::expected<std::uint64_t, std::string> valid_end(std::FILE* file, const std::filesystem::path& path) {
+std::expected<std::uint64_t, std::string> valid_end(std::FILE* file,
+                                                    const std::filesystem::path& path) {
     std::array<std::byte, kHeaderSize> header{};
     if (std::fseek(file, 0, SEEK_END) != 0) {
         return std::unexpected(errno_text("seek", path));
     }
     const long size = std::ftell(file);
     std::fseek(file, 0, SEEK_SET);
-    if (size < static_cast<long>(kHeaderSize) || std::fread(header.data(), 1, header.size(), file) != header.size() ||
+    if (size < static_cast<long>(kHeaderSize) ||
+        std::fread(header.data(), 1, header.size(), file) != header.size() ||
         std::memcmp(header.data(), kMagic.data(), kMagic.size()) != 0) {
         return std::unexpected(path.string() + ": not a journal file");
     }
@@ -106,7 +108,8 @@ std::expected<Writer, std::string> Writer::open(const std::filesystem::path& pat
     return Writer(path, file, size);
 }
 
-std::expected<void, std::string> Writer::append(std::uint32_t type, std::span<const std::byte> payload) {
+std::expected<void, std::string> Writer::append(std::uint32_t type,
+                                                std::span<const std::byte> payload) {
     if (!file_) {
         return std::unexpected("journal closed");
     }
@@ -193,7 +196,8 @@ std::filesystem::path day_dir(const std::filesystem::path& root, std::int64_t un
     const std::chrono::sys_seconds local{std::chrono::seconds{unix_seconds + kIst}};
     const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(local)};
     return root / (std::to_string(static_cast<int>(ymd.year())) + "-" +
-                   two_digits(static_cast<unsigned>(ymd.month())) + "-" + two_digits(static_cast<unsigned>(ymd.day())));
+                   two_digits(static_cast<unsigned>(ymd.month())) + "-" +
+                   two_digits(static_cast<unsigned>(ymd.day())));
 }
 
 std::filesystem::path hour_file(const std::filesystem::path& root, std::int64_t unix_seconds) {
@@ -215,7 +219,8 @@ std::vector<std::filesystem::path> hour_files(const std::filesystem::path& day) 
 
 std::size_t prune(const std::filesystem::path& root, std::int64_t unix_seconds, int keep_days) {
     // Day folders are named YYYY-MM-DD, so names compare like dates.
-    const std::string oldest_kept = day_dir(root, unix_seconds - std::int64_t{keep_days} * 86'400).filename().string();
+    const std::string oldest_kept =
+        day_dir(root, unix_seconds - std::int64_t{keep_days} * 86'400).filename().string();
     std::size_t removed = 0;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {

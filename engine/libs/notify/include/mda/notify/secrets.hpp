@@ -20,9 +20,11 @@ struct NotifierSecrets {
     bool insecure_permissions = false;  ///< readable by group or others
 };
 
-[[nodiscard]] std::expected<NotifierSecrets, std::string> load_notifier_secrets(const std::filesystem::path& path);
+[[nodiscard]] std::expected<NotifierSecrets, std::string> load_notifier_secrets(
+    const std::filesystem::path& path);
 
 /// The same, from the file's text (tests).
-[[nodiscard]] std::expected<NotifierSecrets, std::string> parse_notifier_secrets(std::string_view text);
+[[nodiscard]] std::expected<NotifierSecrets, std::string> parse_notifier_secrets(
+    std::string_view text);
 
 }  // namespace mda::notify

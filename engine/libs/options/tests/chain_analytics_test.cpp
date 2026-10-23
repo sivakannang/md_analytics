@@ -17,12 +17,16 @@ constexpr auto kExpiry = 2026y / 10 / 27;
 constexpr double kForward = 22'660;
 constexpr double kSigma = 0.15;
 
-messages::MarketSnapshot snap(std::uint32_t id, double ltp, double prev_close, std::int64_t oi, std::int64_t volume) {
+messages::MarketSnapshot snap(std::uint32_t id, double ltp, double prev_close, std::int64_t oi,
+                              std::int64_t volume) {
     messages::MarketSnapshot s{};
     s.header = messages::make_header<messages::MarketSnapshot>(core::InstrumentId(id), 1);
-    s.fields = messages::kFieldLtp | messages::kFieldOhlc | messages::kFieldVolume | messages::kFieldOpenInterest;
-    s.ltp = core::Price::from_raw(static_cast<std::int64_t>(std::llround(ltp * core::Price::kScale)));
-    s.close = core::Price::from_raw(static_cast<std::int64_t>(std::llround(prev_close * core::Price::kScale)));
+    s.fields = messages::kFieldLtp | messages::kFieldOhlc | messages::kFieldVolume |
+               messages::kFieldOpenInterest;
+    s.ltp =
+        core::Price::from_raw(static_cast<std::int64_t>(std::llround(ltp * core::Price::kScale)));
+    s.close = core::Price::from_raw(
+        static_cast<std::int64_t>(std::llround(prev_close * core::Price::kScale)));
     s.oi = core::Quantity(oi);
     s.volume = core::Quantity(volume);
     return s;
@@ -40,7 +44,8 @@ protected:
                 // Calls OI rises above ATM, puts below: writers' walls.
                 const std::int64_t oi = call ? static_cast<std::int64_t>(strike - 22'000) * 100
                                              : static_cast<std::int64_t>(23'500 - strike) * 100;
-                analytics_.on_snapshot(snap(id, std::round(price * 20) / 20, price * 1.1, oi, 5'000));
+                analytics_.on_snapshot(
+                    snap(id, std::round(price * 20) / 20, price * 1.1, oi, 5'000));
                 ++id;
             }
         }
@@ -52,11 +57,17 @@ protected:
         for (const double strike : kStrikes) {
             for (const bool call : {true, false}) {
                 expiry.options.push_back(
-                    {.id = core::InstrumentId(id++), .strike = core::Price::from_raw(static_cast<std::int64_t>(strike) * core::Price::kScale), .call = call});
+                    {.id = core::InstrumentId(id++),
+                     .strike = core::Price::from_raw(static_cast<std::int64_t>(strike) *
+                                                     core::Price::kScale),
+                     .call = call});
             }
         }
-        expiry.options.push_back({.id = core::InstrumentId(999), .strike = core::Price::from_raw(230'000'000), .call = true});  // no quote
-        return ChainAnalytics({{.underlying = "NIFTY", .spot = core::InstrumentId(1), .expiries = {expiry}}});
+        expiry.options.push_back({.id = core::InstrumentId(999),
+                                  .strike = core::Price::from_raw(230'000'000),
+                                  .call = true});  // no quote
+        return ChainAnalytics(
+            {{.underlying = "NIFTY", .spot = core::InstrumentId(1), .expiries = {expiry}}});
     }
 
     static constexpr double kStrikes[] = {22'400, 22'500, 22'600, 22'700, 22'800, 22'900};
@@ -71,8 +82,8 @@ TEST_F(ChainAnalyticsTest, ImpliesTheForwardAndRecoversVolatility) {
     ASSERT_EQ(summaries.size(), 1u);
     const ChainSummary& s = summaries[0];
     EXPECT_NEAR(s.forward, kForward, 0.1);  // parity, despite spot 22640 (the basis)
-    EXPECT_EQ(s.atm_strike, 22'700);         // nearest the forward, not the spot
-    EXPECT_NEAR(s.atm_iv, kSigma, 0.002);    // prices were rounded to the 0.05 tick
+    EXPECT_EQ(s.atm_strike, 22'700);        // nearest the forward, not the spot
+    EXPECT_NEAR(s.atm_iv, kSigma, 0.002);   // prices were rounded to the 0.05 tick
     EXPECT_NEAR(s.years, (5 * 86'400 + 4.5 * 3600) / (365.0 * 86'400), 1e-9);
 
     ASSERT_EQ(options.size(), 12u);  // the unquoted strike is skipped
@@ -82,7 +93,8 @@ TEST_F(ChainAnalyticsTest, ImpliesTheForwardAndRecoversVolatility) {
         EXPECT_GT(r.vega, 0);
         EXPECT_LT(r.theta, 0);
     }
-    const auto call = std::ranges::find_if(options, [](const OptionResult& r) { return r.id == core::InstrumentId(106); });
+    const auto call = std::ranges::find_if(
+        options, [](const OptionResult& r) { return r.id == core::InstrumentId(106); });
     EXPECT_NEAR(call->delta, 0.4, 0.15);  // 22700 call, slightly out of the money
 }
 
@@ -105,13 +117,14 @@ TEST_F(ChainAnalyticsTest, SummarisesOpenInterest) {
 }
 
 TEST_F(ChainAnalyticsTest, ClassifiesBuildupAgainstYesterdaysOi) {
-    analytics_.set_prev_oi(core::InstrumentId(100), 1);           // OI up, price down (ltp < close*1.1)
+    analytics_.set_prev_oi(core::InstrumentId(100), 1);  // OI up, price down (ltp < close*1.1)
     analytics_.set_prev_oi(core::InstrumentId(101), 10'000'000);  // OI down, price down
     std::vector<OptionResult> options;
     std::vector<ChainSummary> summaries;
     analytics_.compute(kNow, options, summaries);
     const auto of = [&](std::uint32_t id) {
-        return *std::ranges::find_if(options, [&](const OptionResult& r) { return r.id == core::InstrumentId(id); });
+        return *std::ranges::find_if(
+            options, [&](const OptionResult& r) { return r.id == core::InstrumentId(id); });
     };
     EXPECT_EQ(of(100).buildup, Buildup::ShortBuildup);
     EXPECT_EQ(of(101).buildup, Buildup::LongUnwinding);
@@ -136,9 +149,17 @@ TEST(ChainAnalyticsUnits, YearsToExpiryHasAFloor) {
 }
 
 TEST(ChainAnalyticsUnits, SummaryMessageRoundTrips) {
-    const ChainSummary summary{.underlying = "BANKNIFTY", .spot = core::InstrumentId(9), .expiry = kExpiry,
-                               .forward = 54'800.5, .atm_strike = 54'800, .atm_iv = 0.14, .pcr = 0.8,
-                               .max_pain = 55'000, .years = 0.01, .call_oi = 5, .put_oi = 4};
+    const ChainSummary summary{.underlying = "BANKNIFTY",
+                               .spot = core::InstrumentId(9),
+                               .expiry = kExpiry,
+                               .forward = 54'800.5,
+                               .atm_strike = 54'800,
+                               .atm_iv = 0.14,
+                               .pcr = 0.8,
+                               .max_pain = 55'000,
+                               .years = 0.01,
+                               .call_oi = 5,
+                               .put_oi = 4};
     const ChainSummary back = from_message(to_message(summary));
     EXPECT_EQ(back.underlying, "BANKNIFTY");
     EXPECT_EQ(back.expiry, kExpiry);

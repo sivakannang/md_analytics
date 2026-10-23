@@ -32,8 +32,8 @@ struct Expected {
     const char* name;
     const char* signature;
 };
-constexpr Expected kProcesses[] = {{"feedd", "mda-feedd"},   {"engine", "mda-engine"},
-                                   {"gateway", "mda-gateway"}, {"notifier", "mda-notifier"},
+constexpr Expected kProcesses[] = {{"feedd", "mda-feedd"},       {"engine", "mda-engine"},
+                                   {"gateway", "mda-gateway"},   {"notifier", "mda-notifier"},
                                    {"recorder", "mda-recorder"}, {"web", "npm"}};
 
 std::int64_t unix_now() {
@@ -57,11 +57,16 @@ json::value maybe_i(const std::optional<std::int64_t>& v) {
 
 std::string_view feed_state_name(std::uint8_t state) {
     switch (static_cast<messages::FeedState>(state)) {
-        case messages::FeedState::Connecting: return "connecting";
-        case messages::FeedState::Connected: return "connected";
-        case messages::FeedState::Disconnected: return "disconnected";
-        case messages::FeedState::Stale: return "stale";
-        case messages::FeedState::AuthExpired: return "auth_expired";
+        case messages::FeedState::Connecting:
+            return "connecting";
+        case messages::FeedState::Connected:
+            return "connected";
+        case messages::FeedState::Disconnected:
+            return "disconnected";
+        case messages::FeedState::Stale:
+            return "stale";
+        case messages::FeedState::AuthExpired:
+            return "auth_expired";
     }
     return "unknown";
 }
@@ -108,9 +113,7 @@ bool SystemMonitor::market_hours(std::int64_t unix_seconds) {
 }
 
 SystemMonitor::SystemMonitor(FeedMetrics& metrics, SystemMonitorOptions options)
-    : metrics_(&metrics)
-    , options_(std::move(options))
-    , counters_at_(Clock::now()) {
+    : metrics_(&metrics), options_(std::move(options)), counters_at_(Clock::now()) {
     counters_seen_ = metrics_->counters();
     if (options_.start_thread) {
         thread_ = std::jthread([this](const std::stop_token& stop) { run(stop); });
@@ -147,20 +150,23 @@ void SystemMonitor::sample() {
 
     // Machine.
     const sysmon::MachineStats machine = sysmon::machine_stats();
-    json::object machine_json{{"load1", machine.load1 ? json::value(*machine.load1) : json::value(nullptr)},
-                              {"cores", machine.cores},
-                              {"memory_used", maybe_u(machine.memory_used)},
-                              {"memory_total", maybe_u(machine.memory_total)},
-                              {"power", machine.power ? json::value(*machine.power) : json::value(nullptr)},
-                              {"battery_percent", machine.battery_percent ? json::value(*machine.battery_percent)
-                                                                          : json::value(nullptr)},
-                              {"uptime_s", maybe_i(machine.uptime_s)}};
+    json::object machine_json{
+        {"load1", machine.load1 ? json::value(*machine.load1) : json::value(nullptr)},
+        {"cores", machine.cores},
+        {"memory_used", maybe_u(machine.memory_used)},
+        {"memory_total", maybe_u(machine.memory_total)},
+        {"power", machine.power ? json::value(*machine.power) : json::value(nullptr)},
+        {"battery_percent",
+         machine.battery_percent ? json::value(*machine.battery_percent) : json::value(nullptr)},
+        {"uptime_s", maybe_i(machine.uptime_s)}};
     if (machine.power == "battery") {
         const int percent = machine.battery_percent.value_or(100);
-        check("machine", percent < 20 ? "bad" : "warn", "on battery (" + std::to_string(percent) + "%)");
+        check("machine", percent < 20 ? "bad" : "warn",
+              "on battery (" + std::to_string(percent) + "%)");
     }
 
-    // Processes, from tools/stack.sh's pid files; CPU % from the CPU time used since the last sample.
+    // Processes, from tools/stack.sh's pid files; CPU % from the CPU time used since the last
+    // sample.
     json::array processes;
     std::map<std::string, bool> running;
     for (const auto& [name, signature] : kProcesses) {
@@ -187,10 +193,15 @@ void SystemMonitor::sample() {
             row["started"] = maybe_i(stats->started);
             row["rss_bytes"] = rss;
             json::value percent = nullptr;
-            if (const auto seen = cpu_seen_.find(name); seen != cpu_seen_.end() && cpu >= seen->second.first) {
-                const auto wall = std::chrono::duration<double, std::nano>(now_steady - seen->second.second).count();
+            if (const auto seen = cpu_seen_.find(name);
+                seen != cpu_seen_.end() && cpu >= seen->second.first) {
+                const auto wall =
+                    std::chrono::duration<double, std::nano>(now_steady - seen->second.second)
+                        .count();
                 if (wall > 0) {
-                    percent = std::round(static_cast<double>(cpu - seen->second.first) / wall * 1000.0) / 10.0;
+                    percent =
+                        std::round(static_cast<double>(cpu - seen->second.first) / wall * 1000.0) /
+                        10.0;
                 }
             }
             row["cpu_percent"] = percent;
@@ -223,9 +234,10 @@ void SystemMonitor::sample() {
             check("disk", "warn", gb(space->free) + " free");
         }
     }
-    disk_json["files"] = json::object{{"bars_db", sysmon::size_of_file(options_.bars_db)},
-                                      {"app_db", sysmon::size_of_file(options_.app_db)},
-                                      {"last_quotes_db", sysmon::size_of_file(options_.last_quotes_db)}};
+    disk_json["files"] =
+        json::object{{"bars_db", sysmon::size_of_file(options_.bars_db)},
+                     {"app_db", sysmon::size_of_file(options_.app_db)},
+                     {"last_quotes_db", sysmon::size_of_file(options_.last_quotes_db)}};
     if (journal_at_ == Clock::time_point{} || now_steady - journal_at_ >= kJournalEvery) {
         journal_at_ = now_steady;
         journal_today_ = sysmon::size_of_folder(options_.journal_dir / admin::ist_day(now));
@@ -246,30 +258,42 @@ void SystemMonitor::sample() {
             }
             continue;
         }
-        json::object row{{"name", name}, {"available", true}, {"capacity", snapshot->capacity},
-                         {"writer_alive", snapshot->writer_alive}, {"writer_pid", snapshot->writer.pid}};
+        json::object row{{"name", name},
+                         {"available", true},
+                         {"capacity", snapshot->capacity},
+                         {"writer_alive", snapshot->writer_alive},
+                         {"writer_pid", snapshot->writer.pid}};
         json::value heartbeat_age = nullptr;
         if (snapshot->writer.pid != 0 && snapshot->writer.heartbeat_ns > 0) {
-            const std::int64_t age_ms = (now_ns - static_cast<std::int64_t>(snapshot->writer.heartbeat_ns)) / 1'000'000;
+            const std::int64_t age_ms =
+                (now_ns - static_cast<std::int64_t>(snapshot->writer.heartbeat_ns)) / 1'000'000;
             heartbeat_age = age_ms;
             if (snapshot->writer_alive && age_ms > 10'000) {
-                check("buses", "bad", name + " writer heartbeat " + std::to_string(age_ms / 1000) + " s old");
+                check("buses", "bad",
+                      name + " writer heartbeat " + std::to_string(age_ms / 1000) + " s old");
             } else if (snapshot->writer_alive && age_ms > 2'000) {
-                check("buses", "warn", name + " writer heartbeat " + std::to_string(age_ms / 1000) + " s old");
+                check("buses", "warn",
+                      name + " writer heartbeat " + std::to_string(age_ms / 1000) + " s old");
             }
         }
         row["heartbeat_age_ms"] = heartbeat_age;
         double bytes_per_s = 0;
         double messages_per_s = 0;
         if (const auto seen = bus_seen_.find(name); seen != bus_seen_.end()) {
-            const double seconds = std::chrono::duration<double>(now_steady - seen->second.at).count();
+            const double seconds =
+                std::chrono::duration<double>(now_steady - seen->second.at).count();
             if (seconds > 0 && snapshot->writer_stats.bytes >= seen->second.bytes &&
                 snapshot->writer_stats.messages >= seen->second.messages) {
-                bytes_per_s = static_cast<double>(snapshot->writer_stats.bytes - seen->second.bytes) / seconds;
-                messages_per_s = static_cast<double>(snapshot->writer_stats.messages - seen->second.messages) / seconds;
+                bytes_per_s =
+                    static_cast<double>(snapshot->writer_stats.bytes - seen->second.bytes) /
+                    seconds;
+                messages_per_s =
+                    static_cast<double>(snapshot->writer_stats.messages - seen->second.messages) /
+                    seconds;
             }
         }
-        bus_seen_[name] = {snapshot->writer_stats.bytes, snapshot->writer_stats.messages, now_steady};
+        bus_seen_[name] = {snapshot->writer_stats.bytes, snapshot->writer_stats.messages,
+                           now_steady};
         row["bytes_per_s"] = std::round(bytes_per_s);
         row["messages_per_s"] = std::round(messages_per_s);
         json::array readers;
@@ -300,12 +324,15 @@ void SystemMonitor::sample() {
             }
             const std::string who = name + " / " + reader.name;
             if (lag_pct > 60) {
-                check("buses", "bad", who + " lag " + std::to_string(static_cast<int>(lag_pct)) + "% of the ring");
+                check("buses", "bad",
+                      who + " lag " + std::to_string(static_cast<int>(lag_pct)) + "% of the ring");
             } else if (lag_pct > 25) {
-                check("buses", "warn", who + " lag " + std::to_string(static_cast<int>(lag_pct)) + "% of the ring");
+                check("buses", "warn",
+                      who + " lag " + std::to_string(static_cast<int>(lag_pct)) + "% of the ring");
             }
             if (reader.stats.laps > 0) {
-                check("buses", "warn", who + " was lapped " + std::to_string(reader.stats.laps) + " times");
+                check("buses", "warn",
+                      who + " was lapped " + std::to_string(reader.stats.laps) + " times");
             }
         }
         row["readers"] = std::move(readers);
@@ -315,7 +342,8 @@ void SystemMonitor::sample() {
 
     // Feed, engine and latency from the gateway's own bus readers.
     const FeedMetrics::Counters counters = metrics_->counters();
-    const double since = std::max(1e-3, std::chrono::duration<double>(now_steady - counters_at_).count());
+    const double since =
+        std::max(1e-3, std::chrono::duration<double>(now_steady - counters_at_).count());
     const auto per_s = [&](std::uint64_t now_count, std::uint64_t then_count) {
         return now_count >= then_count ? static_cast<double>(now_count - then_count) / since : 0.0;
     };
@@ -335,20 +363,23 @@ void SystemMonitor::sample() {
         check("feed", "bad", "feed " + std::string(state));
     }
     if (counters.reconnects > 0) {
-        check("feed", "warn", std::to_string(counters.reconnects) + " reconnects since mda-feedd started");
+        check("feed", "warn",
+              std::to_string(counters.reconnects) + " reconnects since mda-feedd started");
     }
-    json::object feed_json{{"state", counters.feed_state == 0 ? json::value(nullptr) : json::value(state)},
-                           {"subscribed", counters.subscribed},
-                           {"reconnects", counters.reconnects},
-                           {"ticks_per_s", std::round(ticks_per_s)},
-                           {"frames_per_s", std::round(per_s(counters.frames, counters_seen_.frames) * 10.0) / 10.0},
-                           {"last_tick_age_ms", last_tick_age}};
+    json::object feed_json{
+        {"state", counters.feed_state == 0 ? json::value(nullptr) : json::value(state)},
+        {"subscribed", counters.subscribed},
+        {"reconnects", counters.reconnects},
+        {"ticks_per_s", std::round(ticks_per_s)},
+        {"frames_per_s", std::round(per_s(counters.frames, counters_seen_.frames) * 10.0) / 10.0},
+        {"last_tick_age_ms", last_tick_age}};
     const LatencyHistogram::Summary latency = metrics_->take_latency();
     const LatencyHistogram::Summary exchange = metrics_->take_exchange_lag();
     if (latency.count > 0 && latency.p99 > 50'000) {
         check("latency", "bad", "feed → gateway p99 " + std::to_string(latency.p99 / 1000) + " ms");
     } else if (latency.count > 0 && latency.p99 > 5'000) {
-        check("latency", "warn", "feed → gateway p99 " + std::to_string(latency.p99 / 1000) + " ms");
+        check("latency", "warn",
+              "feed → gateway p99 " + std::to_string(latency.p99 / 1000) + " ms");
     }
     bars_seen_.emplace_back(now_steady, counters.bars_closed);
     while (bars_seen_.size() > 1 && now_steady - bars_seen_[1].first >= std::chrono::seconds(60)) {
@@ -360,7 +391,8 @@ void SystemMonitor::sample() {
     }
     json::object engine_json{
         {"bars_per_min", bars_per_min},
-        {"last_bar", counters.last_bar_start > 0 ? json::value(counters.last_bar_start) : json::value(nullptr)},
+        {"last_bar",
+         counters.last_bar_start > 0 ? json::value(counters.last_bar_start) : json::value(nullptr)},
         {"analytics_per_s", std::round(per_s(counters.analytics, counters_seen_.analytics))}};
     counters_seen_ = counters;
     counters_at_ = now_steady;
@@ -381,10 +413,12 @@ void SystemMonitor::sample() {
             const std::int64_t at = s.contains("time") ? s.at("time").to_number<std::int64_t>() : 0;
             recorder_json["status_age_s"] = now - at;
             if (now - at <= kRecorderStatusStale) {
-                const auto gaps = s.contains("gaps_today") ? s.at("gaps_today").to_number<std::int64_t>() : 0;
+                const auto gaps =
+                    s.contains("gaps_today") ? s.at("gaps_today").to_number<std::int64_t>() : 0;
                 recorder_json["gaps_today"] = gaps;
-                recorder_json["records_last_minute"] =
-                    s.contains("records_last_minute") ? s.at("records_last_minute") : json::value(nullptr);
+                recorder_json["records_last_minute"] = s.contains("records_last_minute")
+                                                           ? s.at("records_last_minute")
+                                                           : json::value(nullptr);
                 if (gaps > 0) {
                     check("recorder", "warn", std::to_string(gaps) + " gaps in today's journal");
                 }

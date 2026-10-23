@@ -24,7 +24,7 @@ enum class MessageType : std::uint32_t {
     DepthSnapshot = 3,
     FeedStatus = 4,
     CircuitLimits = 5,
-    Bar = 6,  ///< bars::Bar on the analytics bus (mda-engine)
+    Bar = 6,              ///< bars::Bar on the analytics bus (mda-engine)
     OptionAnalytics = 7,  ///< options::OptionAnalyticsMessage (mda-engine)
     ChainSummary = 8,     ///< options::ChainSummaryMessage (mda-engine)
 };

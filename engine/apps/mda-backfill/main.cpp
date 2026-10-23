@@ -142,13 +142,15 @@ int run(const runtime::Config& config, int days, const std::vector<std::string>&
     for (const auto& [id, token] : work) {
         std::vector<kite::Candle> all;
         bool ok = true;
-        for (std::int64_t from = first; from < now && ok; from += apps::kMaxBackfillDaysPerRequest * 86'400) {
-            const std::int64_t to = std::min(now, from + apps::kMaxBackfillDaysPerRequest * 86'400 - 1);
+        for (std::int64_t from = first; from < now && ok;
+             from += apps::kMaxBackfillDaysPerRequest * 86'400) {
+            const std::int64_t to =
+                std::min(now, from + apps::kMaxBackfillDaysPerRequest * 86'400 - 1);
             for (int attempt = 1;; ++attempt) {
                 std::this_thread::sleep_until(next_request);
                 next_request = Clock::now() + kRequestGap;
-                auto chunk = kite::run_sync(
-                    rest.historical(token, "minute", apps::ist_text(from), apps::ist_text(to), true));
+                auto chunk = kite::run_sync(rest.historical(token, "minute", apps::ist_text(from),
+                                                            apps::ist_text(to), true));
                 if (chunk) {
                     all.insert(all.end(), chunk->begin(), chunk->end());
                     break;

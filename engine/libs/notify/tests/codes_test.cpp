@@ -14,7 +14,8 @@ protected:
         EXPECT_TRUE(db_.migrate(appdb::migrations()).has_value());
         for (const char* name : {"asha", "ravi"}) {
             auto insert = db_.prepare(
-                "INSERT INTO users (username, password_hash, created_at, password_changed_at) VALUES (?1, 'x', 0, 0)");
+                "INSERT INTO users (username, password_hash, created_at, password_changed_at) "
+                "VALUES (?1, 'x', 0, 0)");
             insert->bind(1, std::string_view(name));
             EXPECT_TRUE(insert->run().has_value());
         }

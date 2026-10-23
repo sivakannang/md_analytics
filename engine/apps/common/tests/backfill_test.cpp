@@ -50,9 +50,11 @@ bars::Bar bar(std::uint32_t id, std::int64_t start) {
 
 TEST(BackfillTest, CoverageLooksAtTodayAndThePastDays) {
     auto store = bars::BarStore::open_in_memory().value();
-    ASSERT_TRUE(store.write(std::vector{bar(1, at(kThursday - 86'400, 15, 29)), bar(2, at(kThursday, 9, 15)),
-                                        bar(3, at(kThursday - 40 * 86'400, 10, 0))})
-                    .has_value());
+    ASSERT_TRUE(
+        store
+            .write(std::vector{bar(1, at(kThursday - 86'400, 15, 29)), bar(2, at(kThursday, 9, 15)),
+                               bar(3, at(kThursday - 40 * 86'400, 10, 0))})
+            .has_value());
     const std::int64_t now = at(kThursday, 22, 0);
     const auto one = bar_coverage(store, 1, now, 30).value();
     EXPECT_TRUE(one.past);
@@ -66,10 +68,11 @@ TEST(BackfillTest, CoverageLooksAtTodayAndThePastDays) {
 }
 
 TEST(BackfillTest, CandlesBecomeBackfilledBarsUpToTheFormingMinute) {
-    std::vector<kite::Candle> candles{{.start = 60, .close = core::Price::from_raw(10), .volume = 5, .oi = 100},
-                                      {.start = 120, .close = core::Price::from_raw(11), .volume = 6, .oi = 100},
-                                      {.start = 180, .close = core::Price::from_raw(12), .volume = 7, .oi = 120},
-                                      {.start = 240, .close = core::Price::from_raw(13), .volume = 8, .oi = 120}};
+    std::vector<kite::Candle> candles{
+        {.start = 60, .close = core::Price::from_raw(10), .volume = 5, .oi = 100},
+        {.start = 120, .close = core::Price::from_raw(11), .volume = 6, .oi = 100},
+        {.start = 180, .close = core::Price::from_raw(12), .volume = 7, .oi = 120},
+        {.start = 240, .close = core::Price::from_raw(13), .volume = 8, .oi = 120}};
     const auto bars = to_bars(core::InstrumentId(9), candles, 240);
     ASSERT_EQ(bars.size(), 3u);
     EXPECT_EQ(bars[0].source, bars::BarSource::Kite);

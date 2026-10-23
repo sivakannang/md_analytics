@@ -19,7 +19,8 @@ struct Recipient {
 
 /// A user's channels that may carry non-account messages: verified email, linked Telegram,
 /// both unless switched off.
-std::expected<std::vector<Recipient>, DbError> verified_channels(storage::Database& db, std::int64_t user_id) {
+std::expected<std::vector<Recipient>, DbError> verified_channels(storage::Database& db,
+                                                                 std::int64_t user_id) {
     auto query = db.prepare(
         "SELECT u.email, u.email_verified_at, e.enabled, t.address, t.enabled FROM users u "
         "LEFT JOIN user_channels e ON e.user_id = u.id AND e.channel = 'email' "
@@ -41,7 +42,8 @@ std::expected<std::vector<Recipient>, DbError> verified_channels(storage::Databa
         out.push_back({.user_id = user_id, .channel = "email", .address = query->column_text(0)});
     }
     if (!query->column_is_null(3) && !query->column_is_null(4) && query->column_int64(4) != 0) {
-        out.push_back({.user_id = user_id, .channel = "telegram", .address = query->column_text(3)});
+        out.push_back(
+            {.user_id = user_id, .channel = "telegram", .address = query->column_text(3)});
     }
     return out;
 }
@@ -75,7 +77,8 @@ std::expected<std::vector<Recipient>, DbError> route(storage::Database& db, cons
     if (n.type.starts_with("account.")) {
         std::vector<Recipient> out;
         if (n.email) {
-            out.push_back({.user_id = n.user_id.value_or(0), .channel = "email", .address = *n.email});
+            out.push_back(
+                {.user_id = n.user_id.value_or(0), .channel = "email", .address = *n.email});
         }
         return out;
     }
@@ -112,7 +115,8 @@ std::int64_t Outbox::backoff(int attempts) const {
 
 std::expected<std::size_t, DbError> Outbox::expire_stale(std::int64_t now) {
     auto update = db_->prepare(
-        "UPDATE notifications SET status = 'expired', email = NULL WHERE status = 'pending' AND created_at < ?1");
+        "UPDATE notifications SET status = 'expired', email = NULL WHERE status = 'pending' AND "
+        "created_at < ?1");
     if (!update) {
         return std::unexpected(update.error());
     }
@@ -127,7 +131,8 @@ std::expected<std::size_t, DbError> Outbox::dispatch(std::int64_t now) {
     std::vector<Pending> pending;
     {
         auto query = db_->prepare(
-            "SELECT id, user_id, type, email FROM notifications WHERE status = 'pending' ORDER BY id LIMIT 200");
+            "SELECT id, user_id, type, email FROM notifications WHERE status = 'pending' ORDER BY "
+            "id LIMIT 200");
         if (!query) {
             return std::unexpected(query.error());
         }
@@ -161,12 +166,16 @@ std::expected<std::size_t, DbError> Outbox::dispatch(std::int64_t now) {
         }
         for (const Recipient& r : *recipients) {
             auto insert = db_->prepare(
-                "INSERT INTO notification_deliveries (notification_id, user_id, channel, address, status, "
+                "INSERT INTO notification_deliveries (notification_id, user_id, channel, address, "
+                "status, "
                 "next_attempt_at) VALUES (?1, ?2, ?3, ?4, 'pending', ?5) ON CONFLICT DO NOTHING");
             if (!insert) {
                 return std::unexpected(insert.error());
             }
-            insert->bind(1, n.id).bind(3, std::string_view(r.channel)).bind(4, std::string_view(r.address)).bind(5, now);
+            insert->bind(1, n.id)
+                .bind(3, std::string_view(r.channel))
+                .bind(4, std::string_view(r.address))
+                .bind(5, now);
             if (r.user_id == 0) {
                 insert->bind_null(2);
             } else {
@@ -178,7 +187,8 @@ std::expected<std::size_t, DbError> Outbox::dispatch(std::int64_t now) {
             created += static_cast<std::size_t>(db_->changes());
         }
         // The address now lives in the deliveries only.
-        auto mark = db_->prepare("UPDATE notifications SET status = 'dispatched', email = NULL WHERE id = ?1");
+        auto mark = db_->prepare(
+            "UPDATE notifications SET status = 'dispatched', email = NULL WHERE id = ?1");
         if (!mark) {
             return std::unexpected(mark.error());
         }
@@ -193,8 +203,8 @@ std::expected<std::size_t, DbError> Outbox::dispatch(std::int64_t now) {
     return created;
 }
 
-std::expected<std::vector<Delivery>, DbError> Outbox::due(std::int64_t now, std::span<const std::string_view> channels,
-                                                          std::size_t limit) {
+std::expected<std::vector<Delivery>, DbError> Outbox::due(
+    std::int64_t now, std::span<const std::string_view> channels, std::size_t limit) {
     std::vector<Delivery> out;
     if (channels.empty()) {
         return out;
@@ -234,12 +244,14 @@ std::expected<std::vector<Delivery>, DbError> Outbox::due(std::int64_t now, std:
     }
 }
 
-std::expected<void, DbError> Outbox::record(const Delivery& delivery, const SendResult& result, std::int64_t now) {
+std::expected<void, DbError> Outbox::record(const Delivery& delivery, const SendResult& result,
+                                            std::int64_t now) {
     const int attempts = delivery.attempts + 1;
     const std::string error = result.error.substr(0, 300);
     if (result.outcome == SendOutcome::Sent) {
         auto update = db_->prepare(
-            "UPDATE notification_deliveries SET status = 'sent', attempts = ?2, sent_at = ?3, address = NULL, "
+            "UPDATE notification_deliveries SET status = 'sent', attempts = ?2, sent_at = ?3, "
+            "address = NULL, "
             "last_error = NULL WHERE id = ?1");
         if (!update) {
             return std::unexpected(update.error());
@@ -249,16 +261,20 @@ std::expected<void, DbError> Outbox::record(const Delivery& delivery, const Send
     }
     if (result.outcome == SendOutcome::Fail || attempts >= options_.max_attempts) {
         auto update = db_->prepare(
-            "UPDATE notification_deliveries SET status = 'failed', attempts = ?2, address = NULL, last_error = ?3 "
+            "UPDATE notification_deliveries SET status = 'failed', attempts = ?2, address = NULL, "
+            "last_error = ?3 "
             "WHERE id = ?1");
         if (!update) {
             return std::unexpected(update.error());
         }
-        update->bind(1, delivery.id).bind(2, static_cast<std::int64_t>(attempts)).bind(3, std::string_view(error));
+        update->bind(1, delivery.id)
+            .bind(2, static_cast<std::int64_t>(attempts))
+            .bind(3, std::string_view(error));
         return update->run();
     }
     auto update = db_->prepare(
-        "UPDATE notification_deliveries SET attempts = ?2, next_attempt_at = ?3, last_error = ?4 WHERE id = ?1");
+        "UPDATE notification_deliveries SET attempts = ?2, next_attempt_at = ?3, last_error = ?4 "
+        "WHERE id = ?1");
     if (!update) {
         return std::unexpected(update.error());
     }
@@ -292,8 +308,8 @@ boost::asio::awaitable<std::expected<RoundStats, DbError>> deliver_due(
         co_return std::unexpected(due.error());
     }
     for (const Delivery& delivery : *due) {
-        const auto channel =
-            std::ranges::find_if(channels, [&](const Channel* c) { return c->name() == delivery.channel; });
+        const auto channel = std::ranges::find_if(
+            channels, [&](const Channel* c) { return c->name() == delivery.channel; });
         const SendResult result = co_await (*channel)->send(delivery);
         if (auto recorded = outbox.record(delivery, result, now); !recorded) {
             co_return std::unexpected(recorded.error());
@@ -302,7 +318,8 @@ boost::asio::awaitable<std::expected<RoundStats, DbError>> deliver_due(
             ++stats.sent;
             continue;
         }
-        const bool last = result.outcome == SendOutcome::Fail || delivery.attempts + 1 >= outbox.max_attempts();
+        const bool last =
+            result.outcome == SendOutcome::Fail || delivery.attempts + 1 >= outbox.max_attempts();
         ++(last ? stats.failed : stats.retried);
         if (on_error) {
             on_error(delivery, result);

@@ -20,8 +20,8 @@
 namespace mda::notify {
 
 struct Alert {
-    std::string type;       ///< system.*
-    std::string payload;    ///< JSON object (templates.cpp)
+    std::string type;     ///< system.*
+    std::string payload;  ///< JSON object (templates.cpp)
     std::string dedup_key;
 };
 
@@ -35,20 +35,22 @@ class FeedAlerts {
 public:
     struct Options {
         std::chrono::seconds grace{60};
-        int market_open = 9 * 60;          ///< IST minute of day: feed alerts from here …
-        int market_close = 15 * 60 + 45;   ///< … until here
-        int session_from = 7 * 60;         ///< session alerts from here …
-        int session_until = 16 * 60;       ///< … until here
+        int market_open = 9 * 60;         ///< IST minute of day: feed alerts from here …
+        int market_close = 15 * 60 + 45;  ///< … until here
+        int session_from = 7 * 60;        ///< session alerts from here …
+        int session_until = 16 * 60;      ///< … until here
     };
 
     FeedAlerts() = default;
     explicit FeedAlerts(Options options) : options_(options) {}
 
     /// The feed's condition now (call about once a second); alerts to raise.
-    [[nodiscard]] std::vector<Alert> update(FeedCondition condition, std::string_view detail, std::int64_t now);
+    [[nodiscard]] std::vector<Alert> update(FeedCondition condition, std::string_view detail,
+                                            std::int64_t now);
 
     /// The once-a-day "session rejected" alert, if its hours allow it now.
-    [[nodiscard]] std::optional<Alert> session_rejected(std::string_view process, std::int64_t now) const;
+    [[nodiscard]] std::optional<Alert> session_rejected(std::string_view process,
+                                                        std::int64_t now) const;
 
 private:
     Options options_;
@@ -58,6 +60,7 @@ private:
 };
 
 /// The morning reminder, if today's session file is missing (`written` = its last write).
-[[nodiscard]] std::optional<Alert> login_reminder(std::int64_t now, std::optional<std::int64_t> written);
+[[nodiscard]] std::optional<Alert> login_reminder(std::int64_t now,
+                                                  std::optional<std::int64_t> written);
 
 }  // namespace mda::notify

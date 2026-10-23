@@ -1,10 +1,10 @@
 // End-to-end HTTP tests: a real mda-gateway server on 127.0.0.1:<free port> inside the
 // test process, driven by a plain HTTP client.
 
+#include <chrono>
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <chrono>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -26,9 +26,9 @@
 #include <mda/catalog/catalog.hpp>
 #include <mda/gateway/admin_api.hpp>
 #include <mda/gateway/bars_api.hpp>
+#include <mda/gateway/chain_api.hpp>
 #include <mda/gateway/notifications_api.hpp>
 #include <mda/gateway/oi_change_api.hpp>
-#include <mda/gateway/chain_api.hpp>
 #include <mda/gateway/server.hpp>
 #include <mda/gateway/system_api.hpp>
 #include <mda/gateway/usage_tracker.hpp>
@@ -71,11 +71,12 @@ protected:
                               std::chrono::hours(24));
         register_bars_routes(router_, auth_, db_, worker_.get_executor(), bar_store_,
                              bars_worker_.get_executor());
-        register_chain_routes(router_, auth_, db_, worker_.get_executor(), quotes_, summaries_,
-                              {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50", .expiries = 2}});
-        register_oi_change_routes(router_, auth_, db_, worker_.get_executor(), bar_store_,
-                                  bars_worker_.get_executor(),
-                                  {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50", .expiries = 2}});
+        register_chain_routes(
+            router_, auth_, db_, worker_.get_executor(), quotes_, summaries_,
+            {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50", .expiries = 2}});
+        register_oi_change_routes(
+            router_, auth_, db_, worker_.get_executor(), bar_store_, bars_worker_.get_executor(),
+            {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50", .expiries = 2}});
         register_notification_routes(router_, auth_, db_, worker_.get_executor(), "md_test_bot");
         register_system_routes(router_, auth_, db_, worker_.get_executor(), monitor_);
         EXPECT_FALSE(server_.listen({asio::ip::make_address("127.0.0.1"), 0}));
@@ -153,15 +154,17 @@ protected:
         using namespace std::chrono_literals;
         for (std::int64_t strike = 22'400; strike <= 23'000; strike += 100) {
             for (const auto type : {instruments::OptionType::Call, instruments::OptionType::Put}) {
-                const auto id = registry.assign({.exchange = instruments::Exchange::Nse,
-                                                 .market = instruments::Market::Fo,
-                                                 .kind = instruments::Kind::Option,
-                                                 .underlying = "NIFTY",
-                                                 .expiry = 2026y / 10 / 27,
-                                                 .strike = core::Price::from_raw(strike * core::Price::kScale),
-                                                 .option_type = type});
+                const auto id =
+                    registry.assign({.exchange = instruments::Exchange::Nse,
+                                     .market = instruments::Market::Fo,
+                                     .kind = instruments::Kind::Option,
+                                     .underlying = "NIFTY",
+                                     .expiry = 2026y / 10 / 27,
+                                     .strike = core::Price::from_raw(strike * core::Price::kScale),
+                                     .option_type = type});
                 auto* instrument = registry.get(id);
-                instrument->trading_symbol = "NIFTY" + std::to_string(strike) + (type == instruments::OptionType::Call ? "CE" : "PE");
+                instrument->trading_symbol = "NIFTY" + std::to_string(strike) +
+                                             (type == instruments::OptionType::Call ? "CE" : "PE");
                 instrument->name = "NIFTY";
                 instrument->lot_size = core::Quantity(65);
                 instrument->listed_today = true;
@@ -628,19 +631,21 @@ TEST_F(GatewayTest, ServesAggregatedBarHistory) {
 TEST_F(GatewayTest, ClassifiesBuildupFromTheLastOiUpdateIncludingBeforeTheRange) {
     constexpr std::int64_t k0915 = 1'792'607'400 + 9 * 3600 + 15 * 60;  // 2026-10-22 09:15 IST
     constexpr std::uint32_t kOption = 4;                                // NIFTY 22400 CE, lot 65
-    const auto minute = [](std::int64_t start, std::int64_t close, std::int64_t oi, std::uint32_t updates,
-                           bars::BarSource source = bars::BarSource::Live) {
+    const auto minute = [](std::int64_t start, std::int64_t close, std::int64_t oi,
+                           std::uint32_t updates, bars::BarSource source = bars::BarSource::Live) {
         bars::Bar bar{};
         bar.header = messages::make_header<bars::Bar>(core::InstrumentId(kOption), 0);
         bar.start = start;
-        bar.open = bar.high = bar.low = bar.close = core::Price::from_raw(close * core::Price::kScale);
+        bar.open = bar.high = bar.low = bar.close =
+            core::Price::from_raw(close * core::Price::kScale);
         bar.oi_open = bar.oi_high = bar.oi_low = bar.oi_close = core::Quantity(oi);
         bar.oi_updates = updates;
         bar.source = source;
         return bar;
     };
     std::vector<bars::Bar> minutes{
-        minute(k0915 - (17 * 3600 + 46 * 60), 100, 100'000, 1),  // 15:29 the day before: the reference
+        minute(k0915 - (17 * 3600 + 46 * 60), 100, 100'000,
+               1),  // 15:29 the day before: the reference
         minute(k0915, 110, 101'000, 1),
         minute(k0915 + 60, 108, 101'000, 0),
         minute(k0915 + 120, 105, 101'050, 1),  // +50 < 0.1% of 101,000: neutral
@@ -650,9 +655,12 @@ TEST_F(GatewayTest, ClassifiesBuildupFromTheLastOiUpdateIncludingBeforeTheRange)
     ASSERT_TRUE(bar_store_.write(minutes).has_value());
     ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
     const std::string session = signin("siva", "correct horse battery");
-    const std::string range = "&from=" + std::to_string(k0915) + "&to=" + std::to_string(k0915 + 3600);
+    const std::string range =
+        "&from=" + std::to_string(k0915) + "&to=" + std::to_string(k0915 + 3600);
     const auto rows_for = [&](const std::string& interval) {
-        const Reply reply = send(http::verb::get, "/api/v1/instruments/4/bars?interval=" + interval + range, {}, session);
+        const Reply reply =
+            send(http::verb::get, "/api/v1/instruments/4/bars?interval=" + interval + range, {},
+                 session);
         EXPECT_EQ(reply.status, 200u);
         return data(reply).at("bars").as_array();
     };
@@ -664,7 +672,8 @@ TEST_F(GatewayTest, ClassifiesBuildupFromTheLastOiUpdateIncludingBeforeTheRange)
         const auto& state = row.as_array().at(12);
         states.push_back(state.is_null() ? "" : std::string(state.as_string()));
     }
-    EXPECT_EQ(states, (std::vector<std::string>{"long_buildup", "no_oi_update", "neutral", "long_unwinding"}));
+    EXPECT_EQ(states, (std::vector<std::string>{"long_buildup", "no_oi_update", "neutral",
+                                                "long_unwinding"}));
     const auto& third = one[2].as_array();
     EXPECT_EQ(third[7].as_int64(), 101'050);  // oi_open
     EXPECT_EQ(third[10].as_int64(), 1);       // oi_updates
@@ -687,28 +696,38 @@ TEST_F(GatewayTest, VerifiesTheEmailWithAMailedCode) {
     auto channels = data(send(http::verb::get, "/api/v1/notifications", {}, session));
     EXPECT_FALSE(channels.at("email").as_object().at("verified").as_bool());
     EXPECT_TRUE(channels.at("email").as_object().at("enabled").as_bool());
-    EXPECT_NE(channels.at("email").as_object().at("address").as_string().find("***@"), boost::json::string::npos);
+    EXPECT_NE(channels.at("email").as_object().at("address").as_string().find("***@"),
+              boost::json::string::npos);
     EXPECT_TRUE(channels.at("telegram").as_object().at("available").as_bool());
     EXPECT_FALSE(channels.at("telegram").as_object().at("linked").as_bool());
 
-    ASSERT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status, 200u);
-    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status, 429u);
+    ASSERT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status,
+              200u);
+    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status,
+              429u);
     // The code travels in the outbox row the notifier will mail.
     auto row = db_.prepare("SELECT payload FROM notifications WHERE type = 'account.email_code'");
     ASSERT_EQ(row->step().value(), storage::StepResult::Row);
-    const auto code = std::string(boost::json::parse(row->column_text(0)).as_object().at("code").as_string());
+    const auto code =
+        std::string(boost::json::parse(row->column_text(0)).as_object().at("code").as_string());
 
     const std::string wrong = code == "000000" ? "111111" : "000000";
-    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/verify", R"({"code":")" + wrong + R"("})", session)
+    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/verify",
+                   R"({"code":")" + wrong + R"("})", session)
                   .status,
               400u);
-    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/verify", R"({"code":"12"})", session).status, 400u);
-    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/verify", R"({"code":")" + code + R"("})", session)
+    EXPECT_EQ(
+        send(http::verb::post, "/api/v1/notifications/email/verify", R"({"code":"12"})", session)
+            .status,
+        400u);
+    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/verify",
+                   R"({"code":")" + code + R"("})", session)
                   .status,
               200u);
     channels = data(send(http::verb::get, "/api/v1/notifications", {}, session));
     EXPECT_TRUE(channels.at("email").as_object().at("verified").as_bool());
-    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status, 409u);
+    EXPECT_EQ(send(http::verb::post, "/api/v1/notifications/email/code", "{}", session).status,
+              409u);
 }
 
 TEST_F(GatewayTest, LinksTelegramAndSwitchesChannels) {
@@ -716,26 +735,40 @@ TEST_F(GatewayTest, LinksTelegramAndSwitchesChannels) {
     const std::string session = signin("siva", "correct horse battery");
     const Reply link = send(http::verb::post, "/api/v1/notifications/telegram/link", "{}", session);
     ASSERT_EQ(link.status, 200u);
-    EXPECT_TRUE(std::string(data(link).at("url").as_string()).starts_with("https://t.me/md_test_bot?start="));
+    EXPECT_TRUE(std::string(data(link).at("url").as_string())
+                    .starts_with("https://t.me/md_test_bot?start="));
 
-    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/telegram", R"({"enabled":false})", session).status, 404u);
+    EXPECT_EQ(
+        send(http::verb::put, "/api/v1/notifications/telegram", R"({"enabled":false})", session)
+            .status,
+        404u);
     // What the bot does on "/start <code>" (notify::TelegramLinker), done directly here.
     auto linked = db_.prepare(
         "INSERT INTO user_channels (user_id, channel, address, enabled, linked_at) "
         "SELECT id, 'telegram', '555', 1, 0 FROM users WHERE username = 'siva'");
     ASSERT_TRUE(linked->run().has_value());
-    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/telegram", R"({"enabled":false})", session).status, 200u);
-    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/email", R"({"enabled":false})", session).status, 200u);
+    EXPECT_EQ(
+        send(http::verb::put, "/api/v1/notifications/telegram", R"({"enabled":false})", session)
+            .status,
+        200u);
+    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/email", R"({"enabled":false})", session)
+                  .status,
+              200u);
     auto channels = data(send(http::verb::get, "/api/v1/notifications", {}, session));
     EXPECT_TRUE(channels.at("telegram").as_object().at("linked").as_bool());
     EXPECT_FALSE(channels.at("telegram").as_object().at("enabled").as_bool());
     EXPECT_FALSE(channels.at("email").as_object().at("enabled").as_bool());
 
-    EXPECT_EQ(send(http::verb::delete_, "/api/v1/notifications/telegram", {}, session).status, 200u);
+    EXPECT_EQ(send(http::verb::delete_, "/api/v1/notifications/telegram", {}, session).status,
+              200u);
     channels = data(send(http::verb::get, "/api/v1/notifications", {}, session));
     EXPECT_FALSE(channels.at("telegram").as_object().at("linked").as_bool());
-    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/sms", R"({"enabled":true})", session).status, 400u);
-    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/email", R"({"enabled":"yes"})", session).status, 400u);
+    EXPECT_EQ(
+        send(http::verb::put, "/api/v1/notifications/sms", R"({"enabled":true})", session).status,
+        400u);
+    EXPECT_EQ(send(http::verb::put, "/api/v1/notifications/email", R"({"enabled":"yes"})", session)
+                  .status,
+              400u);
 }
 
 TEST_F(GatewayTest, ServesChainsAndStrikeRowsAroundAtm) {
@@ -767,10 +800,18 @@ TEST_F(GatewayTest, ServesChainsAndStrikeRowsAroundAtm) {
     EXPECT_EQ(rows[0].as_object().at("put").as_int64(), 5);
 
     // With the engine's summary, ATM follows its forward-based ATM.
-    options::ChainSummary summary{.underlying = "NIFTY", .spot = core::InstrumentId(3),
-                                  .expiry = std::chrono::year_month_day{std::chrono::year{2026} / 10 / 27},
-                                  .forward = 22'713.45, .atm_strike = 22'700, .atm_iv = 0.1397, .pcr = 0.89,
-                                  .max_pain = 22'800, .years = 5.0 / 365, .call_oi = 10, .put_oi = 9};
+    options::ChainSummary summary{
+        .underlying = "NIFTY",
+        .spot = core::InstrumentId(3),
+        .expiry = std::chrono::year_month_day{std::chrono::year{2026} / 10 / 27},
+        .forward = 22'713.45,
+        .atm_strike = 22'700,
+        .atm_iv = 0.1397,
+        .pcr = 0.89,
+        .max_pain = 22'800,
+        .years = 5.0 / 365,
+        .call_oi = 10,
+        .put_oi = 9};
     summaries_.update(options::to_message(summary));
     chain = send(http::verb::get, "/api/v1/chains/NIFTY/2026-10-27?strikes=1", {}, session);
     EXPECT_DOUBLE_EQ(data(chain).at("atm_strike").as_double(), 22'700);
@@ -779,7 +820,8 @@ TEST_F(GatewayTest, ServesChainsAndStrikeRowsAroundAtm) {
     EXPECT_DOUBLE_EQ(s.at("forward").as_double(), 22'713.45);
     EXPECT_DOUBLE_EQ(s.at("days_to_expiry").as_double(), 5.0);
 
-    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/2026-10-27", {}, session).status, 404u);
+    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/2026-10-27", {}, session).status,
+              404u);
     EXPECT_EQ(send(http::verb::get, "/api/v1/chains/NIFTY/2026-12-31", {}, session).status, 404u);
     EXPECT_EQ(send(http::verb::get, "/api/v1/chains").status, 401u);
 }
@@ -794,19 +836,23 @@ TEST_F(GatewayTest, ServesOiChangeByStrike) {
         bars::Bar b{};
         b.header = messages::make_header<bars::Bar>(core::InstrumentId(id), 0);
         b.start = start;
-        b.open = b.high = b.low = b.close = core::Price::from_raw(static_cast<std::int64_t>(close * core::Price::kScale));
+        b.open = b.high = b.low = b.close =
+            core::Price::from_raw(static_cast<std::int64_t>(close * core::Price::kScale));
         b.oi_open = b.oi_high = b.oi_low = b.oi_close = core::Quantity(oi);
         b.oi_updates = oi > 0 ? 1 : 0;
         b.oi_update_offset = oi_offset;
         return b;
     };
-    ASSERT_TRUE(bar_store_
-                    .write(std::vector<bars::Bar>{
-                        bar(3, kYesterday1529, 22'600, 0), bar(3, k0915, 22'640, 0), bar(3, k0915 + 45 * 60, 22'710, 0),
-                        bar(9, kYesterday1529, 10, 1'000), bar(9, k0915 + 15 * 60, 12, 1'500, 42),  // 22600 PE
-                        bar(10, k0915, 50, 2'000), bar(10, k0915 + 44 * 60, 55, 2'600, 30),           // 22700 CE
-                        bar(12, kYesterday1529, 30, 3'000), bar(12, k0915 + 30 * 60, 25, 2'500, 7)})  // 22800 CE
-                    .has_value());
+    ASSERT_TRUE(
+        bar_store_
+            .write(std::vector<bars::Bar>{
+                bar(3, kYesterday1529, 22'600, 0), bar(3, k0915, 22'640, 0),
+                bar(3, k0915 + 45 * 60, 22'710, 0), bar(9, kYesterday1529, 10, 1'000),
+                bar(9, k0915 + 15 * 60, 12, 1'500, 42),                              // 22600 PE
+                bar(10, k0915, 50, 2'000), bar(10, k0915 + 44 * 60, 55, 2'600, 30),  // 22700 CE
+                bar(12, kYesterday1529, 30, 3'000),
+                bar(12, k0915 + 30 * 60, 25, 2'500, 7)})  // 22800 CE
+            .has_value());
     ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
     const std::string session = signin("siva", "correct horse battery");
     const std::string base = "/api/v1/chains/NIFTY/oi-change";
@@ -849,10 +895,11 @@ TEST_F(GatewayTest, ServesOiChangeByStrike) {
     EXPECT_DOUBLE_EQ(d.at("pcr").as_double(), 0.6);
 
     // An explicit window, snapped to minutes: 09:16 .. 09:31.
-    const Reply window = send(http::verb::get,
-                              base + "?expiries=2026-10-27&strikes=1&from=" + std::to_string(k0915 + 75) +
-                                  "&to=" + std::to_string(k0915 + 16 * 60 + 5),
-                              {}, session);
+    const Reply window =
+        send(http::verb::get,
+             base + "?expiries=2026-10-27&strikes=1&from=" + std::to_string(k0915 + 75) +
+                 "&to=" + std::to_string(k0915 + 16 * 60 + 5),
+             {}, session);
     ASSERT_EQ(window.status, 200u);
     EXPECT_EQ(data(window).at("from").as_int64(), k0915 + 60);
     EXPECT_EQ(data(window).at("rows").as_array().size(), 3u);
@@ -869,18 +916,23 @@ TEST_F(GatewayTest, ServesOiChangeByStrike) {
     EXPECT_EQ(data(last).at("from").as_int64(), k0915 + 16 * 60);
     EXPECT_EQ(data(last).at("to").as_int64(), k0915 + 46 * 60);
     // Longer than the session so far: from the open.
-    EXPECT_EQ(data(send(http::verb::get, base + "?minutes=600", {}, session)).at("from").as_int64(), k0915);
+    EXPECT_EQ(data(send(http::verb::get, base + "?minutes=600", {}, session)).at("from").as_int64(),
+              k0915);
 
     EXPECT_EQ(send(http::verb::get, base + "?minutes=0", {}, session).status, 400u);
-    EXPECT_EQ(send(http::verb::get, base + "?minutes=5&from=" + std::to_string(k0915), {}, session).status, 400u);
+    EXPECT_EQ(send(http::verb::get, base + "?minutes=5&from=" + std::to_string(k0915), {}, session)
+                  .status,
+              400u);
     EXPECT_EQ(send(http::verb::get, base + "?expiries=2026-12-31", {}, session).status, 400u);
     EXPECT_EQ(send(http::verb::get, base + "?strikes=30", {}, session).status, 400u);
     EXPECT_EQ(send(http::verb::get, base + "?from=x", {}, session).status, 400u);
-    EXPECT_EQ(send(http::verb::get, base + "?from=" + std::to_string(k0915 + 600) + "&to=" + std::to_string(k0915),
+    EXPECT_EQ(send(http::verb::get,
+                   base + "?from=" + std::to_string(k0915 + 600) + "&to=" + std::to_string(k0915),
                    {}, session)
                   .status,
               400u);
-    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/oi-change", {}, session).status, 404u);
+    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/oi-change", {}, session).status,
+              404u);
     EXPECT_EQ(send(http::verb::get, base).status, 401u);
     // The strike-rows route still answers for a real expiry.
     EXPECT_EQ(send(http::verb::get, "/api/v1/chains/NIFTY/2026-10-27", {}, session).status, 200u);
@@ -895,7 +947,8 @@ TEST_F(GatewayTest, ServesTheSessionsOiTimeline) {
         bars::Bar b{};
         b.header = messages::make_header<bars::Bar>(core::InstrumentId(id), 0);
         b.start = start;
-        b.open = b.high = b.low = b.close = core::Price::from_raw(static_cast<std::int64_t>(close * core::Price::kScale));
+        b.open = b.high = b.low = b.close =
+            core::Price::from_raw(static_cast<std::int64_t>(close * core::Price::kScale));
         b.oi_open = b.oi_high = b.oi_low = b.oi_close = core::Quantity(oi);
         b.oi_updates = oi > 0 ? 1 : 0;
         b.oi_update_offset = oi_offset;
@@ -905,15 +958,17 @@ TEST_F(GatewayTest, ServesTheSessionsOiTimeline) {
     carried.oi_updates = 0;
     ASSERT_TRUE(bar_store_
                     .write(std::vector<bars::Bar>{
-                        bar(3, kYesterday1529, 22'600, 0), bar(3, k0915, 22'640, 0), bar(3, k0915 + 45 * 60, 22'710, 0),
-                        bar(9, kYesterday1529, 10, 1'000), bar(9, k0915 + 15 * 60, 12, 1'500, 42),
-                        bar(10, k0915, 50, 2'000), carried, bar(10, k0915 + 44 * 60, 55, 2'600, 30),
-                        bar(12, kYesterday1529, 30, 3'000), bar(12, k0915 + 30 * 60, 25, 2'500, 7)})
+                        bar(3, kYesterday1529, 22'600, 0), bar(3, k0915, 22'640, 0),
+                        bar(3, k0915 + 45 * 60, 22'710, 0), bar(9, kYesterday1529, 10, 1'000),
+                        bar(9, k0915 + 15 * 60, 12, 1'500, 42), bar(10, k0915, 50, 2'000), carried,
+                        bar(10, k0915 + 44 * 60, 55, 2'600, 30), bar(12, kYesterday1529, 30, 3'000),
+                        bar(12, k0915 + 30 * 60, 25, 2'500, 7)})
                     .has_value());
     ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
     const std::string session = signin("siva", "correct horse battery");
 
-    const Reply reply = send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?strikes=1", {}, session);
+    const Reply reply =
+        send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?strikes=1", {}, session);
     ASSERT_EQ(reply.status, 200u);
     const auto& d = data(reply);
     EXPECT_EQ(d.at("session_open").as_int64(), k0915);
@@ -939,10 +994,15 @@ TEST_F(GatewayTest, ServesTheSessionsOiTimeline) {
     EXPECT_EQ(points(r22700.at("call")), (P{{1, 2'000}, {45, 2'600}}));  // no value before 09:16
     EXPECT_EQ(points(r22800.at("call")), (P{{0, 3'000}, {31, 2'500}}));
 
-    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?strikes=0", {}, session).status, 400u);
-    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?expiries=2026-12-31", {}, session).status,
-              400u);
-    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/oi-timeline", {}, session).status, 404u);
+    EXPECT_EQ(
+        send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?strikes=0", {}, session).status,
+        400u);
+    EXPECT_EQ(
+        send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline?expiries=2026-12-31", {}, session)
+            .status,
+        400u);
+    EXPECT_EQ(send(http::verb::get, "/api/v1/chains/BANKNIFTY/oi-timeline", {}, session).status,
+              404u);
     EXPECT_EQ(send(http::verb::get, "/api/v1/chains/NIFTY/oi-timeline").status, 401u);
 }
 
@@ -962,8 +1022,8 @@ TEST_F(GatewayTest, ServesTheSystemMonitorToAdminsOnly) {
     const Reply reply = send(http::verb::get, "/api/v1/admin/system", {}, admin_session);
     ASSERT_EQ(reply.status, 200u);
     const auto& d = data(reply);
-    for (const char* key : {"time", "processes", "machine", "disk", "buses", "feed", "latency", "engine",
-                            "recorder", "notifier", "history", "checks", "status"}) {
+    for (const char* key : {"time", "processes", "machine", "disk", "buses", "feed", "latency",
+                            "engine", "recorder", "notifier", "history", "checks", "status"}) {
         EXPECT_TRUE(d.contains(key)) << key;
     }
     EXPECT_EQ(d.at("processes").as_array().size(), 6u);
@@ -983,11 +1043,12 @@ TEST_F(GatewayTest, MarksTheSessionCookieSecureOverHttpsOnly) {
     EXPECT_EQ(plain.set_cookie.find("Secure"), std::string::npos) << plain.set_cookie;
     // Through the local HTTPS proxy (tailscale serve): Secure, on sign-in and on sign-out.
     const std::vector<std::pair<std::string, std::string>> https{{"X-Forwarded-Proto", "https"}};
-    const Reply secure = send(http::verb::post, "/api/v1/session", body, {}, "application/json", https);
+    const Reply secure =
+        send(http::verb::post, "/api/v1/session", body, {}, "application/json", https);
     ASSERT_EQ(secure.status, 200u);
     EXPECT_NE(secure.set_cookie.find("; Secure"), std::string::npos) << secure.set_cookie;
-    const Reply out = send(http::verb::delete_, "/api/v1/session", {}, session_from(secure.set_cookie),
-                           "application/json", https);
+    const Reply out = send(http::verb::delete_, "/api/v1/session", {},
+                           session_from(secure.set_cookie), "application/json", https);
     EXPECT_NE(out.set_cookie.find("; Secure"), std::string::npos) << out.set_cookie;
     // The internal header can't be sent by a client.
     const Reply forged = send(http::verb::post, "/api/v1/session", body, {}, "application/json",

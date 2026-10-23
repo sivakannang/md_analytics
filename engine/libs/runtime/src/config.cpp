@@ -80,7 +80,8 @@ void read_list(const YAML::Node& map, const char* key, std::vector<std::string>&
 Config parse(const YAML::Node& root) {
     Config config;
     check_keys(root, "config",
-               {"logging", "database", "bus", "kite", "feed", "engine", "gateway", "notifier", "recorder"});
+               {"logging", "database", "bus", "kite", "feed", "engine", "gateway", "notifier",
+                "recorder"});
 
     const YAML::Node logging = root["logging"];
     check_keys(logging, "logging", {"level", "directory", "console"});

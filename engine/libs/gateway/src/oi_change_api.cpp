@@ -71,7 +71,8 @@ std::expected<Catalog, std::string> load_catalog(storage::Database& db, const Ch
                                                  const std::vector<std::string>& wanted) {
     const std::string_view underlying = chain.underlying;
     auto listed = db.prepare(
-        "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND underlying = ?1 AND listed = 1 "
+        "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND underlying = ?1 AND listed "
+        "= 1 "
         "ORDER BY expiry LIMIT ?2");
     if (!listed) {
         return std::unexpected("internal");
@@ -94,7 +95,8 @@ std::expected<Catalog, std::string> load_catalog(storage::Database& db, const Ch
         }
     }
     auto options = db.prepare(
-        "SELECT id, strike_raw, option_type FROM instruments WHERE kind = 'OPT' AND underlying = ?1 AND "
+        "SELECT id, strike_raw, option_type FROM instruments WHERE kind = 'OPT' AND underlying = "
+        "?1 AND "
         "expiry = ?2 AND listed = 1");
     if (!options) {
         return std::unexpected("internal");
@@ -127,8 +129,9 @@ Window strike_window(const Catalog& catalog, double spot, int strikes) {
     }
     std::ranges::sort(w.keys);
     w.keys.erase(std::ranges::unique(w.keys).begin(), w.keys.end());
-    const auto nearest = std::ranges::min_element(
-        w.keys, {}, [&](std::int64_t raw) { return std::abs(core::Price::from_raw(raw).to_double() - spot); });
+    const auto nearest = std::ranges::min_element(w.keys, {}, [&](std::int64_t raw) {
+        return std::abs(core::Price::from_raw(raw).to_double() - spot);
+    });
     w.atm = static_cast<std::size_t>(nearest - w.keys.begin());
     const auto n = static_cast<std::size_t>(strikes);
     w.first = w.atm > n ? w.atm - n : 0;
@@ -223,7 +226,8 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
         [&auth, &db, db_executor, &store, bars_executor, chains](
             const Request& request, const PathParams& params) -> asio::awaitable<Response> {
             const std::string underlying = params.empty() ? std::string() : params.front().second;
-            const auto chain = std::ranges::find_if(chains, [&](const auto& c) { return c.underlying == underlying; });
+            const auto chain = std::ranges::find_if(
+                chains, [&](const auto& c) { return c.underlying == underlying; });
             if (chain == chains.end()) {
                 co_return failure(http::status::not_found, "NotFoundException", "no such chain");
             }
@@ -235,34 +239,42 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
             if (bad || (strikes_param && (*strikes_param < 1 || *strikes_param > kMaxStrikes)) ||
                 (minutes_param && (*minutes_param < 1 || *minutes_param > 24 * 60 || from_param))) {
                 co_return detail::bad_input(
-                    "from and to are Unix seconds; strikes is 1-20; minutes is 1-1440, without from");
+                    "from and to are Unix seconds; strikes is 1-20; minutes is 1-1440, without "
+                    "from");
             }
             const int strikes = static_cast<int>(strikes_param.value_or(10));
             const auto wanted = split_csv(query_param(request, "expiries").value_or(""));
 
             const std::string token = token_of(request);
-            const auto user = co_await run_on(db_executor, [&] { return auth.authenticate(token); });
+            const auto user =
+                co_await run_on(db_executor, [&] { return auth.authenticate(token); });
             if (!user) {
                 co_return from_error(user.error());
             }
-            // The chain's listed expiries (as GET /chains shows them), the ticked ones, their options.
-            const auto catalog = co_await run_on(db_executor, [&] { return load_catalog(db, *chain, wanted); });
+            // The chain's listed expiries (as GET /chains shows them), the ticked ones, their
+            // options.
+            const auto catalog =
+                co_await run_on(db_executor, [&] { return load_catalog(db, *chain, wanted); });
             if (!catalog) {
                 co_return catalog.error() == "internal"
-                    ? failure(http::status::internal_server_error, "GeneralException", "internal error")
+                    ? failure(http::status::internal_server_error, "GeneralException",
+                              "internal error")
                     : detail::bad_input(catalog.error());
             }
             if (catalog->options.empty() || catalog->spot == 0) {
-                co_return failure(http::status::not_found, "NotFoundException", "no listed options for this chain");
+                co_return failure(http::status::not_found, "NotFoundException",
+                                  "no listed options for this chain");
             }
 
             co_return co_await run_on(bars_executor, [&]() -> Response {
                 const auto internal = [](const storage::DbError& error) {
                     spdlog::error("oi-change: query failed: {}", error.message);
-                    return failure(http::status::internal_server_error, "GeneralException", "internal error");
+                    return failure(http::status::internal_server_error, "GeneralException",
+                                   "internal error");
                 };
                 const std::uint32_t spot_ids[] = {catalog->spot};
-                const auto spot_at = [&](std::int64_t t) -> std::expected<std::optional<double>, storage::DbError> {
+                const auto spot_at =
+                    [&](std::int64_t t) -> std::expected<std::optional<double>, storage::DbError> {
                     auto bars = store.last_ended(spot_ids, t, t - kLookback, false);
                     if (!bars) {
                         return std::unexpected(bars.error());
@@ -274,20 +286,23 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                 };
 
                 // "Now" is the end of the spot's last closed minute; its IST day is the session.
-                const auto last = store.last_ended(spot_ids, floor_minute(auth::system_clock_seconds()), 0, false);
+                const auto last = store.last_ended(
+                    spot_ids, floor_minute(auth::system_clock_seconds()), 0, false);
                 if (!last) {
                     return internal(last.error());
                 }
                 if (last->empty()) {
-                    return failure(http::status::not_found, "NotFoundException", "no bars for this chain yet");
+                    return failure(http::status::not_found, "NotFoundException",
+                                   "no bars for this chain yet");
                 }
                 const std::int64_t latest = last->begin()->second.start + 60;
                 const std::int64_t to = to_param ? floor_minute(*to_param) : latest;
                 const std::int64_t session_open = ist_midnight(to - 1) + kSessionOpen;
                 // "Last N minutes" counts back from `to`, never before the open.
-                const std::int64_t from = from_param      ? floor_minute(*from_param)
-                                          : minutes_param ? std::max(session_open, to - *minutes_param * 60)
-                                                          : session_open;
+                const std::int64_t from = from_param ? floor_minute(*from_param)
+                                          : minutes_param
+                                              ? std::max(session_open, to - *minutes_param * 60)
+                                              : session_open;
                 if (from >= to || ist_midnight(from) != ist_midnight(to - 1)) {
                     return detail::bad_input("from must be before to, on the same day (IST)");
                 }
@@ -298,7 +313,8 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                     return internal(!spot_from ? spot_from.error() : spot_to.error());
                 }
                 if (!*spot_to) {
-                    return failure(http::status::not_found, "NotFoundException", "no spot price at that time");
+                    return failure(http::status::not_found, "NotFoundException",
+                                   "no spot price at that time");
                 }
 
                 const Window window = strike_window(*catalog, **spot_to, strikes);
@@ -334,7 +350,8 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                     add(side.from, *oi_from, o.id);
                     add(side.to, *oi_to, o.id);
                 }
-                // Totals over the sides known at both times, so they are changes of the same strikes.
+                // Totals over the sides known at both times, so they are changes of the same
+                // strikes.
                 std::int64_t totals[4] = {};  // call_from, call_to, put_from, put_to
                 json::array rows;
                 for (const auto& [raw, sides] : by_strike) {
@@ -378,10 +395,11 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                                             {"call_to", totals[1]},
                                             {"put_from", totals[2]},
                                             {"put_to", totals[3]}}},
-                    {"pcr", totals[1] > 0 ? json::value(std::round(static_cast<double>(totals[3]) /
-                                                                   static_cast<double>(totals[1]) * 100.0) /
-                                                        100.0)
-                                          : json::value(nullptr)},
+                    {"pcr", totals[1] > 0
+                                ? json::value(std::round(static_cast<double>(totals[3]) /
+                                                         static_cast<double>(totals[1]) * 100.0) /
+                                              100.0)
+                                : json::value(nullptr)},
                     {"rows", std::move(rows)}});
             });
         });
@@ -394,7 +412,8 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
         [&auth, &db, db_executor, &store, bars_executor, chains](
             const Request& request, const PathParams& params) -> asio::awaitable<Response> {
             const std::string underlying = params.empty() ? std::string() : params.front().second;
-            const auto chain = std::ranges::find_if(chains, [&](const auto& c) { return c.underlying == underlying; });
+            const auto chain = std::ranges::find_if(
+                chains, [&](const auto& c) { return c.underlying == underlying; });
             if (chain == chains.end()) {
                 co_return failure(http::status::not_found, "NotFoundException", "no such chain");
             }
@@ -407,40 +426,50 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
             const auto wanted = split_csv(query_param(request, "expiries").value_or(""));
 
             const std::string token = token_of(request);
-            const auto user = co_await run_on(db_executor, [&] { return auth.authenticate(token); });
+            const auto user =
+                co_await run_on(db_executor, [&] { return auth.authenticate(token); });
             if (!user) {
                 co_return from_error(user.error());
             }
-            const auto catalog = co_await run_on(db_executor, [&] { return load_catalog(db, *chain, wanted); });
+            const auto catalog =
+                co_await run_on(db_executor, [&] { return load_catalog(db, *chain, wanted); });
             if (!catalog) {
                 co_return catalog.error() == "internal"
-                    ? failure(http::status::internal_server_error, "GeneralException", "internal error")
+                    ? failure(http::status::internal_server_error, "GeneralException",
+                              "internal error")
                     : detail::bad_input(catalog.error());
             }
             if (catalog->options.empty() || catalog->spot == 0) {
-                co_return failure(http::status::not_found, "NotFoundException", "no listed options for this chain");
+                co_return failure(http::status::not_found, "NotFoundException",
+                                  "no listed options for this chain");
             }
 
             co_return co_await run_on(bars_executor, [&]() -> Response {
                 const auto internal = [](const storage::DbError& error) {
                     spdlog::error("oi-timeline: query failed: {}", error.message);
-                    return failure(http::status::internal_server_error, "GeneralException", "internal error");
+                    return failure(http::status::internal_server_error, "GeneralException",
+                                   "internal error");
                 };
                 const std::uint32_t spot_ids[] = {catalog->spot};
-                const auto last = store.last_ended(spot_ids, floor_minute(auth::system_clock_seconds()), 0, false);
+                const auto last = store.last_ended(
+                    spot_ids, floor_minute(auth::system_clock_seconds()), 0, false);
                 if (!last) {
                     return internal(last.error());
                 }
                 if (last->empty()) {
-                    return failure(http::status::not_found, "NotFoundException", "no bars for this chain yet");
+                    return failure(http::status::not_found, "NotFoundException",
+                                   "no bars for this chain yet");
                 }
                 const std::int64_t latest = last->begin()->second.start + 60;
                 const std::int64_t session_open = ist_midnight(latest - 1) + kSessionOpen;
-                const auto minute_of = [&](const bars::Bar& bar) { return (bar.start + 60 - session_open) / 60; };
+                const auto minute_of = [&](const bars::Bar& bar) {
+                    return (bar.start + 60 - session_open) / 60;
+                };
 
                 // Spot: the close before the open, then each minute's.
                 json::array spot;
-                const auto spot_before = store.last_ended(spot_ids, session_open, session_open - kLookback, false);
+                const auto spot_before =
+                    store.last_ended(spot_ids, session_open, session_open - kLookback, false);
                 const auto spot_bars = store.range(catalog->spot, session_open, latest);
                 if (!spot_before || !spot_bars) {
                     return internal(!spot_before ? spot_before.error() : spot_bars.error());
@@ -462,12 +491,14 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                         ids.push_back(o.id);
                     }
                 }
-                const auto before = store.last_ended(ids, session_open, session_open - kLookback, true);
+                const auto before =
+                    store.last_ended(ids, session_open, session_open - kLookback, true);
                 if (!before) {
                     return internal(before.error());
                 }
                 // Per strike: the call and put series of each ticked expiry, summed below.
-                std::map<std::int64_t, std::pair<std::vector<Series>, std::vector<Series>>> by_strike;
+                std::map<std::int64_t, std::pair<std::vector<Series>, std::vector<Series>>>
+                    by_strike;
                 for (std::size_t i = window.first; i < window.end; ++i) {
                     by_strike[window.keys[i]];
                 }
@@ -490,7 +521,8 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                             continue;
                         }
                         if (bar.oi_update_offset != bars::kNoOiUpdateTime) {
-                            oi_as_of = std::max(oi_as_of.value_or(0), bar.start + bar.oi_update_offset);
+                            oi_as_of =
+                                std::max(oi_as_of.value_or(0), bar.start + bar.oi_update_offset);
                         }
                         if (series.empty() || series.back().second != bar.oi_close.value()) {
                             series.emplace_back(minute_of(bar), bar.oi_close.value());
@@ -508,14 +540,15 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                 for (const auto& expiry : catalog->expiries) {
                     expiries.emplace_back(expiry);
                 }
-                return success(json::object{{"underlying", underlying},
-                                            {"expiries", std::move(expiries)},
-                                            {"session_open", session_open},
-                                            {"latest", latest},
-                                            {"oi_as_of", maybe(oi_as_of)},
-                                            {"atm_strike", core::Price::from_raw(window.keys[window.atm]).to_double()},
-                                            {"spot", std::move(spot)},
-                                            {"rows", std::move(rows)}});
+                return success(json::object{
+                    {"underlying", underlying},
+                    {"expiries", std::move(expiries)},
+                    {"session_open", session_open},
+                    {"latest", latest},
+                    {"oi_as_of", maybe(oi_as_of)},
+                    {"atm_strike", core::Price::from_raw(window.keys[window.atm]).to_double()},
+                    {"spot", std::move(spot)},
+                    {"rows", std::move(rows)}});
             });
         });
 }

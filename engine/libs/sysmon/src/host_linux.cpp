@@ -129,8 +129,9 @@ std::optional<ProcessStats> process_stats(std::uint32_t pid) {
                                   std::strtoull(values[12].c_str(), nullptr, 10);
         out.cpu_time_ns = cpu * per_tick;
         if (const auto boot = boot_time()) {
-            out.started = *boot + static_cast<std::int64_t>(std::strtoull(values[19].c_str(), nullptr, 10) /
-                                                            static_cast<std::uint64_t>(ticks));
+            out.started =
+                *boot + static_cast<std::int64_t>(std::strtoull(values[19].c_str(), nullptr, 10) /
+                                                  static_cast<std::uint64_t>(ticks));
         }
     }
     std::uint64_t size = 0;
@@ -159,7 +160,8 @@ std::vector<std::uint32_t> descendant_pids(std::uint32_t pid) {
         std::string state;
         std::uint32_t ppid = 0;
         if (fields >> state >> ppid) {
-            parent_of.emplace_back(static_cast<std::uint32_t>(std::strtoul(name.c_str(), nullptr, 10)), ppid);
+            parent_of.emplace_back(
+                static_cast<std::uint32_t>(std::strtoul(name.c_str(), nullptr, 10)), ppid);
         }
     }
     std::vector<std::uint32_t> out;

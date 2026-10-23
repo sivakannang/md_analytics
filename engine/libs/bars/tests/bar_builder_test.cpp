@@ -128,12 +128,15 @@ TEST_F(BarBuilderTest, CountsOiUpdatesAndKeepsOiOnlyMinutes) {
 }
 
 TEST_F(BarBuilderTest, RecordsWhenOiLastChangedByReceiveTime) {
-    builder_.on_snapshot(snap({.at = ist(10, 0, 5), .ltp = 200, .oi = 50'000}));  // first OI: no change
+    builder_.on_snapshot(
+        snap({.at = ist(10, 0, 5), .ltp = 200, .oi = 50'000}));  // first OI: no change
     builder_.on_snapshot(snap({.at = ist(10, 0, 10), .ltp = 201}));
     builder_.close_due(ist(10, 1, 5));
-    builder_.on_snapshot(snap({.at = ist(10, 2, 10), .ltp = 201, .oi = 51'000, .received = ist(10, 2, 20)}));
+    builder_.on_snapshot(
+        snap({.at = ist(10, 2, 10), .ltp = 201, .oi = 51'000, .received = ist(10, 2, 20)}));
     builder_.on_snapshot(snap({.at = ist(10, 2, 30), .ltp = 202, .oi = 51'000}));  // unchanged OI
-    builder_.on_snapshot(snap({.at = ist(10, 2, 59), .ltp = 202, .oi = 52'000, .received = ist(10, 3, 1)}));
+    builder_.on_snapshot(
+        snap({.at = ist(10, 2, 59), .ltp = 202, .oi = 52'000, .received = ist(10, 3, 1)}));
     builder_.close_due(ist(10, 3, 5));
 
     ASSERT_EQ(closed_.size(), 2u);

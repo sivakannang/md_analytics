@@ -23,11 +23,11 @@
 #include <mda/auth/user_store.hpp>
 #include <mda/gateway/last_quotes.hpp>
 #include <mda/gateway/quote_cache.hpp>
-#include <mda/messages/circuit_limits.hpp>
-#include <mda/messages/depth_snapshot.hpp>
 #include <mda/gateway/server.hpp>
 #include <mda/gateway/stream_api.hpp>
 #include <mda/gateway/user_api.hpp>
+#include <mda/messages/circuit_limits.hpp>
+#include <mda/messages/depth_snapshot.hpp>
 #include <mda/storage/database.hpp>
 
 namespace mda::gateway {
@@ -463,9 +463,16 @@ TEST(QuoteJsonTest, IncludesOptionAnalytics) {
     s.fields |= messages::kFieldOpenInterest;
     s.oi = core::Quantity(5'000);
     cache.update(s);
-    options::OptionResult result{.id = core::InstrumentId(7), .has_iv = true, .iv = 0.1452, .delta = 0.53214,
-                                 .gamma = 0.0004, .theta = -15.75, .vega = 9.1, .has_prev_oi = true,
-                                 .prev_oi = 4'000, .buildup = options::Buildup::LongBuildup};
+    options::OptionResult result{.id = core::InstrumentId(7),
+                                 .has_iv = true,
+                                 .iv = 0.1452,
+                                 .delta = 0.53214,
+                                 .gamma = 0.0004,
+                                 .theta = -15.75,
+                                 .vega = 9.1,
+                                 .has_prev_oi = true,
+                                 .prev_oi = 4'000,
+                                 .buildup = options::Buildup::LongBuildup};
     cache.update_analytics(options::to_message(result));
     SeenVersions seen;
     const std::vector<std::uint32_t> ids{7};
@@ -481,9 +488,14 @@ TEST(QuoteJsonTest, IncludesOptionAnalytics) {
 }
 
 TEST_F(StreamTest, StreamsChainSummaries) {
-    options::ChainSummary summary{.underlying = "NIFTY", .spot = core::InstrumentId(3),
-                                  .expiry = std::chrono::year_month_day{std::chrono::year{2026} / 10 / 27},
-                                  .forward = 22'713.45, .atm_strike = 22'700, .pcr = 0.89, .max_pain = 22'800};
+    options::ChainSummary summary{
+        .underlying = "NIFTY",
+        .spot = core::InstrumentId(3),
+        .expiry = std::chrono::year_month_day{std::chrono::year{2026} / 10 / 27},
+        .forward = 22'713.45,
+        .atm_strike = 22'700,
+        .pcr = 0.89,
+        .max_pain = 22'800};
     chains_.update(options::to_message(summary));
     auto client = connect_ok();
     client->write(asio::buffer(std::string(R"({"a":"subscribe","v":[3],"mode":"chain"})")));

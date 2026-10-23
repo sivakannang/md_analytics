@@ -1,9 +1,8 @@
 #include <fstream>
 #include <sstream>
 
-#include <sys/stat.h>
-
 #include <boost/json.hpp>
+#include <sys/stat.h>
 
 #include <mda/notify/secrets.hpp>
 
@@ -13,19 +12,22 @@ namespace {
 namespace json = boost::json;
 
 /// A required non-empty string field, or an error naming it.
-std::expected<std::string, std::string> required(const json::object& section, std::string_view section_name,
+std::expected<std::string, std::string> required(const json::object& section,
+                                                 std::string_view section_name,
                                                  std::string_view key) {
     const auto* value = section.if_contains(key);
     if (value == nullptr || !value->is_string() || value->as_string().empty()) {
-        return std::unexpected(std::string(section_name) + "." + std::string(key) + " is missing or not a string");
+        return std::unexpected(std::string(section_name) + "." + std::string(key) +
+                               " is missing or not a string");
     }
     return std::string(value->as_string());
 }
 
 std::string optional_text(const json::object& section, std::string_view key, std::string fallback) {
     const auto* value = section.if_contains(key);
-    return value != nullptr && value->is_string() && !value->as_string().empty() ? std::string(value->as_string())
-                                                                                 : fallback;
+    return value != nullptr && value->is_string() && !value->as_string().empty()
+               ? std::string(value->as_string())
+               : fallback;
 }
 
 }  // namespace
@@ -38,7 +40,8 @@ std::expected<NotifierSecrets, std::string> parse_notifier_secrets(std::string_v
     }
     const auto& root = parsed.as_object();
     NotifierSecrets secrets;
-    if (const auto* telegram = root.if_contains("telegram"); telegram != nullptr && telegram->is_object()) {
+    if (const auto* telegram = root.if_contains("telegram");
+        telegram != nullptr && telegram->is_object()) {
         auto token = required(telegram->as_object(), "telegram", "bot_token");
         if (!token) {
             return std::unexpected(token.error());
@@ -48,9 +51,10 @@ std::expected<NotifierSecrets, std::string> parse_notifier_secrets(std::string_v
     if (const auto* smtp = root.if_contains("smtp"); smtp != nullptr && smtp->is_object()) {
         const auto& section = smtp->as_object();
         SmtpOptions options;
-        for (const auto& [key, field] : {std::pair{"host", &options.host}, std::pair{"username", &options.username},
-                                         std::pair{"password", &options.password},
-                                         std::pair{"from_address", &options.from_address}}) {
+        for (const auto& [key, field] :
+             {std::pair{"host", &options.host}, std::pair{"username", &options.username},
+              std::pair{"password", &options.password},
+              std::pair{"from_address", &options.from_address}}) {
             auto value = required(section, "smtp", key);
             if (!value) {
                 return std::unexpected(value.error());
@@ -67,7 +71,8 @@ std::expected<NotifierSecrets, std::string> parse_notifier_secrets(std::string_v
     return secrets;
 }
 
-std::expected<NotifierSecrets, std::string> load_notifier_secrets(const std::filesystem::path& path) {
+std::expected<NotifierSecrets, std::string> load_notifier_secrets(
+    const std::filesystem::path& path) {
     std::ifstream file(path);
     if (!file) {
         return std::unexpected("cannot read " + path.string());

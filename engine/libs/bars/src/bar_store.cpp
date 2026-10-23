@@ -31,7 +31,7 @@ CREATE TABLE bars_1m (
     PRIMARY KEY (instrument_id, start)
 ) WITHOUT ROWID;
 )sql",
-                                                          R"sql(
+                                                         R"sql(
 ALTER TABLE bars_1m ADD COLUMN oi_update_offset INTEGER NOT NULL DEFAULT 65535;
 )sql"};
 
@@ -175,9 +175,10 @@ std::expected<std::vector<Bar>, DbError> BarStore::latest_per_instrument(std::in
 }
 
 std::expected<std::optional<Bar>, DbError> BarStore::latest_before(std::uint32_t instrument_id,
-                                                                  std::int64_t before) {
-    auto statement = db_.prepare("SELECT " + std::string(kColumns) +
-                                 " FROM bars_1m WHERE instrument_id = ?1 AND start < ?2 ORDER BY start DESC LIMIT 1");
+                                                                   std::int64_t before) {
+    auto statement = db_.prepare(
+        "SELECT " + std::string(kColumns) +
+        " FROM bars_1m WHERE instrument_id = ?1 AND start < ?2 ORDER BY start DESC LIMIT 1");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -193,11 +194,14 @@ std::expected<std::optional<Bar>, DbError> BarStore::latest_before(std::uint32_t
 }
 
 std::expected<std::unordered_map<std::uint32_t, Bar>, DbError> BarStore::last_ended(
-    std::span<const std::uint32_t> instrument_ids, std::int64_t at, std::int64_t earliest, bool with_oi) {
+    std::span<const std::uint32_t> instrument_ids, std::int64_t at, std::int64_t earliest,
+    bool with_oi) {
     // Walks the primary key (instrument_id, start) backwards from `at`: one seek per instrument.
-    auto statement = db_.prepare("SELECT " + std::string(kColumns) +
-                                 " FROM bars_1m WHERE instrument_id = ?1 AND start <= ?2 AND start >= ?3 AND "
-                                 "(?4 = 0 OR (oi_close > 0 AND (oi_updates > 0 OR source = ?5))) ORDER BY start DESC LIMIT 1");
+    auto statement =
+        db_.prepare("SELECT " + std::string(kColumns) +
+                    " FROM bars_1m WHERE instrument_id = ?1 AND start <= ?2 AND start >= ?3 AND "
+                    "(?4 = 0 OR (oi_close > 0 AND (oi_updates > 0 OR source = ?5))) ORDER BY start "
+                    "DESC LIMIT 1");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -220,10 +224,11 @@ std::expected<std::unordered_map<std::uint32_t, Bar>, DbError> BarStore::last_en
     return out;
 }
 
-std::expected<std::unordered_map<std::uint32_t, std::int64_t>, DbError> BarStore::volumes(std::int64_t from,
-                                                                                       std::int64_t to) {
+std::expected<std::unordered_map<std::uint32_t, std::int64_t>, DbError> BarStore::volumes(
+    std::int64_t from, std::int64_t to) {
     auto statement = db_.prepare(
-        "SELECT instrument_id, SUM(volume) FROM bars_1m WHERE start >= ?1 AND start < ?2 GROUP BY instrument_id");
+        "SELECT instrument_id, SUM(volume) FROM bars_1m WHERE start >= ?1 AND start < ?2 GROUP BY "
+        "instrument_id");
     if (!statement) {
         return std::unexpected(statement.error());
     }

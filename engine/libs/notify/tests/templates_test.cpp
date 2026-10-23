@@ -18,7 +18,8 @@ TEST(TemplatesTest, VerificationCodeIsInTheText) {
 }
 
 TEST(TemplatesTest, SystemAlertsUseTheirFields) {
-    const auto m = render("system.feed_down", R"({"state":"stale","since":"10:02:11","detail":"no ticks for 5 s."})");
+    const auto m = render("system.feed_down",
+                          R"({"state":"stale","since":"10:02:11","detail":"no ticks for 5 s."})");
     EXPECT_EQ(m.subject, "Market feed stale");
     EXPECT_NE(m.text.find("10:02:11"), std::string::npos);
 }

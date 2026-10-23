@@ -103,8 +103,8 @@ inline std::string token_of(const Request& request) {
 
 /// Runs `work(user)` for the signed-in user on the DB thread; an error reply otherwise.
 template <typename Work>
-asio::awaitable<Response> as_user(auth::AuthService& auth, asio::any_io_executor db_executor, const Request& request,
-                                  Work work) {
+asio::awaitable<Response> as_user(auth::AuthService& auth, asio::any_io_executor db_executor,
+                                  const Request& request, Work work) {
     const std::string token = token_of(request);
     co_return co_await run_on(db_executor, [&]() -> Response {
         const auto user = auth.authenticate(token);
@@ -133,6 +133,5 @@ asio::awaitable<Response> as_admin(auth::AuthService& auth, asio::any_io_executo
         return work(*user);
     });
 }
-
 
 }  // namespace mda::gateway::detail

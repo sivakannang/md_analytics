@@ -37,7 +37,8 @@ public:
     /// Opens `path` for appending (creating it and its folders), cutting a torn tail.
     [[nodiscard]] static std::expected<Writer, std::string> open(const std::filesystem::path& path);
 
-    [[nodiscard]] std::expected<void, std::string> append(std::uint32_t type, std::span<const std::byte> payload);
+    [[nodiscard]] std::expected<void, std::string> append(std::uint32_t type,
+                                                          std::span<const std::byte> payload);
     [[nodiscard]] std::expected<void, std::string> append_gap(Gap gap);
     /// Hands buffered records to the OS.
     [[nodiscard]] std::expected<void, std::string> flush();
@@ -83,8 +84,10 @@ private:
 [[nodiscard]] Gap decode_gap(std::span<const std::byte> payload);
 
 /// <root>/<IST date> and <root>/<IST date>/<HH>.mdj for a Unix time.
-[[nodiscard]] std::filesystem::path day_dir(const std::filesystem::path& root, std::int64_t unix_seconds);
-[[nodiscard]] std::filesystem::path hour_file(const std::filesystem::path& root, std::int64_t unix_seconds);
+[[nodiscard]] std::filesystem::path day_dir(const std::filesystem::path& root,
+                                            std::int64_t unix_seconds);
+[[nodiscard]] std::filesystem::path hour_file(const std::filesystem::path& root,
+                                              std::int64_t unix_seconds);
 
 /// A day's hour files, in time order.
 [[nodiscard]] std::vector<std::filesystem::path> hour_files(const std::filesystem::path& day);

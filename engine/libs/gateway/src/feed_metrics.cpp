@@ -59,7 +59,8 @@ LatencyHistogram::Summary LatencyHistogram::take() noexcept {
     return out;
 }
 
-void FeedMetrics::on_snapshot(const messages::MarketSnapshot& snapshot, std::int64_t now_ns) noexcept {
+void FeedMetrics::on_snapshot(const messages::MarketSnapshot& snapshot,
+                              std::int64_t now_ns) noexcept {
     snapshots_.fetch_add(1, std::memory_order_relaxed);
     const std::int64_t received = snapshot.receive_ts.ns();
     last_tick_ns_.store(received, std::memory_order_relaxed);
@@ -84,7 +85,8 @@ void FeedMetrics::on_bar(const bars::Bar& bar) noexcept {
     }
     bars_closed_.fetch_add(1, std::memory_order_relaxed);
     std::int64_t seen = last_bar_start_.load(std::memory_order_relaxed);
-    while (bar.start > seen && !last_bar_start_.compare_exchange_weak(seen, bar.start, std::memory_order_relaxed)) {
+    while (bar.start > seen &&
+           !last_bar_start_.compare_exchange_weak(seen, bar.start, std::memory_order_relaxed)) {
     }
 }
 

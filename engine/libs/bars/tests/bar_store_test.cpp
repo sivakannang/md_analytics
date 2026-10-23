@@ -43,7 +43,8 @@ TEST(BarStoreTest, WritesAndReadsRanges) {
 
 TEST(BarStoreTest, FindsTheLastBarBeforeATime) {
     auto store = BarStore::open_in_memory().value();
-    ASSERT_TRUE(store.write(std::vector<Bar>{bar(7, 60, 100), bar(7, 120, 101), bar(8, 60, 500)}).has_value());
+    ASSERT_TRUE(store.write(std::vector<Bar>{bar(7, 60, 100), bar(7, 120, 101), bar(8, 60, 500)})
+                    .has_value());
     EXPECT_EQ(store.latest_before(7, 120).value()->close, core::Price::from_raw(100));
     EXPECT_EQ(store.latest_before(7, 1'000).value()->start, 120);
     EXPECT_FALSE(store.latest_before(7, 60).value().has_value());
@@ -53,7 +54,9 @@ TEST(BarStoreTest, FindsEachInstrumentsLastBarEndedByATime) {
     auto store = BarStore::open_in_memory().value();
     Bar no_oi = bar(7, 180, 103);
     no_oi.oi_close = core::Quantity(0);
-    ASSERT_TRUE(store.write(std::vector<Bar>{bar(7, 60, 100), bar(7, 120, 101), no_oi, bar(8, 60, 500)}).has_value());
+    ASSERT_TRUE(
+        store.write(std::vector<Bar>{bar(7, 60, 100), bar(7, 120, 101), no_oi, bar(8, 60, 500)})
+            .has_value());
     const std::vector<std::uint32_t> ids{7, 8, 9};
 
     // At 180 the bar starting at 180 hasn't ended: 7's is the one at 120.
@@ -83,7 +86,9 @@ TEST(BarStoreTest, FindsEachInstrumentsLastBarEndedByATime) {
 
 TEST(BarStoreTest, SumsVolumePerInstrument) {
     auto store = BarStore::open_in_memory().value();
-    ASSERT_TRUE(store.write(std::vector{bar(7, 60, 1), bar(7, 120, 1), bar(8, 60, 1), bar(7, 600, 1)}).has_value());
+    ASSERT_TRUE(
+        store.write(std::vector{bar(7, 60, 1), bar(7, 120, 1), bar(8, 60, 1), bar(7, 600, 1)})
+            .has_value());
     const auto volumes = store.volumes(0, 600).value();
     EXPECT_EQ(volumes.size(), 2u);
     EXPECT_EQ(volumes.at(7), 20);  // the bar at 600 is outside [0, 600)

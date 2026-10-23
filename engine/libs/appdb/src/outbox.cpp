@@ -11,10 +11,7 @@ std::expected<void, storage::DbError> enqueue(storage::Database& db, const NewNo
     if (!statement) {
         return std::unexpected(statement.error());
     }
-    statement->bind(2, n.type)
-        .bind(4, n.payload)
-        .bind(5, n.dedup_key)
-        .bind(6, now);
+    statement->bind(2, n.type).bind(4, n.payload).bind(5, n.dedup_key).bind(6, now);
     if (n.user_id == 0) {  // a system notification: no user
         statement->bind_null(1);
     } else {

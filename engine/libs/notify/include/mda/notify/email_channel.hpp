@@ -20,10 +20,10 @@
 namespace mda::notify {
 
 struct SmtpOptions {
-    std::string host;             ///< e.g. smtp.gmail.com
-    std::string port = "465";     ///< implicit TLS
+    std::string host;          ///< e.g. smtp.gmail.com
+    std::string port = "465";  ///< implicit TLS
     std::string username;
-    std::string password;         ///< never logged
+    std::string password;  ///< never logged
     std::string from_address;
     std::string from_name = "md_analytics";
     std::chrono::seconds timeout{30};  ///< per SMTP step
@@ -31,15 +31,17 @@ struct SmtpOptions {
 
 /// The RFC 5322 message: headers (subject as a UTF-8 encoded word) and a base64 body, with
 /// CRLF line ends. `now` is Unix seconds (the Date header is in IST).
-[[nodiscard]] std::string format_email(const SmtpOptions& options, std::string_view to, const Message& message,
-                                       std::int64_t now, std::string_view message_id);
+[[nodiscard]] std::string format_email(const SmtpOptions& options, std::string_view to,
+                                       const Message& message, std::int64_t now,
+                                       std::string_view message_id);
 
 /// An address we are willing to put in an envelope: one @, no spaces, brackets or line breaks.
 [[nodiscard]] bool plausible_email(std::string_view address);
 
 class EmailChannel : public Channel {
 public:
-    EmailChannel(SmtpOptions options, boost::asio::ssl::context& tls) : options_(std::move(options)), tls_(&tls) {}
+    EmailChannel(SmtpOptions options, boost::asio::ssl::context& tls)
+        : options_(std::move(options)), tls_(&tls) {}
 
     [[nodiscard]] std::string_view name() const override { return "email"; }
     boost::asio::awaitable<SendResult> send(const Delivery& delivery) override;

@@ -22,8 +22,8 @@
 namespace mda::gateway {
 
 struct SystemMonitorOptions {
-    std::filesystem::path run_dir;  ///< pid files (tools/stack.sh) and recorder.status
-    std::filesystem::path data_dir; ///< the volume whose free space is shown
+    std::filesystem::path run_dir;   ///< pid files (tools/stack.sh) and recorder.status
+    std::filesystem::path data_dir;  ///< the volume whose free space is shown
     std::filesystem::path bars_db;
     std::filesystem::path app_db;
     std::filesystem::path last_quotes_db;
@@ -31,8 +31,8 @@ struct SystemMonitorOptions {
     bool recorder_enabled = false;
     std::vector<std::string> buses;  ///< e.g. {"md", "an"}
     std::chrono::seconds interval{5};
-    std::size_t history = 720;       ///< samples kept (an hour at 5 s)
-    bool start_thread = true;        ///< false in tests: call sample() directly
+    std::size_t history = 720;  ///< samples kept (an hour at 5 s)
+    bool start_thread = true;   ///< false in tests: call sample() directly
 };
 
 /// One status check, as shown on a card and in the page header.
@@ -77,7 +77,8 @@ private:
     FeedMetrics* metrics_;
     SystemMonitorOptions options_;
     // Sampling state (the sampling thread only).
-    std::map<std::string, std::pair<std::uint64_t, std::chrono::steady_clock::time_point>> cpu_seen_;
+    std::map<std::string, std::pair<std::uint64_t, std::chrono::steady_clock::time_point>>
+        cpu_seen_;
     std::map<std::string, BusTotals> bus_seen_;
     FeedMetrics::Counters counters_seen_;
     std::chrono::steady_clock::time_point counters_at_;

@@ -21,13 +21,12 @@ inline constexpr std::string_view kEmailVerify = "email_verify";
 
 /// A new Telegram link code (32 hex characters, valid for `ttl`); replaces the user's
 /// earlier unused one.
-[[nodiscard]] std::expected<std::string, storage::DbError> create_link_code(storage::Database& db, std::int64_t user_id,
-                                                                            std::chrono::seconds ttl, std::int64_t now);
+[[nodiscard]] std::expected<std::string, storage::DbError> create_link_code(
+    storage::Database& db, std::int64_t user_id, std::chrono::seconds ttl, std::int64_t now);
 
 /// The user a Telegram link code belongs to, consuming it; nothing if unknown or expired.
-[[nodiscard]] std::expected<std::optional<std::int64_t>, storage::DbError> consume_link_code(storage::Database& db,
-                                                                                             std::string_view code,
-                                                                                             std::int64_t now);
+[[nodiscard]] std::expected<std::optional<std::int64_t>, storage::DbError> consume_link_code(
+    storage::Database& db, std::string_view code, std::int64_t now);
 
 inline constexpr std::chrono::seconds kEmailCodeTtl{15 * 60};
 inline constexpr std::chrono::seconds kEmailCodeGap{60};  ///< between two codes for one user
@@ -35,13 +34,14 @@ inline constexpr int kEmailCodeGuesses = 5;               ///< wrong guesses bef
 
 /// A new 6-digit email code for the user, replacing the earlier one; nothing if the
 /// earlier one was issued less than kEmailCodeGap ago.
-[[nodiscard]] std::expected<std::optional<std::string>, storage::DbError> create_email_code(storage::Database& db,
-                                                                                            std::int64_t user_id,
-                                                                                            std::int64_t now);
+[[nodiscard]] std::expected<std::optional<std::string>, storage::DbError> create_email_code(
+    storage::Database& db, std::int64_t user_id, std::int64_t now);
 
 /// Whether `code` is the user's current email code (consumed if so). A wrong guess
 /// counts; the kEmailCodeGuesses-th wrong guess deletes the code.
-[[nodiscard]] std::expected<bool, storage::DbError> consume_email_code(storage::Database& db, std::int64_t user_id,
-                                                                       std::string_view code, std::int64_t now);
+[[nodiscard]] std::expected<bool, storage::DbError> consume_email_code(storage::Database& db,
+                                                                       std::int64_t user_id,
+                                                                       std::string_view code,
+                                                                       std::int64_t now);
 
 }  // namespace mda::notify

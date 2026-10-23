@@ -9,7 +9,8 @@ messages::MarketSnapshot day_snapshot(std::span<const Bar> day, core::Price prev
     const Bar& last = day.back();
     messages::MarketSnapshot s{};
     s.header = messages::make_header<messages::MarketSnapshot>(first.header.instrument_id, 0);
-    s.fields = messages::kFieldLtp | messages::kFieldOhlc | messages::kFieldVolume | messages::kFieldExchangeTime;
+    s.fields = messages::kFieldLtp | messages::kFieldOhlc | messages::kFieldVolume |
+               messages::kFieldExchangeTime;
     s.mode = messages::FeedMode::Quote;
     s.ltp = last.close;
     s.open = first.open;

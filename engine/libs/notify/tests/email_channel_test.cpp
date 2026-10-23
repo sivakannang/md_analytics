@@ -33,7 +33,8 @@ using asio::ip::tcp;
 std::string unbase64(std::string_view text) {
     std::string out(text.size() * 3 / 4 + 3, '\0');
     const int length = EVP_DecodeBlock(reinterpret_cast<unsigned char*>(out.data()),
-                                       reinterpret_cast<const unsigned char*>(text.data()), static_cast<int>(text.size()));
+                                       reinterpret_cast<const unsigned char*>(text.data()),
+                                       static_cast<int>(text.size()));
     out.resize(static_cast<std::size_t>(std::max(length, 0)));
     while (!text.empty() && text.back() == '=') {  // DecodeBlock keeps padding bytes
         text.remove_suffix(1);
@@ -59,7 +60,8 @@ struct Received {
     std::string message;
 };
 
-asio::awaitable<void> serve(tcp::acceptor& acceptor, asio::ssl::context& tls, Script script, Received& got) {
+asio::awaitable<void> serve(tcp::acceptor& acceptor, asio::ssl::context& tls, Script script,
+                            Received& got) {
     boost::system::error_code ec;
     const auto token = asio::redirect_error(asio::use_awaitable, ec);
     tcp::socket socket = co_await acceptor.async_accept(token);
@@ -85,7 +87,8 @@ asio::awaitable<void> serve(tcp::acceptor& acceptor, asio::ssl::context& tls, Sc
     }
     std::string input;
     while (true) {
-        const std::size_t length = co_await asio::async_read_until(stream, asio::dynamic_buffer(input), "\r\n", token);
+        const std::size_t length =
+            co_await asio::async_read_until(stream, asio::dynamic_buffer(input), "\r\n", token);
         if (ec) {
             co_return;
         }
@@ -93,7 +96,8 @@ asio::awaitable<void> serve(tcp::acceptor& acceptor, asio::ssl::context& tls, Sc
         input.erase(0, length);
         got.commands.push_back(line);
         if (line.starts_with("EHLO")) {
-            co_await say(std::to_string(script.ehlo) + "-localhost\r\n" + std::to_string(script.ehlo) + " AUTH PLAIN\r\n");
+            co_await say(std::to_string(script.ehlo) + "-localhost\r\n" +
+                         std::to_string(script.ehlo) + " AUTH PLAIN\r\n");
         } else if (line.starts_with("AUTH")) {
             co_await say(std::to_string(script.auth) + " auth\r\n");
         } else if (line.starts_with("MAIL")) {
@@ -105,7 +109,8 @@ asio::awaitable<void> serve(tcp::acceptor& acceptor, asio::ssl::context& tls, Sc
             if (script.data != 354) {
                 continue;
             }
-            const std::size_t end = co_await asio::async_read_until(stream, asio::dynamic_buffer(input), "\r\n.\r\n", token);
+            const std::size_t end = co_await asio::async_read_until(
+                stream, asio::dynamic_buffer(input), "\r\n.\r\n", token);
             if (ec) {
                 co_return;
             }
@@ -141,9 +146,13 @@ protected:
         asio::ssl::context untrusted(asio::ssl::context::tls_client);
         untrusted.set_verify_mode(asio::ssl::verify_peer);
         EmailChannel channel(options, trusted ? client_tls_ : untrusted);
-        Delivery delivery{.id = 7, .notification_id = 3, .channel = "email", .address = std::move(address),
+        Delivery delivery{.id = 7,
+                          .notification_id = 3,
+                          .channel = "email",
+                          .address = std::move(address),
                           .type = "account.signup",
-                          .message = {.subject = "Welcome to md_analytics", .text = "Hi asha,\n\nReady.\n\n— md_analytics"}};
+                          .message = {.subject = "Welcome to md_analytics",
+                                      .text = "Hi asha,\n\nReady.\n\n— md_analytics"}};
         auto result = asio::co_spawn(
             io,
             [&]() -> asio::awaitable<SendResult> {
@@ -181,7 +190,8 @@ TEST_F(EmailChannelTest, DeliversAMailOverTls) {
     const auto subject = m.find("Subject: =?UTF-8?B?");
     ASSERT_NE(subject, std::string::npos);
     const auto subject_end = m.find("?=", subject);
-    EXPECT_EQ(unbase64(m.substr(subject + 19, subject_end - subject - 19)), "Welcome to md_analytics");
+    EXPECT_EQ(unbase64(m.substr(subject + 19, subject_end - subject - 19)),
+              "Welcome to md_analytics");
     const auto body = m.find("\r\n\r\n");
     std::string encoded;
     for (const char c : m.substr(body + 4)) {

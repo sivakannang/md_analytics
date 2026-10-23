@@ -80,8 +80,15 @@ jobs:
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
 
+      - name: Show configure log
+        if: failure()
+        run: |
+          log=build/${{ matrix.preset }}/CMakeFiles/CMakeConfigureLog.yaml
+          [ -f "$log" ] && grep -n -B2 -A40 'result: [1-9]' "$log" | tail -200 || true
+
       - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
+        # -k 0: report every failing file, not just the first.
+        run: cmake --build --preset ${{ matrix.preset }} -- -k 0
 
       - name: Test
         run: ctest --preset ${{ matrix.preset }}

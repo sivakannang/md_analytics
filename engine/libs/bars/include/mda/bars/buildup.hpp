@@ -66,11 +66,13 @@ private:
 };
 
 /// States of `bars` (one instrument, oldest first); bars flagged kBarForming are peeked.
-[[nodiscard]] std::vector<Buildup> classify_buildup(std::span<const Bar> bars, core::Quantity lot_size,
+[[nodiscard]] std::vector<Buildup> classify_buildup(std::span<const Bar> bars,
+                                                    core::Quantity lot_size,
                                                     BuildupThreshold threshold = {});
 
 /// The same with each bar's OI change (the ΔOI bars of docs/design/instrument-page.md).
-[[nodiscard]] std::vector<BuildupPoint> classify_buildup_points(std::span<const Bar> bars, core::Quantity lot_size,
+[[nodiscard]] std::vector<BuildupPoint> classify_buildup_points(std::span<const Bar> bars,
+                                                                core::Quantity lot_size,
                                                                 BuildupThreshold threshold = {});
 
 }  // namespace mda::bars

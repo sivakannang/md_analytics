@@ -27,8 +27,8 @@ inline Certificate make_localhost_certificate() {
     X509_gmtime_adj(X509_getm_notAfter(x), 3600);
     X509_set_pubkey(x, c.key.get());
     X509_NAME* name = X509_get_subject_name(x);
-    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, reinterpret_cast<const unsigned char*>("localhost"), -1, -1,
-                               0);
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+                               reinterpret_cast<const unsigned char*>("localhost"), -1, -1, 0);
     X509_set_issuer_name(x, name);
     X509V3_CTX ctx;
     X509V3_set_ctx_nodb(&ctx);

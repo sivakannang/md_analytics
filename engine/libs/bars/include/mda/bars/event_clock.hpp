@@ -24,11 +24,13 @@ public:
     }
 
     /// Unix seconds; `wall_ns` is used until the first event.
-    [[nodiscard]] std::int64_t now_seconds(std::int64_t wall_ns, Steady::time_point at = Steady::now()) const noexcept {
+    [[nodiscard]] std::int64_t now_seconds(std::int64_t wall_ns,
+                                           Steady::time_point at = Steady::now()) const noexcept {
         if (last_event_ns_ == 0) {
             return wall_ns / 1'000'000'000;
         }
-        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(at - seen_).count();
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(at - seen_).count();
         return (last_event_ns_ + (elapsed > 0 ? elapsed : 0)) / 1'000'000'000;
     }
 

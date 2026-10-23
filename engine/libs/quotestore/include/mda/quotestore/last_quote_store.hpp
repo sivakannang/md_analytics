@@ -31,7 +31,8 @@ public:
     template <messages::Message T>
     void remember(const T& message) {
         const auto bytes = messages::as_bytes(message);
-        pending_[{message.header.instrument_id.value(), messages::to_wire(messages::MessageTraits<T>::type)}]
+        pending_[{message.header.instrument_id.value(),
+                  messages::to_wire(messages::MessageTraits<T>::type)}]
             .assign(bytes.begin(), bytes.end());
     }
 
@@ -40,14 +41,17 @@ public:
 
     /// Calls `on_message(type, payload)` for every saved message.
     [[nodiscard]] std::expected<std::size_t, storage::DbError> load(
-        const std::function<void(std::uint32_t type, std::span<const std::byte> payload)>& on_message);
+        const std::function<void(std::uint32_t type, std::span<const std::byte> payload)>&
+            on_message);
 
 private:
     explicit LastQuoteStore(storage::Database db) : db_(std::move(db)) {}
-    [[nodiscard]] static std::expected<LastQuoteStore, storage::DbError> prepare(storage::Database db);
+    [[nodiscard]] static std::expected<LastQuoteStore, storage::DbError> prepare(
+        storage::Database db);
 
     storage::Database db_;
-    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<std::byte>> pending_;  // (id, type)
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<std::byte>>
+        pending_;  // (id, type)
 };
 
 }  // namespace mda::quotestore

@@ -7,8 +7,8 @@
 namespace mda::bars {
 namespace {
 
-Bar minute(std::int64_t start, std::int64_t o, std::int64_t h, std::int64_t l, std::int64_t c, std::int64_t volume,
-           std::int64_t oi = 0) {
+Bar minute(std::int64_t start, std::int64_t o, std::int64_t h, std::int64_t l, std::int64_t c,
+           std::int64_t volume, std::int64_t oi = 0) {
     Bar b{};
     b.header = messages::make_header<Bar>(core::InstrumentId(7), 0);
     b.start = start;
@@ -25,7 +25,8 @@ Bar minute(std::int64_t start, std::int64_t o, std::int64_t h, std::int64_t l, s
 }
 
 TEST(DaySnapshotTest, SummarisesTheDayLikeAQuote) {
-    const std::vector<Bar> day{minute(600, 100, 104, 99, 103, 10, 1'000), minute(660, 103, 110, 102, 108, 5),
+    const std::vector<Bar> day{minute(600, 100, 104, 99, 103, 10, 1'000),
+                               minute(660, 103, 110, 102, 108, 5),
                                minute(720, 108, 109, 95, 97, 7, 900)};
     const auto s = day_snapshot(day, core::Price::from_raw(101));
     EXPECT_EQ(s.header.instrument_id, core::InstrumentId(7));

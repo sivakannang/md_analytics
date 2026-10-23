@@ -5,10 +5,9 @@
 #include <fstream>
 #include <string>
 
-#include <unistd.h>
-
 #include <boost/json.hpp>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <mda/gateway/feed_metrics.hpp>
 #include <mda/gateway/system_monitor.hpp>
@@ -18,7 +17,8 @@ namespace {
 
 TEST(LatencyHistogramTest, BucketsCoverEveryValueWithinAQuarter) {
     std::size_t last = 0;
-    for (std::uint64_t v : {0ull, 1ull, 15ull, 16ull, 17ull, 31ull, 32ull, 100ull, 999ull, 1'000'000ull, 1ull << 40}) {
+    for (std::uint64_t v : {0ull, 1ull, 15ull, 16ull, 17ull, 31ull, 32ull, 100ull, 999ull,
+                            1'000'000ull, 1ull << 40}) {
         const std::size_t i = LatencyHistogram::index_of(v);
         EXPECT_GE(i, last) << v;  // monotonic
         last = i;
@@ -38,7 +38,7 @@ TEST(LatencyHistogramTest, TakesPercentilesAndResets) {
     EXPECT_GE(s.p50, 500u);
     EXPECT_LE(s.p50, 640u);  // the bucket holding 500 ends at 511 or a little above
     EXPECT_GE(s.p99, 990u);
-    EXPECT_LE(s.p99, 1000u);  // never above the max
+    EXPECT_LE(s.p99, 1000u);        // never above the max
     EXPECT_EQ(h.take().count, 0u);  // reset
 }
 
@@ -88,7 +88,8 @@ TEST(SystemMonitorTest, KnowsMarketHours) {
 }
 
 TEST(SystemMonitorTest, ReportsProcessesBusesAndTheRecordersStatus) {
-    const auto dir = std::filesystem::temp_directory_path() / ("mda_monitor_test_" + std::to_string(getpid()));
+    const auto dir =
+        std::filesystem::temp_directory_path() / ("mda_monitor_test_" + std::to_string(getpid()));
     std::filesystem::create_directories(dir / "run");
     std::filesystem::create_directories(dir / "journal");
     // A pid file naming this test process: alive, but not the program the name stands for.

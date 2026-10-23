@@ -30,11 +30,11 @@
 #include <mda/gateway/admin_api.hpp>
 #include <mda/gateway/bars_api.hpp>
 #include <mda/gateway/bus_feed.hpp>
+#include <mda/gateway/chain_api.hpp>
 #include <mda/gateway/last_quotes.hpp>
+#include <mda/gateway/live_bars.hpp>
 #include <mda/gateway/notifications_api.hpp>
 #include <mda/gateway/oi_change_api.hpp>
-#include <mda/gateway/chain_api.hpp>
-#include <mda/gateway/live_bars.hpp>
 #include <mda/gateway/quote_cache.hpp>
 #include <mda/gateway/server.hpp>
 #include <mda/gateway/static_site.hpp>
@@ -154,7 +154,8 @@ int run(const runtime::Config& config) {
                                    auth_options.session_idle_timeout);
     gateway::register_bars_routes(router, auth, *db, auth_worker.get_executor(), *bar_store,
                                   bars_worker.get_executor());
-    gateway::register_notification_routes(router, auth, *db, auth_worker.get_executor(), config.notifier.telegram_bot);
+    gateway::register_notification_routes(router, auth, *db, auth_worker.get_executor(),
+                                          config.notifier.telegram_bot);
     // System monitor (docs/design/system-monitor.md): fed by the bus readers below; the
     // data folder is where bars.db lives (tools/stack.sh keeps pid files in its run/).
     gateway::FeedMetrics feed_metrics;
@@ -175,10 +176,11 @@ int run(const runtime::Config& config) {
         site.emplace(settings.web_dir);
         spdlog::info("web: serving {}{}", site->root().string(),
                      site->available() ? "" : " (not built yet: npm --prefix web run build)");
-        router.set_fallback([&site](const gateway::Request& request,
-                                    const gateway::PathParams&) -> asio::awaitable<gateway::Response> {
-            co_return site->serve(request);
-        });
+        router.set_fallback(
+            [&site](const gateway::Request& request,
+                    const gateway::PathParams&) -> asio::awaitable<gateway::Response> {
+                co_return site->serve(request);
+            });
     }
     gateway::HttpServer server(io.get_executor(), router);
     gateway::QuoteCache quotes;
@@ -186,15 +188,18 @@ int run(const runtime::Config& config) {
     gateway::ChainSummaries chain_summaries;
     std::vector<gateway::ChainInfo> chain_info;
     for (const auto& chain : config.feed.chains) {
-        chain_info.push_back({.underlying = chain.underlying, .spot = chain.spot, .expiries = chain.expiries});
+        chain_info.push_back(
+            {.underlying = chain.underlying, .spot = chain.spot, .expiries = chain.expiries});
     }
     gateway::register_oi_change_routes(router, auth, *db, auth_worker.get_executor(), *bar_store,
                                        bars_worker.get_executor(), chain_info);
-    gateway::register_chain_routes(router, auth, *db, auth_worker.get_executor(), quotes, chain_summaries,
-                                   std::move(chain_info));
-    gateway::register_stream(
-        server, auth, auth_worker.get_executor(), quotes,
-        {.publish_interval = settings.publish_interval, .usage = &usage, .bars = &live_bars, .chains = &chain_summaries});
+    gateway::register_chain_routes(router, auth, *db, auth_worker.get_executor(), quotes,
+                                   chain_summaries, std::move(chain_info));
+    gateway::register_stream(server, auth, auth_worker.get_executor(), quotes,
+                             {.publish_interval = settings.publish_interval,
+                              .usage = &usage,
+                              .bars = &live_bars,
+                              .chains = &chain_summaries});
     server.on_response([&usage](const gateway::Request& request, std::size_t bytes) {
         usage.meter_http(request, bytes);
     });
@@ -208,7 +213,8 @@ int run(const runtime::Config& config) {
         spdlog::info("last quotes: {} saved messages loaded", *used);
     }
     gateway::BusFeed bus_feed(quotes, {.bus_name = config.md_bus.name, .metrics = &feed_metrics});
-    gateway::AnalyticsFeed analytics_feed(live_bars, quotes, chain_summaries, config.an_bus.name, &feed_metrics);
+    gateway::AnalyticsFeed analytics_feed(live_bars, quotes, chain_summaries, config.an_bus.name,
+                                          &feed_metrics);
 
     boost::system::error_code ec;
     const auto address = asio::ip::make_address(host, ec);

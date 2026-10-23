@@ -211,7 +211,8 @@ asio::awaitable<Response> Router::dispatch(const Request& request) const {
             continue;
         }
         path_known = true;
-        if (route.verb == request.method() && (best == nullptr || params.size() < best_params.size())) {
+        if (route.verb == request.method() &&
+            (best == nullptr || params.size() < best_params.size())) {
             best = &route;
             best_params = std::move(params);
         }

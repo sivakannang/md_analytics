@@ -11,23 +11,35 @@ namespace {
 /// The site loads nothing from elsewhere: scripts, styles, images and the stream are all
 /// same-origin. Inline style attributes (React) need 'unsafe-inline' for styles only.
 constexpr std::string_view kContentSecurityPolicy =
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' "
+    "data:; "
     "font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
     "frame-ancestors 'none'";
 
 std::string_view content_type(const std::filesystem::path& path) {
     const std::string ext = path.extension().string();
-    if (ext == ".html") return "text/html; charset=utf-8";
-    if (ext == ".js" || ext == ".mjs") return "text/javascript; charset=utf-8";
-    if (ext == ".css") return "text/css; charset=utf-8";
-    if (ext == ".json" || ext == ".map") return "application/json";
-    if (ext == ".webmanifest") return "application/manifest+json";
-    if (ext == ".svg") return "image/svg+xml";
-    if (ext == ".png") return "image/png";
-    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
-    if (ext == ".ico") return "image/x-icon";
-    if (ext == ".woff2") return "font/woff2";
-    if (ext == ".txt") return "text/plain; charset=utf-8";
+    if (ext == ".html")
+        return "text/html; charset=utf-8";
+    if (ext == ".js" || ext == ".mjs")
+        return "text/javascript; charset=utf-8";
+    if (ext == ".css")
+        return "text/css; charset=utf-8";
+    if (ext == ".json" || ext == ".map")
+        return "application/json";
+    if (ext == ".webmanifest")
+        return "application/manifest+json";
+    if (ext == ".svg")
+        return "image/svg+xml";
+    if (ext == ".png")
+        return "image/png";
+    if (ext == ".jpg" || ext == ".jpeg")
+        return "image/jpeg";
+    if (ext == ".ico")
+        return "image/x-icon";
+    if (ext == ".woff2")
+        return "font/woff2";
+    if (ext == ".txt")
+        return "text/plain; charset=utf-8";
     return "application/octet-stream";
 }
 
@@ -95,7 +107,8 @@ Response StaticSite::serve(const Request& request) const {
     if (path != "/") {
         const auto candidate = std::filesystem::weakly_canonical(root_ / path.substr(1), ec);
         const bool inside =
-            std::mismatch(root_.begin(), root_.end(), candidate.begin(), candidate.end()).first == root_.end();
+            std::mismatch(root_.begin(), root_.end(), candidate.begin(), candidate.end()).first ==
+            root_.end();
         if (!ec && inside && std::filesystem::is_regular_file(candidate, ec)) {
             file = candidate;
         }
@@ -112,8 +125,9 @@ Response StaticSite::serve(const Request& request) const {
 
     std::string body;
     if (!read_file(file, body)) {
-        return plain(http::status::not_found, version,
-                     is_index ? "the website is not built (npm --prefix web run build)" : "not found");
+        return plain(
+            http::status::not_found, version,
+            is_index ? "the website is not built (npm --prefix web run build)" : "not found");
     }
     Response response{http::status::ok, version};
     response.set(http::field::content_type, content_type(file));

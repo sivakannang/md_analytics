@@ -49,16 +49,17 @@ void on_signal(int) {
 }
 
 struct Options {
-    std::string date;           ///< YYYY-MM-DD (IST); default today
-    int from_minute = 0;        ///< IST minute of day, inclusive
-    int to_minute = 24 * 60;    ///< exclusive
-    double speed = 1.0;         ///< 0 = as fast as possible
+    std::string date;         ///< YYYY-MM-DD (IST); default today
+    int from_minute = 0;      ///< IST minute of day, inclusive
+    int to_minute = 24 * 60;  ///< exclusive
+    double speed = 1.0;       ///< 0 = as fast as possible
 };
 
 int usage() {
-    std::fprintf(stderr,
-                 "usage: mda-replayer --config FILE [--date YYYY-MM-DD] [--from HH:MM] [--to HH:MM] "
-                 "[--speed N|max]\n");
+    std::fprintf(
+        stderr,
+        "usage: mda-replayer --config FILE [--date YYYY-MM-DD] [--from HH:MM] [--to HH:MM] "
+        "[--speed N|max]\n");
     return 2;
 }
 
@@ -107,7 +108,8 @@ int run(const runtime::Config& config, const Options& options) {
     csv << csv_file.rdbuf();
     auto imported = kite::import_instruments(csv.str(), loaded->registry);
     if (!imported) {
-        spdlog::error("replay: {} has no header or missing columns", (day / "instruments.csv").string());
+        spdlog::error("replay: {} has no header or missing columns",
+                      (day / "instruments.csv").string());
         return 1;
     }
     kite::TickDecoder decoder(imported->tokens);
@@ -118,8 +120,10 @@ int run(const runtime::Config& config, const Options& options) {
         spdlog::error("bus: {}: {}", config.md_bus.name, bus::to_string(writer.error()));
         return 1;
     }
-    spdlog::info("replay: {} ({} hour files) onto '{}' at {}", options.date, files.size(), config.md_bus.name,
-                 options.speed == 0 ? std::string("full speed") : std::to_string(options.speed) + "x");
+    spdlog::info(
+        "replay: {} ({} hour files) onto '{}' at {}", options.date, files.size(),
+        config.md_bus.name,
+        options.speed == 0 ? std::string("full speed") : std::to_string(options.speed) + "x");
 
     const auto in_window = [&](std::int64_t receive_ns) {
         const std::int64_t s = receive_ns / 1'000'000'000;
@@ -155,7 +159,8 @@ int run(const runtime::Config& config, const Options& options) {
                              journal::decode_gap(record->payload).lost_bytes);
                 continue;
             }
-            if (auto status = messages::decode<messages::FeedStatus>(record->type, record->payload)) {
+            if (auto status =
+                    messages::decode<messages::FeedStatus>(record->type, record->payload)) {
                 if (in_window(status->timestamp.ns())) {
                     status->header.sequence = ++sequence;
                     (void)writer->publish(record->type, messages::as_bytes(*status));
@@ -172,37 +177,45 @@ int run(const runtime::Config& config, const Options& options) {
                 first_ns = at;
             }
             if (options.speed > 0) {
-                const auto due = wall_start + std::chrono::nanoseconds(static_cast<std::int64_t>(
-                                                  static_cast<double>(at - *first_ns) / options.speed));
+                const auto due =
+                    wall_start + std::chrono::nanoseconds(static_cast<std::int64_t>(
+                                     static_cast<double>(at - *first_ns) / options.speed));
                 while (Clock::now() < due && !g_stop.load()) {
                     beat();
-                    std::this_thread::sleep_until(std::min(due, Clock::now() + std::chrono::milliseconds(100)));
+                    std::this_thread::sleep_until(
+                        std::min(due, Clock::now() + std::chrono::milliseconds(100)));
                 }
             }
             beat();
             ++frames;
             decoder.decode(raw->frame, raw->header.receive_ts,
-                           [&](const messages::MarketSnapshot& snapshot, const messages::DepthSnapshot* depth) {
+                           [&](const messages::MarketSnapshot& snapshot,
+                               const messages::DepthSnapshot* depth) {
                                messages::MarketSnapshot s = snapshot;
                                s.header.sequence = ++sequence;
-                               (void)writer->publish(messages::to_wire(messages::MessageType::MarketSnapshot),
-                                                     messages::as_bytes(s));
+                               (void)writer->publish(
+                                   messages::to_wire(messages::MessageType::MarketSnapshot),
+                                   messages::as_bytes(s));
                                if (depth != nullptr) {
                                    messages::DepthSnapshot d = *depth;
                                    d.header.sequence = ++sequence;
-                                   (void)writer->publish(messages::to_wire(messages::MessageType::DepthSnapshot),
-                                                         messages::as_bytes(d));
+                                   (void)writer->publish(
+                                       messages::to_wire(messages::MessageType::DepthSnapshot),
+                                       messages::as_bytes(d));
                                }
                                ++snapshots;
                            });
         }
         if (reader->torn()) {
-            spdlog::warn("replay: {} ends in a torn record (recorder still writing, or a crash)", file.string());
+            spdlog::warn("replay: {} ends in a torn record (recorder still writing, or a crash)",
+                         file.string());
         }
     }
-    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - wall_start).count();
-    spdlog::info("replay: done: {} frames, {} snapshots in {} s; keeping the bus open (Ctrl+C to stop)", frames,
-                 snapshots, elapsed);
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - wall_start).count();
+    spdlog::info(
+        "replay: done: {} frames, {} snapshots in {} s; keeping the bus open (Ctrl+C to stop)",
+        frames, snapshots, elapsed);
     while (!g_stop.load()) {
         beat();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

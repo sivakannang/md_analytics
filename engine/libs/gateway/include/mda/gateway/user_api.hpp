@@ -17,7 +17,8 @@ inline constexpr std::string_view kSessionCookie = "mda_session";
 
 struct UserApiOptions {
     std::int64_t cookie_max_age_seconds = 30 * 24 * 3600;
-    bool secure_cookie = false;  ///< always Secure; otherwise only for requests that came over HTTPS (ADR-0027)
+    bool secure_cookie =
+        false;  ///< always Secure; otherwise only for requests that came over HTTPS (ADR-0027)
 };
 
 /// Registers the user/session routes on `router`. `auth` must outlive the router and is

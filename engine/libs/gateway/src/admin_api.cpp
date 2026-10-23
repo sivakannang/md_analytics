@@ -13,8 +13,8 @@ namespace mda::gateway {
 namespace {
 
 namespace json = boost::json;
-using detail::from_error;
 using detail::as_admin;
+using detail::from_error;
 using detail::run_on;
 using detail::token_of;
 

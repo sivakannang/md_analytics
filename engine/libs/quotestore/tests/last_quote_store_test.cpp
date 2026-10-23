@@ -55,7 +55,10 @@ TEST(LastQuoteStoreTest, KeepsTheLatestMessagePerInstrumentAndType) {
     std::size_t depths = 0;
     ASSERT_TRUE(store
                     .load([&](std::uint32_t type, std::span<const std::byte> payload) {
-                        depths += messages::decode<messages::DepthSnapshot>(type, payload).has_value() ? 1 : 0;
+                        depths +=
+                            messages::decode<messages::DepthSnapshot>(type, payload).has_value()
+                                ? 1
+                                : 0;
                     })
                     .has_value());
     EXPECT_EQ(depths, 1u);
@@ -63,7 +66,8 @@ TEST(LastQuoteStoreTest, KeepsTheLatestMessagePerInstrumentAndType) {
 
 TEST(LastQuoteStoreTest, SurvivesReopeningTheFile) {
     const auto path = std::filesystem::temp_directory_path() /
-                      ("mda_last_quotes_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + ".db");
+                      ("mda_last_quotes_" +
+                       std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + ".db");
     std::filesystem::remove(path);
     {
         auto store = LastQuoteStore::open(path).value();

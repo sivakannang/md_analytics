@@ -28,10 +28,10 @@
 namespace mda::notify {
 
 struct TelegramOptions {
-    std::string token;                    ///< from @BotFather; secret
+    std::string token;  ///< from @BotFather; secret
     std::string host = "api.telegram.org";
     std::string port = "443";
-    std::chrono::seconds timeout{30};     ///< per request (long polls add poll_timeout)
+    std::chrono::seconds timeout{30};  ///< per request (long polls add poll_timeout)
     std::chrono::seconds poll_timeout{25};
     std::chrono::milliseconds per_chat_gap{1100};
     std::chrono::milliseconds global_gap{40};
@@ -45,12 +45,12 @@ struct TelegramError {
 
 class TelegramApi {
 public:
-    TelegramApi(TelegramOptions options, boost::asio::ssl::context& tls) : options_(std::move(options)), tls_(&tls) {}
+    TelegramApi(TelegramOptions options, boost::asio::ssl::context& tls)
+        : options_(std::move(options)), tls_(&tls) {}
 
     /// POST /bot<token>/<method> with a JSON body; the "result" of an ok reply.
-    boost::asio::awaitable<std::expected<boost::json::value, TelegramError>> call(std::string_view method,
-                                                                                  const boost::json::object& body,
-                                                                                  std::chrono::seconds timeout);
+    boost::asio::awaitable<std::expected<boost::json::value, TelegramError>> call(
+        std::string_view method, const boost::json::object& body, std::chrono::seconds timeout);
 
     [[nodiscard]] const TelegramOptions& options() const { return options_; }
 
@@ -103,8 +103,8 @@ public:
     explicit TelegramLinker(storage::Database& db) : db_(&db) {}
 
     /// The reply to send, if any.
-    [[nodiscard]] std::expected<std::optional<OutgoingMessage>, storage::DbError> handle(const Update& update,
-                                                                                         std::int64_t now);
+    [[nodiscard]] std::expected<std::optional<OutgoingMessage>, storage::DbError> handle(
+        const Update& update, std::int64_t now);
 
 private:
     storage::Database* db_;
@@ -112,7 +112,7 @@ private:
 
 /// One long poll: fetches updates after `offset`, handles them and sends the replies.
 /// Returns the next offset (unchanged when the poll failed).
-boost::asio::awaitable<std::int64_t> poll_once(TelegramApi& api, TelegramLinker& linker, std::int64_t offset,
-                                               std::int64_t now);
+boost::asio::awaitable<std::int64_t> poll_once(TelegramApi& api, TelegramLinker& linker,
+                                               std::int64_t offset, std::int64_t now);
 
 }  // namespace mda::notify

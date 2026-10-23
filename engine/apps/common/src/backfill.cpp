@@ -24,9 +24,10 @@ std::string ist_text(std::int64_t unix_seconds) {
     const std::chrono::year_month_day ymd{day};
     const std::chrono::hh_mm_ss hms{local - day};
     char text[32];
-    std::snprintf(text, sizeof text, "%04d-%02u-%02u %02ld:%02ld:%02ld", static_cast<int>(ymd.year()),
-                  static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()),
-                  static_cast<long>(hms.hours().count()), static_cast<long>(hms.minutes().count()),
+    std::snprintf(text, sizeof text, "%04d-%02u-%02u %02ld:%02ld:%02ld",
+                  static_cast<int>(ymd.year()), static_cast<unsigned>(ymd.month()),
+                  static_cast<unsigned>(ymd.day()), static_cast<long>(hms.hours().count()),
+                  static_cast<long>(hms.minutes().count()),
                   static_cast<long>(hms.seconds().count()));
     return text;
 }
@@ -61,7 +62,8 @@ std::vector<bars::Bar> to_bars(core::InstrumentId id, const std::vector<kite::Ca
 
 bool in_market_hours(std::int64_t now) {
     const std::int64_t midnight = ist_midnight(now);
-    const std::chrono::weekday weekday{std::chrono::sys_days{std::chrono::days{(midnight + kIst) / kDay}}};
+    const std::chrono::weekday weekday{
+        std::chrono::sys_days{std::chrono::days{(midnight + kIst) / kDay}}};
     if (weekday == std::chrono::Saturday || weekday == std::chrono::Sunday) {
         return false;
     }
@@ -69,7 +71,8 @@ bool in_market_hours(std::int64_t now) {
     return time_of_day >= kSessionOpen && time_of_day < kSessionClose;
 }
 
-std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store, std::uint32_t instrument_id,
+std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store,
+                                                          std::uint32_t instrument_id,
                                                           std::int64_t now, int days) {
     const std::int64_t today = ist_midnight(now);
     BarCoverage coverage;
@@ -86,7 +89,8 @@ std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store,
     return coverage;
 }
 
-std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage, int days) {
+std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage,
+                                                   int days) {
     const std::int64_t today = ist_midnight(now);
     if (in_market_hours(now)) {
         if (coverage.today) {
@@ -98,7 +102,8 @@ std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage
         return std::nullopt;
     }
     // The last `days` days including today, as mda-backfill --days.
-    return BackfillWindow{.from = today - static_cast<std::int64_t>(days - 1) * kDay + kSessionOpen, .to = now};
+    return BackfillWindow{.from = today - static_cast<std::int64_t>(days - 1) * kDay + kSessionOpen,
+                          .to = now};
 }
 
 }  // namespace mda::apps

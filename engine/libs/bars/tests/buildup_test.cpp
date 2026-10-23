@@ -39,32 +39,32 @@ TEST(Buildup, NoOiIsNone) {
 
 TEST(Buildup, FourQuadrantsCloseToClose) {
     const std::vector<Bar> bars{
-        minute(ist(10, 0), 100, 1'000'000, 1),
-        minute(ist(10, 1), 110, 1'010'000, 1),  // up, up
-        minute(ist(10, 2), 105, 1'020'000, 1),  // down, up
-        minute(ist(10, 3), 108, 1'010'000, 1),  // up, down
-        minute(ist(10, 4), 101, 1'000'000, 1),  // down, down
+        minute(ist(10, 0), 100, 1'000'000, 1), minute(ist(10, 1), 110, 1'010'000, 1),  // up, up
+        minute(ist(10, 2), 105, 1'020'000, 1),                                         // down, up
+        minute(ist(10, 3), 108, 1'010'000, 1),                                         // up, down
+        minute(ist(10, 4), 101, 1'000'000, 1),                                         // down, down
     };
     EXPECT_EQ(classify_buildup(bars, kLot),
-              (std::vector{Buildup::None, Buildup::LongBuildup, Buildup::ShortBuildup, Buildup::ShortCovering,
-                           Buildup::LongUnwinding}));
+              (std::vector{Buildup::None, Buildup::LongBuildup, Buildup::ShortBuildup,
+                           Buildup::ShortCovering, Buildup::LongUnwinding}));
 }
 
 TEST(Buildup, UnchangedPriceCountsAsUp) {
-    const std::vector<Bar> bars{minute(ist(10, 0), 100, 1'000'000, 1), minute(ist(10, 1), 100, 990'000, 1)};
+    const std::vector<Bar> bars{minute(ist(10, 0), 100, 1'000'000, 1),
+                                minute(ist(10, 1), 100, 990'000, 1)};
     EXPECT_EQ(classify_buildup(bars, kLot)[1], Buildup::ShortCovering);
 }
 
 // The design's example: OI arrives at 10:03 and 10:06; 10:06 is measured from 10:03.
 TEST(Buildup, MeasuresFromLastOiUpdate) {
     const std::vector<Bar> bars{
-        minute(ist(10, 3), 100, 1'000'000, 2),
-        minute(ist(10, 4), 120, 1'000'000, 0),
+        minute(ist(10, 3), 100, 1'000'000, 2), minute(ist(10, 4), 120, 1'000'000, 0),
         minute(ist(10, 5), 90, 1'000'000, 0),
         minute(ist(10, 6), 95, 1'010'000, 1),  // price 100 -> 95, OI up
     };
     EXPECT_EQ(classify_buildup(bars, kLot),
-              (std::vector{Buildup::None, Buildup::NoOiUpdate, Buildup::NoOiUpdate, Buildup::ShortBuildup}));
+              (std::vector{Buildup::None, Buildup::NoOiUpdate, Buildup::NoOiUpdate,
+                           Buildup::ShortBuildup}));
 }
 
 TEST(Buildup, PointsCarryTheOiChangeTheStateWasMeasuredOn) {
@@ -104,8 +104,10 @@ TEST(Buildup, NeutralBelowOneLot) {
 }
 
 TEST(Buildup, UpdateWithoutNetChangeIsNeutral) {
-    const std::vector<Bar> bars{minute(ist(10, 0), 100, 1'000'000, 1), minute(ist(10, 1), 110, 1'000'000, 3)};
-    EXPECT_EQ(classify_buildup(bars, core::Quantity{0}, {.oi_fraction = 0, .lots = 0})[1], Buildup::Neutral);
+    const std::vector<Bar> bars{minute(ist(10, 0), 100, 1'000'000, 1),
+                                minute(ist(10, 1), 110, 1'000'000, 3)};
+    EXPECT_EQ(classify_buildup(bars, core::Quantity{0}, {.oi_fraction = 0, .lots = 0})[1],
+              Buildup::Neutral);
 }
 
 TEST(Buildup, FormingBarIsPeekedAndNotAReference) {

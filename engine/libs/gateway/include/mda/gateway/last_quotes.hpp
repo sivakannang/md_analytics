@@ -12,7 +12,7 @@
 namespace mda::gateway {
 
 /// Loads every saved quote, depth and circuit-limit message; returns how many were used.
-[[nodiscard]] std::expected<std::size_t, storage::DbError> load_last_quotes(QuoteCache& cache,
-                                                                           quotestore::LastQuoteStore& store);
+[[nodiscard]] std::expected<std::size_t, storage::DbError> load_last_quotes(
+    QuoteCache& cache, quotestore::LastQuoteStore& store);
 
 }  // namespace mda::gateway

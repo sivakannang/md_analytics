@@ -19,10 +19,30 @@ set(_mda_warnings
     -Wimplicit-fallthrough
 )
 
+# GCC's -Wextra flags designated initialisers that leave members out; we rely on those
+# being value-initialised (C++23 convention), and Clang doesn't warn about them.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    list(APPEND _mda_warnings -Wno-missing-field-initializers)
+endif()
+
+# Older libc++ (Xcode 16 and earlier) keeps std::jthread and std::stop_token behind
+# -fexperimental-library; newer ones don't need it.
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles([=[
+#include <stop_token>
+#include <thread>
+int main() { std::jthread t([](std::stop_token) {}); }
+]=] MDA_HAVE_JTHREAD)
+set(_mda_std_options)
+if(NOT MDA_HAVE_JTHREAD AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(_mda_std_options -fexperimental-library)
+endif()
+
 # mda_target_defaults(<target>)
 #   Applies warnings and the configured sanitizers to one of our compiled targets.
 function(mda_target_defaults target)
-    target_compile_options(${target} PRIVATE ${_mda_warnings})
+    target_compile_options(${target} PRIVATE ${_mda_warnings} ${_mda_std_options})
+    target_link_options(${target} PRIVATE ${_mda_std_options})
     if(MDA_WARNINGS_AS_ERRORS)
         target_compile_options(${target} PRIVATE -Werror)
     endif()

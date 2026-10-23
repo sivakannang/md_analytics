@@ -39,8 +39,10 @@ std::uint64_t mach_to_ns(std::uint64_t ticks) {
 }
 
 bool same(CFStringRef a, const char* b) {
-    const CFStringRef other = CFStringCreateWithCString(kCFAllocatorDefault, b, kCFStringEncodingUTF8);
-    const bool equal = a != nullptr && other != nullptr && CFStringCompare(a, other, 0) == kCFCompareEqualTo;
+    const CFStringRef other =
+        CFStringCreateWithCString(kCFAllocatorDefault, b, kCFStringEncodingUTF8);
+    const bool equal =
+        a != nullptr && other != nullptr && CFStringCompare(a, other, 0) == kCFCompareEqualTo;
     if (other != nullptr) {
         CFRelease(other);
     }
@@ -60,19 +62,24 @@ void read_power(MachineStats& out) {
     }
     if (const CFArrayRef sources = IOPSCopyPowerSourcesList(info)) {
         for (CFIndex i = 0; i < CFArrayGetCount(sources); ++i) {
-            const CFDictionaryRef source = IOPSGetPowerSourceDescription(info, CFArrayGetValueAtIndex(sources, i));
+            const CFDictionaryRef source =
+                IOPSGetPowerSourceDescription(info, CFArrayGetValueAtIndex(sources, i));
             if (source == nullptr) {
                 continue;
             }
-            const auto type = static_cast<CFStringRef>(CFDictionaryGetValue(source, CFSTR(kIOPSTypeKey)));
+            const auto type =
+                static_cast<CFStringRef>(CFDictionaryGetValue(source, CFSTR(kIOPSTypeKey)));
             if (!same(type, kIOPSInternalBatteryType)) {
                 continue;
             }
             int current = 0;
             int max = 0;
-            const auto current_ref = static_cast<CFNumberRef>(CFDictionaryGetValue(source, CFSTR(kIOPSCurrentCapacityKey)));
-            const auto max_ref = static_cast<CFNumberRef>(CFDictionaryGetValue(source, CFSTR(kIOPSMaxCapacityKey)));
-            if (current_ref != nullptr && max_ref != nullptr && CFNumberGetValue(current_ref, kCFNumberIntType, &current) &&
+            const auto current_ref = static_cast<CFNumberRef>(
+                CFDictionaryGetValue(source, CFSTR(kIOPSCurrentCapacityKey)));
+            const auto max_ref =
+                static_cast<CFNumberRef>(CFDictionaryGetValue(source, CFSTR(kIOPSMaxCapacityKey)));
+            if (current_ref != nullptr && max_ref != nullptr &&
+                CFNumberGetValue(current_ref, kCFNumberIntType, &current) &&
                 CFNumberGetValue(max_ref, kCFNumberIntType, &max) && max > 0) {
                 out.battery_percent = current * 100 / max;
             }
@@ -102,20 +109,23 @@ MachineStats machine_stats() {
     vm_statistics64_data_t vm{};
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     vm_size_t page = 0;
-    if (host_statistics64(host_port(), HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&vm), &count) == KERN_SUCCESS &&
+    if (host_statistics64(host_port(), HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&vm),
+                          &count) == KERN_SUCCESS &&
         host_page_size(host_port(), &page) == KERN_SUCCESS) {
         // As Activity Monitor's "Memory Used": app memory + wired + compressed.
         const std::uint64_t app = vm.internal_page_count > vm.purgeable_count
                                       ? std::uint64_t{vm.internal_page_count} - vm.purgeable_count
                                       : 0;
-        out.memory_used = (app + vm.wire_count + vm.compressor_page_count) * static_cast<std::uint64_t>(page);
+        out.memory_used =
+            (app + vm.wire_count + vm.compressor_page_count) * static_cast<std::uint64_t>(page);
     }
 
     timeval boot{};
     length = sizeof boot;
     int boot_mib[2] = {CTL_KERN, KERN_BOOTTIME};
     if (sysctl(boot_mib, 2, &boot, &length, nullptr, 0) == 0 && boot.tv_sec > 0) {
-        out.uptime_s = static_cast<std::int64_t>(std::time(nullptr)) - static_cast<std::int64_t>(boot.tv_sec);
+        out.uptime_s =
+            static_cast<std::int64_t>(std::time(nullptr)) - static_cast<std::int64_t>(boot.tv_sec);
     }
     read_power(out);
     return out;
@@ -133,7 +143,8 @@ std::optional<ProcessStats> process_stats(std::uint32_t pid) {
     ProcessStats out{.pid = pid};
     out.started = static_cast<std::int64_t>(bsd.pbi_start_tvsec);
     proc_taskinfo task{};
-    if (proc_pidinfo(id, PROC_PIDTASKINFO, 0, &task, sizeof task) == static_cast<int>(sizeof task)) {
+    if (proc_pidinfo(id, PROC_PIDTASKINFO, 0, &task, sizeof task) ==
+        static_cast<int>(sizeof task)) {
         out.cpu_time_ns = mach_to_ns(task.pti_total_user + task.pti_total_system);
         out.rss_bytes = task.pti_resident_size;
     }

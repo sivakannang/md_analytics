@@ -23,15 +23,19 @@ std::int64_t ist_midnight(std::int64_t t) {
 /// Queued, sent today, failed today, and the oldest queued notification's age.
 json::object notifier_json(storage::Database& db, std::int64_t now, std::vector<Check>& checks) {
     const std::int64_t midnight = ist_midnight(now);
-    json::object out{{"queued", nullptr}, {"sent_today", nullptr}, {"failed_today", nullptr},
+    json::object out{{"queued", nullptr},
+                     {"sent_today", nullptr},
+                     {"failed_today", nullptr},
                      {"oldest_queued_s", nullptr}};
     auto counts = db.prepare(
         "SELECT "
         "  (SELECT COUNT(*) FROM notification_deliveries WHERE status = 'pending'), "
-        "  (SELECT MIN(n.created_at) FROM notification_deliveries d JOIN notifications n ON n.id = d.notification_id "
+        "  (SELECT MIN(n.created_at) FROM notification_deliveries d JOIN notifications n ON n.id = "
+        "d.notification_id "
         "     WHERE d.status = 'pending'), "
         "  (SELECT COUNT(*) FROM notification_deliveries WHERE status = 'sent' AND sent_at >= ?1), "
-        "  (SELECT COUNT(*) FROM notification_deliveries d JOIN notifications n ON n.id = d.notification_id "
+        "  (SELECT COUNT(*) FROM notification_deliveries d JOIN notifications n ON n.id = "
+        "d.notification_id "
         "     WHERE d.status = 'failed' AND n.created_at >= ?1)");
     if (!counts) {
         spdlog::error("admin/system: notifier query failed: {}", counts.error().message);
@@ -49,7 +53,8 @@ json::object notifier_json(storage::Database& db, std::int64_t now, std::vector<
         const std::int64_t age = now - counts->column_int64(1);
         out["oldest_queued_s"] = age;
         if (age > kStuckQueue) {
-            checks.push_back({"notifier", "bad", "a notification has waited " + std::to_string(age / 60) + " min"});
+            checks.push_back({"notifier", "bad",
+                              "a notification has waited " + std::to_string(age / 60) + " min"});
         }
     }
     if (failed > 0) {
@@ -83,7 +88,8 @@ void register_system_routes(Router& router, auth::AuthService& auth, storage::Da
                        report["notifier"] = notifier_json(db, auth::system_clock_seconds(), checks);
                        json::array all;
                        for (const Check& c : checks) {
-                           all.push_back(json::object{{"card", c.card}, {"level", c.level}, {"text", c.text}});
+                           all.push_back(json::object{
+                               {"card", c.card}, {"level", c.level}, {"text", c.text}});
                        }
                        report["checks"] = std::move(all);
                        report["status"] = worst_level(checks);

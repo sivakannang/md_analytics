@@ -16,9 +16,9 @@
 #include <vector>
 
 #include <mda/messages/circuit_limits.hpp>
-#include <mda/options/chain_analytics.hpp>
 #include <mda/messages/depth_snapshot.hpp>
 #include <mda/messages/market_snapshot.hpp>
+#include <mda/options/chain_analytics.hpp>
 
 namespace mda::gateway {
 

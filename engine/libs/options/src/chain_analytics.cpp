@@ -20,7 +20,8 @@ double rupees(core::Price price) {
 
 double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry) {
     const auto day = std::chrono::sys_days{expiry}.time_since_epoch();
-    const std::int64_t close = std::chrono::duration_cast<std::chrono::seconds>(day).count() + 15 * 3600 + 30 * 60 - kIst;
+    const std::int64_t close =
+        std::chrono::duration_cast<std::chrono::seconds>(day).count() + 15 * 3600 + 30 * 60 - kIst;
     return static_cast<double>(std::max<std::int64_t>(close - now, 3600)) / kYear;
 }
 
@@ -126,7 +127,8 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
             }
             const double years = years_to_expiry(now, expiry.expiry);
 
-            // Forward from put-call parity at the 3 strikes nearest spot where both sides traded today.
+            // Forward from put-call parity at the 3 strikes nearest spot where both sides traded
+            // today.
             std::vector<std::pair<double, double>> parity;  // (distance, F)
             for (const auto& [strike, pair] : rows) {
                 if (pair.first == nullptr || pair.second == nullptr) {
@@ -149,8 +151,11 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
                 forward = nearest[nearest.size() / 2];
             }
 
-            ChainSummary summary{.underlying = chain.underlying, .spot = chain.spot, .expiry = expiry.expiry,
-                                 .forward = forward, .years = years};
+            ChainSummary summary{.underlying = chain.underlying,
+                                 .spot = chain.spot,
+                                 .expiry = expiry.expiry,
+                                 .forward = forward,
+                                 .years = years};
             std::vector<double> strikes;
             std::vector<std::int64_t> call_oi;
             std::vector<std::int64_t> put_oi;
@@ -168,8 +173,10 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
                     const Quote* q = quote_of(option->id);
                     OptionResult r{.id = option->id};
                     if (q->volume > 0 && forward > 0) {  // traded today: the price is meaningful
-                        if (const auto iv = implied_vol(q->ltp, forward, strike, years, option->call)) {
-                            const Greeks g = black76_greeks(forward, strike, years, *iv, option->call);
+                        if (const auto iv =
+                                implied_vol(q->ltp, forward, strike, years, option->call)) {
+                            const Greeks g =
+                                black76_greeks(forward, strike, years, *iv, option->call);
                             r.has_iv = true;
                             r.iv = *iv;
                             r.delta = g.delta;
@@ -180,7 +187,8 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
                             ++row_iv_count;
                         }
                     }
-                    if (const auto prev = prev_oi_.find(option->id.value()); prev != prev_oi_.end()) {
+                    if (const auto prev = prev_oi_.find(option->id.value());
+                        prev != prev_oi_.end()) {
                         r.has_prev_oi = true;
                         r.prev_oi = prev->second;
                         if (q->prev_close > 0) {
@@ -201,7 +209,9 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
                     summary.atm_iv = row_iv_count > 0 ? row_iv_sum / row_iv_count : 0;
                 }
             }
-            summary.pcr = summary.call_oi > 0 ? static_cast<double>(summary.put_oi) / static_cast<double>(summary.call_oi) : 0;
+            summary.pcr = summary.call_oi > 0 ? static_cast<double>(summary.put_oi) /
+                                                    static_cast<double>(summary.call_oi)
+                                              : 0;
             summary.max_pain = max_pain(strikes, call_oi, put_oi);
             summaries.push_back(summary);
         }
@@ -225,7 +235,8 @@ OptionAnalyticsMessage to_message(const OptionResult& r) {
 ChainSummaryMessage to_message(const ChainSummary& s) {
     ChainSummaryMessage m{};
     m.header = messages::make_header<ChainSummaryMessage>(s.spot, 0);
-    m.expiry_days = static_cast<std::int32_t>(std::chrono::sys_days{s.expiry}.time_since_epoch().count());
+    m.expiry_days =
+        static_cast<std::int32_t>(std::chrono::sys_days{s.expiry}.time_since_epoch().count());
     std::strncpy(m.underlying, s.underlying.c_str(), sizeof(m.underlying) - 1);
     m.forward = s.forward;
     m.atm_strike = s.atm_strike;
@@ -240,17 +251,19 @@ ChainSummaryMessage to_message(const ChainSummary& s) {
 
 ChainSummary from_message(const ChainSummaryMessage& m) {
     const std::size_t length = strnlen(m.underlying, sizeof(m.underlying));
-    return {.underlying = std::string(m.underlying, length),
-            .spot = m.header.instrument_id,
-            .expiry = std::chrono::year_month_day{std::chrono::sys_days{std::chrono::days{m.expiry_days}}},
-            .forward = m.forward,
-            .atm_strike = m.atm_strike,
-            .atm_iv = m.atm_iv,
-            .pcr = m.pcr,
-            .max_pain = m.max_pain,
-            .years = m.years,
-            .call_oi = m.call_oi,
-            .put_oi = m.put_oi};
+    return {
+        .underlying = std::string(m.underlying, length),
+        .spot = m.header.instrument_id,
+        .expiry =
+            std::chrono::year_month_day{std::chrono::sys_days{std::chrono::days{m.expiry_days}}},
+        .forward = m.forward,
+        .atm_strike = m.atm_strike,
+        .atm_iv = m.atm_iv,
+        .pcr = m.pcr,
+        .max_pain = m.max_pain,
+        .years = m.years,
+        .call_oi = m.call_oi,
+        .put_oi = m.put_oi};
 }
 
 }  // namespace mda::options

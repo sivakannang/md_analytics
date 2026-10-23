@@ -90,8 +90,8 @@ void AnalyticsFeed::run(const std::stop_token& stop) {
                         if (metrics_ != nullptr) {
                             metrics_->on_bar(*bar);
                         }
-                    } else if (auto analytics =
-                                   messages::decode<options::OptionAnalyticsMessage>(type, payload)) {
+                    } else if (auto analytics = messages::decode<options::OptionAnalyticsMessage>(
+                                   type, payload)) {
                         quotes_->update_analytics(*analytics);
                         if (metrics_ != nullptr) {
                             metrics_->on_analytics();

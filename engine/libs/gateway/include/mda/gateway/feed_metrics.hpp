@@ -43,15 +43,15 @@ private:
 class FeedMetrics {
 public:
     struct Counters {
-        std::uint64_t snapshots = 0;     ///< ticks (MarketSnapshot) since the gateway started
-        std::uint64_t frames = 0;        ///< raw WebSocket frames
-        std::uint64_t bars_closed = 0;   ///< closed minute bars on "an"
-        std::uint64_t analytics = 0;     ///< option analytics messages
-        std::int64_t last_tick_ns = 0;   ///< receive time of the newest snapshot
-        std::int64_t last_bar_start = 0; ///< newest closed bar's minute (Unix s)
-        std::uint8_t feed_state = 0;     ///< messages::FeedState; 0 = no status seen
+        std::uint64_t snapshots = 0;      ///< ticks (MarketSnapshot) since the gateway started
+        std::uint64_t frames = 0;         ///< raw WebSocket frames
+        std::uint64_t bars_closed = 0;    ///< closed minute bars on "an"
+        std::uint64_t analytics = 0;      ///< option analytics messages
+        std::int64_t last_tick_ns = 0;    ///< receive time of the newest snapshot
+        std::int64_t last_bar_start = 0;  ///< newest closed bar's minute (Unix s)
+        std::uint8_t feed_state = 0;      ///< messages::FeedState; 0 = no status seen
         std::uint32_t subscribed = 0;
-        std::uint32_t reconnects = 0;    ///< since mda-feedd started
+        std::uint32_t reconnects = 0;  ///< since mda-feedd started
     };
 
     /// `now_ns`: the gateway's read time (system clock).
@@ -65,7 +65,9 @@ public:
     /// feed → gateway, µs, since the last call.
     [[nodiscard]] LatencyHistogram::Summary take_latency() noexcept { return latency_us_.take(); }
     /// exchange → feed, whole seconds (Kite's exchange time is per second), since the last call.
-    [[nodiscard]] LatencyHistogram::Summary take_exchange_lag() noexcept { return exchange_s_.take(); }
+    [[nodiscard]] LatencyHistogram::Summary take_exchange_lag() noexcept {
+        return exchange_s_.take();
+    }
 
 private:
     std::atomic<std::uint64_t> snapshots_{0};

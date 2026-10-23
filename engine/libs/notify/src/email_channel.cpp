@@ -44,10 +44,11 @@ std::string rfc5322_date(std::int64_t now) {
     const std::chrono::weekday weekday{day};
     const std::chrono::hh_mm_ss hms{local - day};
     char text[48];
-    std::snprintf(text, sizeof text, "%s, %02u %s %04d %02ld:%02ld:%02ld +0530", kDays[weekday.c_encoding()],
-                  static_cast<unsigned>(ymd.day()), kMonths[static_cast<unsigned>(ymd.month()) - 1],
-                  static_cast<int>(ymd.year()), static_cast<long>(hms.hours().count()),
-                  static_cast<long>(hms.minutes().count()), static_cast<long>(hms.seconds().count()));
+    std::snprintf(text, sizeof text, "%s, %02u %s %04d %02ld:%02ld:%02ld +0530",
+                  kDays[weekday.c_encoding()], static_cast<unsigned>(ymd.day()),
+                  kMonths[static_cast<unsigned>(ymd.month()) - 1], static_cast<int>(ymd.year()),
+                  static_cast<long>(hms.hours().count()), static_cast<long>(hms.minutes().count()),
+                  static_cast<long>(hms.seconds().count()));
     return text;
 }
 
@@ -95,15 +96,16 @@ bool plausible_email(std::string_view address) {
         return false;
     }
     for (const char c : address) {
-        if (static_cast<unsigned char>(c) <= ' ' || c == '<' || c == '>' || c == ',' || c == '"' || c == 0x7f) {
+        if (static_cast<unsigned char>(c) <= ' ' || c == '<' || c == '>' || c == ',' || c == '"' ||
+            c == 0x7f) {
             return false;
         }
     }
     return true;
 }
 
-std::string format_email(const SmtpOptions& options, std::string_view to, const Message& message, std::int64_t now,
-                         std::string_view message_id) {
+std::string format_email(const SmtpOptions& options, std::string_view to, const Message& message,
+                         std::int64_t now, std::string_view message_id) {
     std::string out;
     out += "From: " + options.from_name + " <" + options.from_address + ">\r\n";
     out += "To: <" + std::string(to) + ">\r\n";
@@ -148,7 +150,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
     }
     beast::ssl_stream<beast::tcp_stream> stream(executor, *tls_);
     if (SSL_set_tlsext_host_name(stream.native_handle(), options_.host.c_str()) != 1) {
-        co_return SendResult{.outcome = SendOutcome::Retry, .error = "smtp connect: could not set SNI"};
+        co_return SendResult{.outcome = SendOutcome::Retry,
+                             .error = "smtp connect: could not set SNI"};
     }
     stream.set_verify_callback(asio::ssl::host_name_verification(options_.host));
     auto& tcp = beast::get_lowest_layer(stream);
@@ -168,7 +171,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
     const auto read_reply = [&]() -> asio::awaitable<Reply> {
         while (true) {
             tcp.expires_after(options_.timeout);
-            const std::size_t length = co_await asio::async_read_until(stream, asio::dynamic_buffer(input), "\r\n", token);
+            const std::size_t length =
+                co_await asio::async_read_until(stream, asio::dynamic_buffer(input), "\r\n", token);
             if (ec) {
                 co_return Reply{};
             }
@@ -198,7 +202,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
         std::string line;  // empty: just read (the greeting)
         int expect;
     };
-    const std::string auth = std::string("\0", 1) + options_.username + std::string("\0", 1) + options_.password;
+    const std::string auth =
+        std::string("\0", 1) + options_.username + std::string("\0", 1) + options_.password;
     const std::vector<Step> steps{
         {Stage::Greeting, "", 220},
         {Stage::Ehlo, "EHLO md-analytics", 250},
@@ -217,7 +222,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
         }
     }
 
-    const std::string id = std::to_string(delivery.id) + "." + std::to_string(delivery.notification_id) + "@md-analytics";
+    const std::string id = std::to_string(delivery.id) + "." +
+                           std::to_string(delivery.notification_id) + "@md-analytics";
     std::string body = format_email(options_, delivery.address, delivery.message,
                                     std::chrono::duration_cast<std::chrono::seconds>(
                                         std::chrono::system_clock::now().time_since_epoch())
@@ -237,7 +243,8 @@ asio::awaitable<SendResult> EmailChannel::send(const Delivery& delivery) {
     if (accepted.code != 250) {
         co_return unexpected_reply(Stage::Body, accepted.code);
     }
-    (void)co_await command("QUIT");  // the mail is accepted; how the server says goodbye doesn't matter
+    (void)co_await command(
+        "QUIT");  // the mail is accepted; how the server says goodbye doesn't matter
     co_return SendResult{.outcome = SendOutcome::Sent};
 }
 

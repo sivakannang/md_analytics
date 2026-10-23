@@ -23,10 +23,12 @@ TEST(SecretsTest, AMissingSectionTurnsTheChannelOff) {
 }
 
 TEST(SecretsTest, ErrorsNameTheFieldNotTheValue) {
-    const auto missing = parse_notifier_secrets(R"({"smtp": {"host": "h", "username": "u", "from_address": "a@b.c"}})");
+    const auto missing = parse_notifier_secrets(
+        R"({"smtp": {"host": "h", "username": "u", "from_address": "a@b.c"}})");
     ASSERT_FALSE(missing.has_value());
     EXPECT_EQ(missing.error(), "smtp.password is missing or not a string");
-    const auto bad = parse_notifier_secrets(R"({"smtp": {"host": "h", "username": "u", "password": "topsecret",
+    const auto bad =
+        parse_notifier_secrets(R"({"smtp": {"host": "h", "username": "u", "password": "topsecret",
                                                          "from_address": "nope"}})");
     ASSERT_FALSE(bad.has_value());
     EXPECT_EQ(bad.error().find("topsecret"), std::string::npos);

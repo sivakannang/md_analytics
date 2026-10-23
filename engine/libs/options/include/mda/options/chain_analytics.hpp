@@ -56,12 +56,12 @@ struct ChainSummary {
     std::string underlying;
     core::InstrumentId spot;
     std::chrono::year_month_day expiry;
-    double forward = 0;    ///< 0 when unknown
+    double forward = 0;  ///< 0 when unknown
     double atm_strike = 0;
-    double atm_iv = 0;     ///< fraction; 0 when unknown
-    double pcr = 0;        ///< put OI / call OI over the received strikes
+    double atm_iv = 0;  ///< fraction; 0 when unknown
+    double pcr = 0;     ///< put OI / call OI over the received strikes
     double max_pain = 0;
-    double years = 0;      ///< time to expiry
+    double years = 0;  ///< time to expiry
     std::int64_t call_oi = 0;
     std::int64_t put_oi = 0;
 };
@@ -76,7 +76,8 @@ public:
 
     /// Analytics at `now` (Unix seconds) for every option with a price, and a summary per
     /// expiry with data.
-    void compute(std::int64_t now, std::vector<OptionResult>& options, std::vector<ChainSummary>& summaries) const;
+    void compute(std::int64_t now, std::vector<OptionResult>& options,
+                 std::vector<ChainSummary>& summaries) const;
 
     /// Every option instrument the chains know about.
     [[nodiscard]] std::vector<core::InstrumentId> option_ids() const;
@@ -97,7 +98,8 @@ private:
 [[nodiscard]] double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry);
 
 /// The strike minimising option writers' payout if the underlying settled there.
-[[nodiscard]] double max_pain(const std::vector<double>& strikes, const std::vector<std::int64_t>& call_oi,
+[[nodiscard]] double max_pain(const std::vector<double>& strikes,
+                              const std::vector<std::int64_t>& call_oi,
                               const std::vector<std::int64_t>& put_oi);
 
 [[nodiscard]] Buildup classify(double price_change, std::int64_t oi_change);

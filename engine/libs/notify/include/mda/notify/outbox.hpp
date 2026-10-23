@@ -25,15 +25,16 @@
 namespace mda::notify {
 
 struct OutboxOptions {
-    std::chrono::seconds max_age{24 * 3600};   ///< older pending notifications expire unsent
-    std::chrono::seconds first_retry{30};      ///< doubled per attempt …
-    std::chrono::seconds max_retry{3600};      ///< … up to this
-    int max_attempts = 8;                      ///< then the delivery fails
+    std::chrono::seconds max_age{24 * 3600};  ///< older pending notifications expire unsent
+    std::chrono::seconds first_retry{30};     ///< doubled per attempt …
+    std::chrono::seconds max_retry{3600};     ///< … up to this
+    int max_attempts = 8;                     ///< then the delivery fails
 };
 
 class Outbox {
 public:
-    explicit Outbox(storage::Database& db, OutboxOptions options = {}) : db_(&db), options_(options) {}
+    explicit Outbox(storage::Database& db, OutboxOptions options = {})
+        : db_(&db), options_(options) {}
 
     /// Marks pending notifications older than max_age `expired` (and drops their address).
     [[nodiscard]] std::expected<std::size_t, storage::DbError> expire_stale(std::int64_t now);
@@ -47,7 +48,8 @@ public:
 
     /// Records an attempt: sent; retried later with back-off; or failed (after
     /// max_attempts, or a permanent error). A finished delivery's address is dropped.
-    [[nodiscard]] std::expected<void, storage::DbError> record(const Delivery& delivery, const SendResult& result,
+    [[nodiscard]] std::expected<void, storage::DbError> record(const Delivery& delivery,
+                                                               const SendResult& result,
                                                                std::int64_t now);
 
     /// Seconds to wait after the `attempts`-th failed attempt.
@@ -60,8 +62,8 @@ private:
 };
 
 struct RoundStats {
-    std::size_t expired = 0;    ///< notifications too old to send
-    std::size_t dispatched = 0; ///< deliveries created
+    std::size_t expired = 0;     ///< notifications too old to send
+    std::size_t dispatched = 0;  ///< deliveries created
     std::size_t sent = 0;
     std::size_t retried = 0;
     std::size_t failed = 0;

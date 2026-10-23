@@ -19,20 +19,20 @@ struct MachineStats {
     unsigned cores = 0;                        ///< online logical CPUs
     std::optional<std::uint64_t> memory_used;  ///< bytes in use (apps + wired + compressed)
     std::optional<std::uint64_t> memory_total;
-    std::optional<std::string> power;          ///< "ac" or "battery"; empty if unknown
-    std::optional<int> battery_percent;        ///< empty without a battery
+    std::optional<std::string> power;    ///< "ac" or "battery"; empty if unknown
+    std::optional<int> battery_percent;  ///< empty without a battery
     std::optional<std::int64_t> uptime_s;
 };
 
 struct ProcessStats {
     std::uint32_t pid = 0;
-    std::optional<std::int64_t> started;        ///< Unix seconds
-    std::optional<std::uint64_t> cpu_time_ns;   ///< user + system, since it started
-    std::optional<std::uint64_t> rss_bytes;     ///< resident memory
+    std::optional<std::int64_t> started;       ///< Unix seconds
+    std::optional<std::uint64_t> cpu_time_ns;  ///< user + system, since it started
+    std::optional<std::uint64_t> rss_bytes;    ///< resident memory
 };
 
 struct DiskSpace {
-    std::uint64_t free = 0;   ///< available to an unprivileged user
+    std::uint64_t free = 0;  ///< available to an unprivileged user
     std::uint64_t total = 0;
 };
 

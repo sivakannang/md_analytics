@@ -10,7 +10,7 @@
 namespace mda::sysmon {
 
 std::expected<DiskSpace, std::string> disk_space(const std::filesystem::path& path) {
-    struct statvfs fs {};
+    struct statvfs fs{};
     if (::statvfs(path.c_str(), &fs) != 0) {
         return std::unexpected("statvfs " + path.string() + ": " + std::strerror(errno));
     }
@@ -28,7 +28,8 @@ std::uint64_t size_of_file(const std::filesystem::path& path) {
 std::uint64_t size_of_folder(const std::filesystem::path& path) {
     std::uint64_t total = 0;
     std::error_code ec;
-    for (std::filesystem::recursive_directory_iterator it(path, ec), end; !ec && it != end; it.increment(ec)) {
+    for (std::filesystem::recursive_directory_iterator it(path, ec), end; !ec && it != end;
+         it.increment(ec)) {
         std::error_code entry_ec;
         if (it->is_regular_file(entry_ec)) {
             const auto size = it->file_size(entry_ec);

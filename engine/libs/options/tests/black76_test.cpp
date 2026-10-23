@@ -31,13 +31,18 @@ TEST(Black76Test, GreeksMatchFiniteDifferences) {
         const double mid = black76_price(f, k, t, s, call);
         EXPECT_NEAR(g.delta, (up - down) / (2 * h), 1e-4);
         EXPECT_NEAR(g.gamma, (up - 2 * mid + down) / (h * h), 1e-4);
-        EXPECT_NEAR(g.vega, (black76_price(f, k, t, s + 0.0001, call) - black76_price(f, k, t, s - 0.0001, call)) / 0.0002 / 100,
-                    1e-4);
+        EXPECT_NEAR(
+            g.vega,
+            (black76_price(f, k, t, s + 0.0001, call) - black76_price(f, k, t, s - 0.0001, call)) /
+                0.0002 / 100,
+            1e-4);
         // Theta is the instantaneous decay per calendar day: compare with a tiny time step.
         const double dt = 1e-5 / 365;
-        EXPECT_NEAR(g.theta, (black76_price(f, k, t - dt, s, call) - mid) / (dt * 365), std::abs(g.theta) * 1e-3);
+        EXPECT_NEAR(g.theta, (black76_price(f, k, t - dt, s, call) - mid) / (dt * 365),
+                    std::abs(g.theta) * 1e-3);
     }
-    EXPECT_NEAR(black76_greeks(f, k, t, s, true).delta - black76_greeks(f, k, t, s, false).delta, 1.0, 1e-12);
+    EXPECT_NEAR(black76_greeks(f, k, t, s, true).delta - black76_greeks(f, k, t, s, false).delta,
+                1.0, 1e-12);
 }
 
 TEST(ImpliedVolTest, RecoversTheVolatility) {
@@ -45,7 +50,8 @@ TEST(ImpliedVolTest, RecoversTheVolatility) {
         for (const double strike : {20'000.0, 22'500.0, 22'650.0, 23'500.0}) {
             for (const bool call : {true, false}) {
                 const double price = black76_price(22'650, strike, 12.0 / 365, sigma, call);
-                const double intrinsic = call ? std::max(22'650 - strike, 0.0) : std::max(strike - 22'650, 0.0);
+                const double intrinsic =
+                    call ? std::max(22'650 - strike, 0.0) : std::max(strike - 22'650, 0.0);
                 if (price - intrinsic < 0.01) {
                     continue;  // (almost) no time value: not meaningfully invertible
                 }
@@ -58,7 +64,7 @@ TEST(ImpliedVolTest, RecoversTheVolatility) {
 }
 
 TEST(ImpliedVolTest, RejectsArbitragePrices) {
-    EXPECT_FALSE(implied_vol(40, 22'650, 22'600, 0.01, true).has_value());   // below intrinsic 50
+    EXPECT_FALSE(implied_vol(40, 22'650, 22'600, 0.01, true).has_value());  // below intrinsic 50
     EXPECT_FALSE(implied_vol(23'000, 22'650, 22'600, 0.01, true).has_value());  // above the forward
     EXPECT_FALSE(implied_vol(0, 22'650, 22'600, 0.01, true).has_value());
     EXPECT_FALSE(implied_vol(10, 22'650, 22'600, 0, true).has_value());

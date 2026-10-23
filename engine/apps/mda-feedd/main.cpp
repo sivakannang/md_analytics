@@ -303,7 +303,8 @@ template <typename Work>
 asio::awaitable<std::invoke_result_t<Work>> run_on(asio::any_io_executor executor, Work work) {
     using Result = std::invoke_result_t<Work>;
     co_return co_await asio::co_spawn(
-        executor, [work = std::move(work)]() mutable -> asio::awaitable<Result> { co_return work(); },
+        executor,
+        [work = std::move(work)]() mutable -> asio::awaitable<Result> { co_return work(); },
         asio::use_awaitable);
 }
 
@@ -311,12 +312,11 @@ asio::awaitable<std::invoke_result_t<Work>> run_on(asio::any_io_executor executo
 /// checks the subscriptions it hasn't checked in this phase (market hours or not): during
 /// market hours only today's minutes, outside them the past `days`. bars.db is touched only
 /// on `store_executor`; Kite requests are ~3 per second.
-asio::awaitable<void> auto_backfill_loop(const runtime::KiteConfig& kite_config, asio::ssl::context& tls,
-                                         const instruments::InstrumentRegistry& registry,
-                                         const kite::TokenMap& tokens,
-                                         const std::vector<std::uint32_t>& subscriptions,
-                                         bars::BarStore& store, asio::any_io_executor store_executor,
-                                         int days, std::function<void()> on_session_rejected) {
+asio::awaitable<void> auto_backfill_loop(
+    const runtime::KiteConfig& kite_config, asio::ssl::context& tls,
+    const instruments::InstrumentRegistry& registry, const kite::TokenMap& tokens,
+    const std::vector<std::uint32_t>& subscriptions, bars::BarStore& store,
+    asio::any_io_executor store_executor, int days, std::function<void()> on_session_rejected) {
     using Clock = std::chrono::steady_clock;
     const auto unix_now = [] { return core::Timestamp::now().ns() / 1'000'000'000; };
     asio::steady_timer timer(co_await asio::this_coro::executor);
@@ -358,7 +358,9 @@ asio::awaitable<void> auto_backfill_loop(const runtime::KiteConfig& kite_config,
             }
             return out;
         });
-        const auto session = windows.empty() ? std::nullopt : std::optional(kite::load_session(kite_config.session_file));
+        const auto session = windows.empty()
+                                 ? std::nullopt
+                                 : std::optional(kite::load_session(kite_config.session_file));
         std::size_t filled = 0;
         std::size_t empty = 0;
         std::size_t written_bars = 0;
@@ -374,19 +376,23 @@ asio::awaitable<void> auto_backfill_loop(const runtime::KiteConfig& kite_config,
                 timer.expires_at(next_request);
                 co_await timer.async_wait(asio::use_awaitable);
                 next_request = Clock::now() + std::chrono::milliseconds(350);
-                const auto chunk = co_await rest.historical(token, "minute", apps::ist_text(from),
-                                                            apps::ist_text(std::min(window.to, from + step - 1)), true);
+                const auto chunk = co_await rest.historical(
+                    token, "minute", apps::ist_text(from),
+                    apps::ist_text(std::min(window.to, from + step - 1)), true);
                 if (chunk) {
                     candles.insert(candles.end(), chunk->begin(), chunk->end());
                     continue;
                 }
                 ok = false;
                 if (chunk.error().code == kite::KiteError::Code::AuthExpired) {
-                    spdlog::warn("backfill: Kite rejected the session; paused until the next phase (run mda-login)");
+                    spdlog::warn(
+                        "backfill: Kite rejected the session; paused until the next phase (run "
+                        "mda-login)");
                     paused = true;
                     on_session_rejected();
                 } else {
-                    spdlog::warn("backfill: instrument {} failed: {}", id.value(), chunk.error().message);
+                    spdlog::warn("backfill: instrument {} failed: {}", id.value(),
+                                 chunk.error().message);
                 }
             }
             if (paused) {
@@ -399,21 +405,24 @@ asio::awaitable<void> auto_backfill_loop(const runtime::KiteConfig& kite_config,
             const auto bars = apps::to_bars(id, candles, current_minute);
             const auto written = co_await run_on(store_executor, [&] { return store.write(bars); });
             const auto* instrument = registry.get(id);
-            const std::string symbol = instrument != nullptr ? instrument->trading_symbol : std::to_string(id.value());
+            const std::string symbol =
+                instrument != nullptr ? instrument->trading_symbol : std::to_string(id.value());
             if (!written) {
                 spdlog::warn("backfill: {}: writing failed: {}", symbol, written.error().message);
             } else if (bars.empty()) {  // common for far strikes that never traded
                 spdlog::debug("backfill: {}: no candles at Kite", symbol);
                 ++empty;
             } else {
-                spdlog::info("backfill: {}: {} bars from {}", symbol, bars.size(), apps::ist_text(window.from));
+                spdlog::info("backfill: {}: {} bars from {}", symbol, bars.size(),
+                             apps::ist_text(window.from));
                 ++filled;
                 written_bars += bars.size();
             }
         }
         if (!windows.empty()) {
-            spdlog::info("backfill: {} of {} instruments filled with {} bars ({} had no candles at Kite)", filled,
-                         windows.size(), written_bars, empty);
+            spdlog::info(
+                "backfill: {} of {} instruments filled with {} bars ({} had no candles at Kite)",
+                filled, windows.size(), written_bars, empty);
         }
         timer.expires_after(std::chrono::seconds(30));
         co_await timer.async_wait(asio::use_awaitable);
@@ -625,9 +634,10 @@ int run(const runtime::Config& config) {
                     const auto reconnects = static_cast<std::uint32_t>(socket->reconnects());
                     publisher.on_state(state, static_cast<std::uint32_t>(socket->token_count()),
                                        reconnects);
-                    feed_condition = state == kite::WsState::Connected     ? notify::FeedCondition::Up
-                                     : state == kite::WsState::AuthExpired ? notify::FeedCondition::AuthRejected
-                                                                           : notify::FeedCondition::Down;
+                    feed_condition = state == kite::WsState::Connected ? notify::FeedCondition::Up
+                                     : state == kite::WsState::AuthExpired
+                                         ? notify::FeedCondition::AuthRejected
+                                         : notify::FeedCondition::Down;
                     feed_detail = std::string(detail);
                     if (state == kite::WsState::Connected || state == kite::WsState::Connecting) {
                         spdlog::info("kite ws: {} ({})", kite::to_string(state), detail);
@@ -663,20 +673,21 @@ int run(const runtime::Config& config) {
     if (config.feed.auto_backfill.count() > 0) {
         if (auto opened = bars::BarStore::open(config.engine.bars_db)) {
             bar_store.emplace(std::move(*opened));
-            asio::co_spawn(io,
-                           auto_backfill_loop(kite_config, *tls, registry, tokens, subscriptions, *bar_store,
-                                              bars_worker.get_executor(),
-                                              static_cast<int>(config.feed.auto_backfill.count()),
-                                              [&] {
-                                                  if (auto alert = notify::FeedAlerts{}.session_rejected(
-                                                          "mda-feedd backfill", unix_now())) {
-                                                      raise_alert(std::move(*alert));
-                                                  }
-                                              }),
-                           asio::detached);
+            asio::co_spawn(
+                io,
+                auto_backfill_loop(kite_config, *tls, registry, tokens, subscriptions, *bar_store,
+                                   bars_worker.get_executor(),
+                                   static_cast<int>(config.feed.auto_backfill.count()),
+                                   [&] {
+                                       if (auto alert = notify::FeedAlerts{}.session_rejected(
+                                               "mda-feedd backfill", unix_now())) {
+                                           raise_alert(std::move(*alert));
+                                       }
+                                   }),
+                asio::detached);
         } else {
-            spdlog::warn("backfill: cannot open {}: {}; automatic backfill off", config.engine.bars_db.string(),
-                         opened.error().message);
+            spdlog::warn("backfill: cannot open {}: {}; automatic backfill off",
+                         config.engine.bars_db.string(), opened.error().message);
         }
     }
 
@@ -689,7 +700,9 @@ int run(const runtime::Config& config) {
         spdlog::warn("alert: {}", alert.type);
         asio::post(db_worker, [&, alert = std::move(alert)] {
             if (auto queued = appdb::enqueue(*db,
-                                             {.user_id = 0, .type = alert.type, .payload = alert.payload,
+                                             {.user_id = 0,
+                                              .type = alert.type,
+                                              .payload = alert.payload,
                                               .dedup_key = alert.dedup_key},
                                              unix_now());
                 !queued) {
@@ -698,14 +711,15 @@ int run(const runtime::Config& config) {
         });
     };
     notify::FeedAlerts feed_alerts;
-    asio::co_spawn(io,
-                   every(std::chrono::seconds(1),
-                         [&] {
-                             for (auto& alert : feed_alerts.update(feed_condition, feed_detail, unix_now())) {
-                                 raise_alert(std::move(alert));
-                             }
-                         }),
-                   asio::detached);
+    asio::co_spawn(
+        io,
+        every(std::chrono::seconds(1),
+              [&] {
+                  for (auto& alert : feed_alerts.update(feed_condition, feed_detail, unix_now())) {
+                      raise_alert(std::move(alert));
+                  }
+              }),
+        asio::detached);
     // One place applies subscription changes (static + watchlists + chain windows), on the
     // I/O thread, sending Kite only the difference.
     const auto resubscribe = [&](std::string_view reason) {

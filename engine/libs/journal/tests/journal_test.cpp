@@ -23,14 +23,16 @@ std::string text(std::span<const std::byte> payload) {
 class JournalTest : public ::testing::Test {
 protected:
     JournalTest() {
-        root_ = std::filesystem::temp_directory_path() /
-                ("mda_journal_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "_" +
-                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        root_ =
+            std::filesystem::temp_directory_path() /
+            ("mda_journal_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+             "_" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(root_);
     }
     ~JournalTest() override { std::filesystem::remove_all(root_); }
 
-    std::vector<std::pair<std::uint32_t, std::string>> read_all(const std::filesystem::path& path, bool* torn = nullptr) {
+    std::vector<std::pair<std::uint32_t, std::string>> read_all(const std::filesystem::path& path,
+                                                                bool* torn = nullptr) {
         auto reader = Reader::open(path).value();
         std::vector<std::pair<std::uint32_t, std::string>> out;
         while (const auto record = reader.next()) {
@@ -47,7 +49,8 @@ protected:
 
 TEST_F(JournalTest, NamesFilesByIstDayAndHour) {
     EXPECT_EQ(hour_file(root_, kThursday1015), root_ / "2026-10-22" / "10.mdj");
-    EXPECT_EQ(hour_file(root_, kThursday1015 + 14 * 3600), root_ / "2026-10-23" / "00.mdj");  // 00:15 IST
+    EXPECT_EQ(hour_file(root_, kThursday1015 + 14 * 3600),
+              root_ / "2026-10-23" / "00.mdj");  // 00:15 IST
 }
 
 TEST_F(JournalTest, WritesAndReadsRecordsInOrder) {

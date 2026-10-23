@@ -28,7 +28,8 @@ D d_terms(double forward, double strike, double years, double sigma) {
 }
 
 bool valid(double forward, double strike, double years, double sigma) {
-    return forward > 0 && strike > 0 && years > 0 && sigma > 0 && std::isfinite(forward) && std::isfinite(sigma);
+    return forward > 0 && strike > 0 && years > 0 && sigma > 0 && std::isfinite(forward) &&
+           std::isfinite(sigma);
 }
 
 }  // namespace
@@ -38,7 +39,8 @@ double black76_price(double forward, double strike, double years, double sigma, 
         return call ? std::max(forward - strike, 0.0) : std::max(strike - forward, 0.0);
     }
     const auto [d1, d2] = d_terms(forward, strike, years, sigma);
-    return call ? forward * norm_cdf(d1) - strike * norm_cdf(d2) : strike * norm_cdf(-d2) - forward * norm_cdf(-d1);
+    return call ? forward * norm_cdf(d1) - strike * norm_cdf(d2)
+                : strike * norm_cdf(-d2) - forward * norm_cdf(-d1);
 }
 
 Greeks black76_greeks(double forward, double strike, double years, double sigma, bool call) {
@@ -55,11 +57,13 @@ Greeks black76_greeks(double forward, double strike, double years, double sigma,
             .vega = forward * pdf * sqrt_t / 100.0};
 }
 
-std::optional<double> implied_vol(double price, double forward, double strike, double years, bool call) {
+std::optional<double> implied_vol(double price, double forward, double strike, double years,
+                                  bool call) {
     if (!(price > 0) || forward <= 0 || strike <= 0 || years <= 0) {
         return std::nullopt;
     }
-    const double intrinsic = call ? std::max(forward - strike, 0.0) : std::max(strike - forward, 0.0);
+    const double intrinsic =
+        call ? std::max(forward - strike, 0.0) : std::max(strike - forward, 0.0);
     const double ceiling = call ? forward : strike;
     if (price <= intrinsic + 1e-9 || price >= ceiling) {
         return std::nullopt;  // no volatility produces this price

@@ -1,20 +1,18 @@
 // The stats depend on the machine, so these check shapes and bounds, measured on this test
 // process itself where an exact answer is known.
 
+#include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <string>
-
-#include <algorithm>
-#include <csignal>
 #include <thread>
 
+#include <gtest/gtest.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-#include <gtest/gtest.h>
 
 #include <mda/sysmon/sysmon.hpp>
 
@@ -101,7 +99,8 @@ TEST(SysmonTest, MeasuresDiskAndFolders) {
     EXPECT_LE(disk->free, disk->total);
     EXPECT_FALSE(disk_space("/no/such/folder/anywhere").has_value());
 
-    const auto dir = std::filesystem::temp_directory_path() / ("mda_sysmon_test_" + std::to_string(getpid()));
+    const auto dir =
+        std::filesystem::temp_directory_path() / ("mda_sysmon_test_" + std::to_string(getpid()));
     std::filesystem::create_directories(dir / "day");
     std::ofstream(dir / "a.bin", std::ios::binary) << std::string(1000, 'x');
     std::ofstream(dir / "day" / "b.bin", std::ios::binary) << std::string(234, 'y');

@@ -16,6 +16,7 @@ namespace mda::bars {
 /// LTP = the last close, day open/high/low/volume and OI from `day` (one instrument,
 /// oldest first, not empty), `previous_close` for the day change (0 when unknown), and
 /// exchange and receive time = the end of the last minute.
-[[nodiscard]] messages::MarketSnapshot day_snapshot(std::span<const Bar> day, core::Price previous_close);
+[[nodiscard]] messages::MarketSnapshot day_snapshot(std::span<const Bar> day,
+                                                    core::Price previous_close);
 
 }  // namespace mda::bars

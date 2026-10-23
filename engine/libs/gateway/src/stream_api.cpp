@@ -140,7 +140,7 @@ bool apply(Session& session, std::string_view text, const StreamOptions& options
     }
     if (mode != nullptr &&
         (!mode->is_string() || (mode->as_string() != "quote" && mode->as_string() != "depth" &&
-         mode->as_string() != "bars" && mode->as_string() != "chain"))) {
+                                mode->as_string() != "bars" && mode->as_string() != "chain"))) {
         return false;
     }
     std::vector<std::uint32_t> ids;
@@ -236,13 +236,15 @@ asio::awaitable<void> push_loop(Socket& ws, Session& session, const Deps& deps, 
             }
         }
         if (deps.options.chains != nullptr && !session.chain_spots.empty()) {
-            const auto changed = deps.options.chains->changed(session.chain_spots, session.seen_chains);
+            const auto changed =
+                deps.options.chains->changed(session.chain_spots, session.seen_chains);
             if (!changed.empty()) {
                 json::array data;
                 for (const auto& summary : changed) {
                     data.emplace_back(chain_summary_json(summary));
                 }
-                outgoing.push_back(json::serialize(json::object{{"type", "chain"}, {"data", std::move(data)}}));
+                outgoing.push_back(
+                    json::serialize(json::object{{"type", "chain"}, {"data", std::move(data)}}));
             }
         }
         if (deps.options.bars != nullptr && !session.bar_ids.empty()) {

@@ -39,7 +39,11 @@ using asio::ip::tcp;
 constexpr std::int64_t kNow = 1'792'690'000;
 
 Update message(std::string text, std::string chat = "555") {
-    return {.update_id = 1, .chat_id = std::move(chat), .private_chat = true, .from_id = 42, .text = std::move(text)};
+    return {.update_id = 1,
+            .chat_id = std::move(chat),
+            .private_chat = true,
+            .from_id = 42,
+            .text = std::move(text)};
 }
 
 class LinkerTest : public ::testing::Test {
@@ -60,7 +64,9 @@ protected:
         return query->column_text(0);
     }
 
-    OutgoingMessage handle(const Update& update) { return linker_.handle(update, kNow).value().value(); }
+    OutgoingMessage handle(const Update& update) {
+        return linker_.handle(update, kNow).value().value();
+    }
 
     storage::Database db_;
     TelegramLinker linker_{db_};
@@ -87,7 +93,9 @@ TEST_F(LinkerTest, StartWithACodeLinksTheChat) {
     const auto answer = handle(message("/start " + code));
     EXPECT_EQ(answer.chat_id, "555");
     EXPECT_EQ(answer.keyboard, OutgoingMessage::Keyboard::ShareContact);
-    EXPECT_EQ(text("SELECT address || ' ' || enabled FROM user_channels WHERE channel = 'telegram'"), "555 1");
+    EXPECT_EQ(
+        text("SELECT address || ' ' || enabled FROM user_channels WHERE channel = 'telegram'"),
+        "555 1");
 
     // The code is spent: a second tap is told so.
     EXPECT_NE(handle(message("/start " + code)).text.find("expired"), std::string::npos);
@@ -135,7 +143,8 @@ struct Call {
     json::object body;
 };
 
-using Handler = std::function<std::pair<http::status, std::string>(const std::string& method, const json::object&)>;
+using Handler = std::function<std::pair<http::status, std::string>(const std::string& method,
+                                                                   const json::object&)>;
 
 asio::awaitable<void> serve_api(tcp::acceptor& acceptor, asio::ssl::context& tls, Handler handler,
                                 std::vector<Call>& calls) {
@@ -182,7 +191,8 @@ protected:
     T run(Handler handler, std::function<asio::awaitable<T>(TelegramApi&)> work) {
         asio::io_context io;
         tcp::acceptor acceptor(io, {asio::ip::make_address("127.0.0.1"), 0});
-        asio::co_spawn(io, serve_api(acceptor, server_tls_, std::move(handler), calls_), asio::detached);
+        asio::co_spawn(io, serve_api(acceptor, server_tls_, std::move(handler), calls_),
+                       asio::detached);
         TelegramApi api({.token = "123:secret",
                          .host = "localhost",
                          .port = std::to_string(acceptor.local_endpoint().port()),
@@ -214,7 +224,10 @@ protected:
 };
 
 Delivery delivery(std::string chat) {
-    return {.id = 1, .channel = "telegram", .address = std::move(chat), .type = "system.login_reminder",
+    return {.id = 1,
+            .channel = "telegram",
+            .address = std::move(chat),
+            .type = "system.login_reminder",
             .message = {.subject = "Kite login needed", .text = "Run mda-login."}};
 }
 
@@ -248,12 +261,14 @@ TEST_F(TelegramApiTest, BlockedBotsFailAndRateLimitsRetry) {
                 co_return co_await channel.send(delivery("555"));
             });
     };
-    const auto blocked = send_with(http::status::forbidden,
-                                   R"({"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"})");
+    const auto blocked = send_with(
+        http::status::forbidden,
+        R"({"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"})");
     EXPECT_EQ(blocked.outcome, SendOutcome::Fail);
     EXPECT_EQ(blocked.error.find("secret"), std::string::npos);  // the token never shows
-    const auto limited = send_with(http::status::too_many_requests,
-                                   R"({"ok":false,"error_code":429,"description":"Too Many Requests: retry after 3"})");
+    const auto limited = send_with(
+        http::status::too_many_requests,
+        R"({"ok":false,"error_code":429,"description":"Too Many Requests: retry after 3"})");
     EXPECT_EQ(limited.outcome, SendOutcome::Retry);
     EXPECT_EQ(send_with(http::status::bad_gateway, "<html>").outcome, SendOutcome::Retry);
 }
@@ -264,11 +279,14 @@ TEST_F(TelegramApiTest, APollLinksTheChatAndAnswers) {
         [&](const std::string& method, const json::object&) {
             if (method == "getUpdates") {
                 return ok(R"([{"update_id": 70, "message": {"chat": {"id": 555, "type": "private"},
-                               "from": {"id": 42}, "text": "/start )" + code + R"("}}])");
+                               "from": {"id": 42}, "text": "/start )" +
+                          code + R"("}}])");
             }
             return ok(R"({"message_id": 1})");
         },
-        [&](TelegramApi& api) -> asio::awaitable<std::int64_t> { co_return co_await poll_once(api, linker_, 0, kNow); });
+        [&](TelegramApi& api) -> asio::awaitable<std::int64_t> {
+            co_return co_await poll_once(api, linker_, 0, kNow);
+        });
     EXPECT_EQ(offset, 71);
     ASSERT_EQ(calls_.size(), 2u);
     EXPECT_EQ(calls_[0].body.at("offset").as_int64(), 0);

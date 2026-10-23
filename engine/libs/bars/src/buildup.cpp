@@ -34,15 +34,16 @@ BuildupPoint BuildupClassifier::point(const Bar& bar) const {
         return {};
     }
     const std::int64_t d_oi = bar.oi_close.value() - ref_->oi.value();
-    const auto by_fraction =
-        static_cast<std::int64_t>(std::llround(threshold_.oi_fraction * static_cast<double>(ref_->oi.value())));
+    const auto by_fraction = static_cast<std::int64_t>(
+        std::llround(threshold_.oi_fraction * static_cast<double>(ref_->oi.value())));
     const std::int64_t threshold = std::max(by_fraction, threshold_.lots * lot_size_.value());
     if (d_oi == 0 || std::abs(d_oi) < threshold) {
         return {.state = Buildup::Neutral, .oi_change = d_oi};
     }
     const bool price_up = bar.close >= ref_->close;  // unchanged price counts as up (§2.2)
     if (d_oi > 0) {
-        return {.state = price_up ? Buildup::LongBuildup : Buildup::ShortBuildup, .oi_change = d_oi};
+        return {.state = price_up ? Buildup::LongBuildup : Buildup::ShortBuildup,
+                .oi_change = d_oi};
     }
     return {.state = price_up ? Buildup::ShortCovering : Buildup::LongUnwinding, .oi_change = d_oi};
 }
@@ -59,7 +60,8 @@ Buildup BuildupClassifier::on_close(const Bar& bar) {
     return close_point(bar).state;
 }
 
-std::vector<BuildupPoint> classify_buildup_points(std::span<const Bar> bars, core::Quantity lot_size,
+std::vector<BuildupPoint> classify_buildup_points(std::span<const Bar> bars,
+                                                  core::Quantity lot_size,
                                                   BuildupThreshold threshold) {
     BuildupClassifier classifier(lot_size, threshold);
     std::vector<BuildupPoint> points;

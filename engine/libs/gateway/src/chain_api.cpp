@@ -16,15 +16,15 @@ namespace mda::gateway {
 namespace {
 
 namespace json = boost::json;
+using detail::as_user;
 using detail::from_error;
 using detail::run_on;
-using detail::as_user;
 using detail::token_of;
 
 std::string date_text(std::chrono::year_month_day d) {
     char text[16];
-    std::snprintf(text, sizeof text, "%04d-%02u-%02u", static_cast<int>(d.year()), static_cast<unsigned>(d.month()),
-                  static_cast<unsigned>(d.day()));
+    std::snprintf(text, sizeof text, "%04d-%02u-%02u", static_cast<int>(d.year()),
+                  static_cast<unsigned>(d.month()), static_cast<unsigned>(d.day()));
     return text;
 }
 
@@ -41,7 +41,6 @@ double round2(double value) {
     return std::round(value * 100.0) / 100.0;
 }
 
-
 }  // namespace
 
 /// The catalog id of a chain's spot ("NSE|CASH|IDX|NIFTY 50"); 0 if unknown.
@@ -51,16 +50,20 @@ std::int64_t chain_spot_id(storage::Database& db, std::string_view key_text) {
         return 0;
     }
     auto statement = db.prepare(
-        "SELECT id FROM instruments WHERE exchange = ?1 AND kind = ?2 AND underlying = ?3 AND listed = 1");
+        "SELECT id FROM instruments WHERE exchange = ?1 AND kind = ?2 AND underlying = ?3 AND "
+        "listed = 1");
     if (!statement) {
         return 0;
     }
     const std::string_view kind = key->kind == instruments::Kind::Index ? "IDX" : "EQ";
-    statement->bind(1, key->exchange == instruments::Exchange::Nse ? std::string_view("NSE") : std::string_view("BSE"))
+    statement
+        ->bind(1, key->exchange == instruments::Exchange::Nse ? std::string_view("NSE")
+                                                              : std::string_view("BSE"))
         .bind(2, kind)
         .bind(3, std::string_view(key->underlying));
-    return statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row ? statement->column_int64(0)
-                                                                                            : 0;
+    return statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row
+               ? statement->column_int64(0)
+               : 0;
 }
 
 void ChainSummaries::update(const options::ChainSummaryMessage& message) {
@@ -95,7 +98,8 @@ std::vector<options::ChainSummary> ChainSummaries::changed(std::span<const std::
     return out;
 }
 
-std::optional<options::ChainSummary> ChainSummaries::get(std::uint32_t spot, std::int32_t expiry_days) const {
+std::optional<options::ChainSummary> ChainSummaries::get(std::uint32_t spot,
+                                                         std::int32_t expiry_days) const {
     const std::scoped_lock lock(mutex_);
     for (const Entry& entry : entries_) {
         if (entry.summary.spot.value() == spot && entry.expiry_days == expiry_days) {
@@ -125,12 +129,14 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                            const ChainSummaries& summaries, std::vector<ChainInfo> chains) {
     // GET /chains — underlyings with chains, their spot and listed expiries.
     router.add(http::verb::get, "/api/v1/chains",
-               [&auth, &db, db_executor, chains](const Request& request, const PathParams&) -> asio::awaitable<Response> {
+               [&auth, &db, db_executor, chains](const Request& request,
+                                                 const PathParams&) -> asio::awaitable<Response> {
                    co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
                        json::array out;
                        for (const auto& chain : chains) {
                            auto expiries = db.prepare(
-                               "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND underlying = ?1 "
+                               "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND "
+                               "underlying = ?1 "
                                "AND listed = 1 ORDER BY expiry LIMIT ?2");
                            if (!expiries) {
                                continue;
@@ -138,7 +144,8 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                            expiries->bind(1, std::string_view(chain.underlying))
                                .bind(2, static_cast<std::int64_t>(chain.expiries));
                            json::array list;
-                           while (expiries->step().value_or(storage::StepResult::Done) == storage::StepResult::Row) {
+                           while (expiries->step().value_or(storage::StepResult::Done) ==
+                                  storage::StepResult::Row) {
                                list.emplace_back(expiries->column_text(0));
                            }
                            out.push_back(json::object{{"underlying", chain.underlying},
@@ -152,8 +159,8 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
     // GET /chains/{underlying}/{expiry}?strikes=20 — strike rows around ATM.
     router.add(
         http::verb::get, "/api/v1/chains/{underlying}/{expiry}",
-        [&auth, &db, db_executor, &quotes, &summaries, chains](const Request& request,
-                                                               const PathParams& params) -> asio::awaitable<Response> {
+        [&auth, &db, db_executor, &quotes, &summaries, chains](
+            const Request& request, const PathParams& params) -> asio::awaitable<Response> {
             std::string underlying;
             std::string expiry;
             for (const auto& [name, value] : params) {
@@ -163,7 +170,8 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                     expiry = value;
                 }
             }
-            const auto chain = std::ranges::find_if(chains, [&](const auto& c) { return c.underlying == underlying; });
+            const auto chain = std::ranges::find_if(
+                chains, [&](const auto& c) { return c.underlying == underlying; });
             const std::int32_t expiry_days = days_of(expiry);
             if (chain == chains.end() || expiry_days == 0) {
                 co_return failure(http::status::not_found, "NotFoundException", "no such chain");
@@ -174,21 +182,27 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
             }
             co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
                 auto rows = db.prepare(
-                    "SELECT id, strike_raw, option_type, lot_size FROM instruments WHERE kind = 'OPT' AND "
+                    "SELECT id, strike_raw, option_type, lot_size FROM instruments WHERE kind = "
+                    "'OPT' AND "
                     "underlying = ?1 AND expiry = ?2 AND listed = 1 ORDER BY strike_raw");
                 if (!rows) {
-                    return failure(http::status::internal_server_error, "GeneralException", "internal error");
+                    return failure(http::status::internal_server_error, "GeneralException",
+                                   "internal error");
                 }
                 rows->bind(1, std::string_view(underlying)).bind(2, std::string_view(expiry));
-                std::map<std::int64_t, std::pair<std::int64_t, std::int64_t>> by_strike;  // raw -> (call, put)
+                std::map<std::int64_t, std::pair<std::int64_t, std::int64_t>>
+                    by_strike;  // raw -> (call, put)
                 std::int64_t lot_size = 0;
-                while (rows->step().value_or(storage::StepResult::Done) == storage::StepResult::Row) {
+                while (rows->step().value_or(storage::StepResult::Done) ==
+                       storage::StepResult::Row) {
                     auto& pair = by_strike[rows->column_int64(1)];
-                    (rows->column_text(2) == "CE" ? pair.first : pair.second) = rows->column_int64(0);
+                    (rows->column_text(2) == "CE" ? pair.first : pair.second) =
+                        rows->column_int64(0);
                     lot_size = rows->column_int64(3);
                 }
                 if (by_strike.empty()) {
-                    return failure(http::status::not_found, "NotFoundException", "no listed options for this expiry");
+                    return failure(http::status::not_found, "NotFoundException",
+                                   "no listed options for this expiry");
                 }
                 const std::int64_t spot = chain_spot_id(db, chain->spot);
                 const auto summary = summaries.get(static_cast<std::uint32_t>(spot), expiry_days);
@@ -206,20 +220,25 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                 std::size_t atm = keys.size() / 2;
                 double best = -1;
                 for (std::size_t i = 0; i < keys.size(); ++i) {
-                    const double gap = std::abs(core::Price::from_raw(keys[i]).to_double() - centre);
+                    const double gap =
+                        std::abs(core::Price::from_raw(keys[i]).to_double() - centre);
                     if (best < 0 || gap < best) {
                         best = gap;
                         atm = i;
                     }
                 }
-                const std::size_t first = atm > static_cast<std::size_t>(strikes) ? atm - static_cast<std::size_t>(strikes) : 0;
-                const std::size_t last = std::min(keys.size() - 1, atm + static_cast<std::size_t>(strikes));
+                const std::size_t first = atm > static_cast<std::size_t>(strikes)
+                                              ? atm - static_cast<std::size_t>(strikes)
+                                              : 0;
+                const std::size_t last =
+                    std::min(keys.size() - 1, atm + static_cast<std::size_t>(strikes));
                 json::array out_rows;
                 for (std::size_t i = first; i <= last; ++i) {
                     const auto& [call, put] = by_strike[keys[i]];
-                    out_rows.push_back(json::object{{"strike", core::Price::from_raw(keys[i]).to_double()},
-                                                    {"call", call != 0 ? json::value(call) : json::value(nullptr)},
-                                                    {"put", put != 0 ? json::value(put) : json::value(nullptr)}});
+                    out_rows.push_back(
+                        json::object{{"strike", core::Price::from_raw(keys[i]).to_double()},
+                                     {"call", call != 0 ? json::value(call) : json::value(nullptr)},
+                                     {"put", put != 0 ? json::value(put) : json::value(nullptr)}});
                 }
                 json::object out{{"underlying", underlying},
                                  {"expiry", expiry},
@@ -227,7 +246,8 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                                  {"lot_size", lot_size},
                                  {"atm_strike", core::Price::from_raw(keys[atm]).to_double()},
                                  {"rows", std::move(out_rows)}};
-                out["summary"] = summary ? json::value(chain_summary_json(*summary)) : json::value(nullptr);
+                out["summary"] =
+                    summary ? json::value(chain_summary_json(*summary)) : json::value(nullptr);
                 return success(std::move(out));
             });
         });

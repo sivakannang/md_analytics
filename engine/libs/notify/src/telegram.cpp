@@ -57,23 +57,25 @@ OutgoingMessage reply(const Update& update, std::string text,
 }
 
 constexpr std::string_view kHelp =
-    "This bot sends md_analytics alerts. To connect it, open md_analytics → Account → Notifications → "
+    "This bot sends md_analytics alerts. To connect it, open md_analytics → Account → "
+    "Notifications → "
     "Connect Telegram. Send /stop to turn the alerts off.";
 
 }  // namespace
 
 std::string TelegramError::what(std::string_view method) const {
-    return "telegram " + std::string(method) + ": " + (code != 0 ? std::to_string(code) + " " : "") + description;
+    return "telegram " + std::string(method) + ": " +
+           (code != 0 ? std::to_string(code) + " " : "") + description;
 }
 
-asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(std::string_view method,
-                                                                              const json::object& body,
-                                                                              std::chrono::seconds timeout) {
+asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(
+    std::string_view method, const json::object& body, std::chrono::seconds timeout) {
     const auto executor = co_await asio::this_coro::executor;
     boost::system::error_code ec;
     const auto token = asio::redirect_error(asio::use_awaitable, ec);
     const auto network = [&](std::string_view step) {
-        return std::unexpected(TelegramError{.code = 0, .description = std::string(step) + ": " + ec.message()});
+        return std::unexpected(
+            TelegramError{.code = 0, .description = std::string(step) + ": " + ec.message()});
     };
 
     asio::ip::tcp::resolver resolver(executor);
@@ -98,7 +100,8 @@ asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(std
         co_return network("handshake");
     }
 
-    http::request<http::string_body> request{http::verb::post, "/bot" + options_.token + "/" + std::string(method), 11};
+    http::request<http::string_body> request{
+        http::verb::post, "/bot" + options_.token + "/" + std::string(method), 11};
     request.set(http::field::host, options_.host);
     request.set(http::field::content_type, "application/json");
     request.body() = json::serialize(body);
@@ -123,8 +126,8 @@ asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(std
     boost::system::error_code parse_error;
     json::value parsed = json::parse(response.body(), parse_error);
     if (parse_error || !parsed.is_object()) {
-        co_return std::unexpected(
-            TelegramError{.code = static_cast<int>(response.result_int()), .description = "reply is not JSON"});
+        co_return std::unexpected(TelegramError{.code = static_cast<int>(response.result_int()),
+                                                .description = "reply is not JSON"});
     }
     auto& reply = parsed.as_object();
     const auto* ok = reply.if_contains("ok");
@@ -132,15 +135,18 @@ asio::awaitable<std::expected<json::value, TelegramError>> TelegramApi::call(std
         co_return reply["result"];
     }
     const std::int64_t code = int_at(reply, "error_code");
-    co_return std::unexpected(TelegramError{.code = code != 0 ? static_cast<int>(code) : static_cast<int>(response.result_int()),
-                                            .description = text_at(reply, "description")});
+    co_return std::unexpected(TelegramError{
+        .code = code != 0 ? static_cast<int>(code) : static_cast<int>(response.result_int()),
+        .description = text_at(reply, "description")});
 }
 
 json::object to_json(const OutgoingMessage& message) {
-    json::object body{{"chat_id", message.chat_id}, {"text", message.text}, {"disable_web_page_preview", true}};
+    json::object body{
+        {"chat_id", message.chat_id}, {"text", message.text}, {"disable_web_page_preview", true}};
     if (message.keyboard == OutgoingMessage::Keyboard::ShareContact) {
         body["reply_markup"] = json::object{
-            {"keyboard", json::array{json::array{json::object{{"text", "Share phone number"}, {"request_contact", true}}}}},
+            {"keyboard", json::array{json::array{json::object{{"text", "Share phone number"},
+                                                              {"request_contact", true}}}}},
             {"one_time_keyboard", true},
             {"resize_keyboard", true}};
     } else if (message.keyboard == OutgoingMessage::Keyboard::Remove) {
@@ -165,8 +171,9 @@ asio::awaitable<void> TelegramChannel::pace(const std::string& chat_id) {
 
 asio::awaitable<SendResult> TelegramChannel::send(const Delivery& delivery) {
     co_await pace(delivery.address);
-    const OutgoingMessage message{.chat_id = delivery.address,
-                                  .text = delivery.message.subject + "\n\n" + delivery.message.text};
+    const OutgoingMessage message{
+        .chat_id = delivery.address,
+        .text = delivery.message.subject + "\n\n" + delivery.message.text};
     const auto sent = co_await api_->call("sendMessage", to_json(message), api_->options().timeout);
     if (sent) {
         co_return SendResult{.outcome = SendOutcome::Sent};
@@ -209,13 +216,15 @@ std::vector<Update> parse_updates(const json::value& result) {
     return out;
 }
 
-std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(const Update& update, std::int64_t now) {
+std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(const Update& update,
+                                                                              std::int64_t now) {
     using Keyboard = OutgoingMessage::Keyboard;
     if (!update.private_chat || update.chat_id.empty()) {
         return std::optional<OutgoingMessage>{};  // groups and channels: not ours
     }
     const auto linked_user = [&]() -> std::expected<std::optional<std::int64_t>, DbError> {
-        auto query = db_->prepare("SELECT user_id FROM user_channels WHERE channel = 'telegram' AND address = ?1");
+        auto query = db_->prepare(
+            "SELECT user_id FROM user_channels WHERE channel = 'telegram' AND address = ?1");
         if (!query) {
             return std::unexpected(query.error());
         }
@@ -237,18 +246,22 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
             return std::unexpected(user.error());
         }
         if (!*user) {
-            return std::optional(reply(update,
-                                       "This link has expired or was already used. Open Account → Notifications in "
-                                       "md_analytics and connect Telegram again."));
+            return std::optional(
+                reply(update,
+                      "This link has expired or was already used. Open Account → Notifications in "
+                      "md_analytics and connect Telegram again."));
         }
         auto transaction = storage::Transaction::begin(*db_);
         if (!transaction) {
             return std::unexpected(transaction.error());
         }
         // A chat belongs to one account: linking it elsewhere unlinks it here.
-        auto unlink = db_->prepare("DELETE FROM user_channels WHERE channel = 'telegram' AND address = ?1 AND user_id <> ?2");
+        auto unlink = db_->prepare(
+            "DELETE FROM user_channels WHERE channel = 'telegram' AND address = ?1 AND user_id <> "
+            "?2");
         auto link = db_->prepare(
-            "INSERT INTO user_channels (user_id, channel, address, enabled, linked_at) VALUES (?1, 'telegram', ?2, 1, ?3) "
+            "INSERT INTO user_channels (user_id, channel, address, enabled, linked_at) VALUES (?1, "
+            "'telegram', ?2, 1, ?3) "
             "ON CONFLICT (user_id, channel) DO UPDATE SET address = excluded.address, enabled = 1, "
             "linked_at = excluded.linked_at");
         if (!unlink || !link) {
@@ -265,10 +278,11 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
         if (auto committed = transaction->commit(); !committed) {
             return std::unexpected(committed.error());
         }
-        return std::optional(reply(update,
-                                   "Connected: md_analytics alerts will arrive here.\n\nTap \"Share phone number\" "
-                                   "below to verify the phone number on your account.",
-                                   Keyboard::ShareContact));
+        return std::optional(
+            reply(update,
+                  "Connected: md_analytics alerts will arrive here.\n\nTap \"Share phone number\" "
+                  "below to verify the phone number on your account.",
+                  Keyboard::ShareContact));
     }
 
     if (update.contact_phone) {
@@ -280,7 +294,8 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
             return std::optional(reply(update, std::string(kHelp), Keyboard::Remove));
         }
         if (update.contact_user_id != update.from_id) {
-            return std::optional(reply(update, "Please share your own contact, with the button below.",
+            return std::optional(reply(update,
+                                       "Please share your own contact, with the button below.",
                                        Keyboard::ShareContact));
         }
         auto phone = db_->prepare("SELECT phone FROM users WHERE id = ?1");
@@ -292,13 +307,15 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
         if (!row) {
             return std::unexpected(row.error());
         }
-        const std::string registered =
-            *row == StepResult::Row && !phone->column_is_null(0) ? last_digits(phone->column_text(0), 10) : std::string{};
+        const std::string registered = *row == StepResult::Row && !phone->column_is_null(0)
+                                           ? last_digits(phone->column_text(0), 10)
+                                           : std::string{};
         if (registered.empty() || registered != last_digits(*update.contact_phone, 10)) {
-            return std::optional(reply(update,
-                                       "That number doesn't match the phone number on your md_analytics account, so "
-                                       "it stays unverified.",
-                                       Keyboard::Remove));
+            return std::optional(
+                reply(update,
+                      "That number doesn't match the phone number on your md_analytics account, so "
+                      "it stays unverified.",
+                      Keyboard::Remove));
         }
         auto verify = db_->prepare("UPDATE users SET phone_verified_at = ?2 WHERE id = ?1");
         if (!verify) {
@@ -312,7 +329,8 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
     }
 
     if (update.text == "/stop") {
-        auto off = db_->prepare("UPDATE user_channels SET enabled = 0 WHERE channel = 'telegram' AND address = ?1");
+        auto off = db_->prepare(
+            "UPDATE user_channels SET enabled = 0 WHERE channel = 'telegram' AND address = ?1");
         if (!off) {
             return std::unexpected(off.error());
         }
@@ -320,18 +338,21 @@ std::expected<std::optional<OutgoingMessage>, DbError> TelegramLinker::handle(co
         if (auto done = off->run(); !done) {
             return std::unexpected(done.error());
         }
-        return std::optional(reply(update,
-                                   "Telegram alerts are off. Turn them on again under Account → Notifications in "
-                                   "md_analytics."));
+        return std::optional(
+            reply(update,
+                  "Telegram alerts are off. Turn them on again under Account → Notifications in "
+                  "md_analytics."));
     }
     return std::optional(reply(update, std::string(kHelp)));
 }
 
-asio::awaitable<std::int64_t> poll_once(TelegramApi& api, TelegramLinker& linker, std::int64_t offset, std::int64_t now) {
+asio::awaitable<std::int64_t> poll_once(TelegramApi& api, TelegramLinker& linker,
+                                        std::int64_t offset, std::int64_t now) {
     const json::object request{{"offset", offset},
                                {"timeout", api.options().poll_timeout.count()},
                                {"allowed_updates", json::array{"message"}}};
-    const auto result = co_await api.call("getUpdates", request, api.options().timeout + api.options().poll_timeout);
+    const auto result = co_await api.call("getUpdates", request,
+                                          api.options().timeout + api.options().poll_timeout);
     if (!result) {
         co_return offset;
     }
