@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to secrets/notifier.json (chmod 600) and fill in. Leave out a section to turn that channel off.",
+  "telegram": {
+    "bot_token": "<token from @BotFather>"
+  },
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": "465",
+    "username": "your.name@gmail.com",
+    "password": "<16-letter Gmail app password>",
+    "from_address": "your.name@gmail.com",
+    "from_name": "md_analytics"
+  }
+}

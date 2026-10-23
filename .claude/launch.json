@@ -1,0 +1,44 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/sivakannan/Developer/md_analytics/web",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "web-test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "MDA_GATEWAY_URL=http://127.0.0.1:8092",
+        "PORT=5174",
+        "npm",
+        "--prefix",
+        "/Users/sivakannan/Developer/md_analytics/web",
+        "run",
+        "dev"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "web-replay",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "MDA_GATEWAY_URL=http://127.0.0.1:8093",
+        "PORT=5175",
+        "npm",
+        "--prefix",
+        "/Users/sivakannan/Developer/md_analytics/web",
+        "run",
+        "dev"
+      ],
+      "port": 5175
+    }
+  ]
+}

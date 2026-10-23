@@ -1,0 +1,85 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_MANIFEST_FEATURES": "tests",
+        "MDA_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "dev-debug",
+      "displayName": "Debug",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "dev-asan",
+      "displayName": "Debug + AddressSanitizer + UBSan",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MDA_SANITIZER": "address,undefined"
+      }
+    },
+    {
+      "name": "dev-tsan",
+      "displayName": "Debug + ThreadSanitizer",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MDA_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (-O2, with debug info for profiling)",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "ci-asan",
+      "inherits": "dev-asan",
+      "cacheVariables": { "MDA_WARNINGS_AS_ERRORS": "ON" }
+    },
+    {
+      "name": "ci-tsan",
+      "inherits": "dev-tsan",
+      "cacheVariables": { "MDA_WARNINGS_AS_ERRORS": "ON" }
+    },
+    {
+      "name": "ci-release",
+      "inherits": "release",
+      "cacheVariables": { "MDA_WARNINGS_AS_ERRORS": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev-debug", "configurePreset": "dev-debug" },
+    { "name": "dev-asan", "configurePreset": "dev-asan" },
+    { "name": "dev-tsan", "configurePreset": "dev-tsan" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "ci-asan", "configurePreset": "ci-asan" },
+    { "name": "ci-tsan", "configurePreset": "ci-tsan" },
+    { "name": "ci-release", "configurePreset": "ci-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "dev-debug", "inherits": "base", "configurePreset": "dev-debug" },
+    { "name": "dev-asan", "inherits": "base", "configurePreset": "dev-asan" },
+    { "name": "dev-tsan", "inherits": "base", "configurePreset": "dev-tsan" },
+    { "name": "release", "inherits": "base", "configurePreset": "release" },
+    { "name": "ci-asan", "inherits": "base", "configurePreset": "ci-asan" },
+    { "name": "ci-tsan", "inherits": "base", "configurePreset": "ci-tsan" },
+    { "name": "ci-release", "inherits": "base", "configurePreset": "ci-release" }
+  ]
+}

@@ -1,0 +1,73 @@
+# md_analytics configuration (ADR-0017). One file for every process; each reads its section.
+# No secrets here: credentials live in secrets/ (git-ignored).
+# Override the path with --config PATH.
+
+logging:
+  level: info              # trace | debug | info | warn | error
+  directory: data/logs     # one rotating file per process; "" = console only
+  console: true
+
+database:
+  path: data/app.db        # app DB (SQLite): users, watchlists, instrument catalog, notifications
+
+bus:
+  md:                      # market data bus: mda-feedd -> recorder, engine, gateway
+    name: md
+    capacity_mb: 256       # ring size, power of two (~100 s of slack at full live rate)
+  an:                      # analytics bus: mda-engine -> gateway (bars, option analytics)
+    name: an
+    capacity_mb: 64
+
+kite:
+  session_file: secrets/kite_session.json        # written daily by mda-login
+  ca_file: ""                                    # "" = auto-detect the system CA bundle
+  registry_file: data/instruments/registry.csv   # permanent InstrumentIds
+  instruments_dir: data/instruments              # daily instrument CSV cache
+
+feed:                      # mda-feedd
+  mode: full               # ltp | quote | full (full includes OI and 5-level depth)
+  stale_after_seconds: 5   # no data or heartbeat for this long -> reconnect
+  reconnect_initial_ms: 1000
+  reconnect_max_ms: 30000
+  summary_interval_seconds: 60   # periodic counters line in the log
+  watchlists_refresh_seconds: 2  # also subscribe every instrument on any watchlist; 0 = off
+  circuit_refresh_minutes: 15    # re-fetch circuit limits (Kite quote API); 0 = off
+  auto_backfill_days: 30         # bar history for subscribed instruments with none (ADR-0025); 0 = off
+  # Always subscribed (the subscription manager with rolling ATM windows comes later)
+  instruments:
+    - NSE|CASH|IDX|NIFTY 50
+    - NSE|CASH|IDX|NIFTY BANK
+    - BSE|CASH|IDX|SENSEX
+    - NSE|CASH|EQ|RELIANCE
+    - NSE|CASH|EQ|HDFCBANK
+    - NSE|CASH|EQ|INFY
+  futures_of:              # all listed futures of these F&O underlyings
+    - NIFTY
+    - BANKNIFTY
+  # Option chains kept subscribed around ATM (ADR-0020): nearest `expiries`, ATM ± `strikes`
+  # (+5 buffer strikes; re-centred when ATM moves more than 5 strikes).
+  chains:
+    - { underlying: NIFTY,     spot: "NSE|CASH|IDX|NIFTY 50",   expiries: 3, strikes: 20 }
+    - { underlying: BANKNIFTY, spot: "NSE|CASH|IDX|NIFTY BANK", expiries: 1, strikes: 20 }
+    - { underlying: SENSEX,    spot: "BSE|CASH|IDX|SENSEX",     expiries: 2, strikes: 20 }
+    - { underlying: BANKEX,    spot: "BSE|CASH|IDX|BANKEX",     expiries: 1, strikes: 20 }
+
+engine:                    # mda-engine
+  bars_db: data/bars.db    # 1-minute bars (ADR-0021)
+  last_quotes_db: data/last_quotes.db  # last quote/depth/circuits per instrument (ADR-0024)
+
+gateway:                   # mda-gateway
+  listen: 127.0.0.1:8090
+  allow_signup: true
+  publish_interval_ms: 250 # browser pushes (latest quote per instrument); 0 = fastest (10 ms)
+  web_dir: web/dist        # the built website, served on the same origin (ADR-0027); empty = API only
+
+notifier:                  # mda-notifier (ADR-0016, docs/design/notifications.md)
+  secrets_file: secrets/notifier.json  # bot token + SMTP login (template: config/notifier.example.json)
+  telegram_bot: ett_mda_alerts_bot # the bot's @username without "@" (from @BotFather); empty = no Telegram
+  interval_seconds: 2      # how often the outbox is checked
+
+recorder:                  # mda-recorder: the tick journal (ADR-0026)
+  enabled: false           # false: mda-recorder exits at once and nothing is recorded
+  journal_dir: data/journal  # <IST date>/<HH>.mdj raw frames + that day's instruments.csv
+  keep_days: 90            # older day folders are deleted

@@ -1,0 +1,35 @@
+# --- Secrets: never commit credentials or tokens -----------------------------
+secrets/
+*.secret
+*.token
+.env
+.env.*
+!.env.example
+
+# --- Build outputs ------------------------------------------------------------
+build/
+out/
+cmake-build-*/
+vcpkg_installed/
+compile_commands.json
+.cache/
+
+# --- Market data (recordings are large and broker-licensed; keep local) -------
+data/
+*.mdrec
+
+# --- Frontend -----------------------------------------------------------------
+node_modules/
+web/dist/
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# --- Editors / OS -------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store

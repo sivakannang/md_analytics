@@ -1,0 +1,41 @@
+# Replay configuration (ADR-0026): the same processes on separate buses, files and port, so
+# a replay never touches live data and can run while the live stack does.
+#   build/release/engine/apps/mda-replayer --config config/replay.yaml --date 2026-10-23 --speed 10
+#   build/release/engine/apps/mda-engine   --config config/replay.yaml
+#   build/release/engine/apps/mda-gateway  --config config/replay.yaml
+# The website for it: .claude/launch.json "web-replay" (http://localhost:5175).
+
+logging:
+  level: info
+  directory: data/replay/logs
+  console: true
+
+database:
+  path: data/app.db        # same accounts as live (sign in as usual)
+
+bus:
+  md:
+    name: md-replay
+    capacity_mb: 256
+  an:
+    name: an-replay
+    capacity_mb: 64
+
+feed:                      # used by the engine's chain analytics
+  chains:
+    - { underlying: NIFTY,     spot: "NSE|CASH|IDX|NIFTY 50",   expiries: 3, strikes: 20 }
+    - { underlying: BANKNIFTY, spot: "NSE|CASH|IDX|NIFTY BANK", expiries: 1, strikes: 20 }
+    - { underlying: SENSEX,    spot: "BSE|CASH|IDX|SENSEX",     expiries: 2, strikes: 20 }
+    - { underlying: BANKEX,    spot: "BSE|CASH|IDX|BANKEX",     expiries: 1, strikes: 20 }
+
+engine:
+  bars_db: data/replay/bars.db
+  last_quotes_db: data/replay/last_quotes.db
+
+gateway:
+  listen: 127.0.0.1:8093
+  allow_signup: false
+
+recorder:
+  enabled: false           # never record a replay
+  journal_dir: data/journal  # read by the replayer

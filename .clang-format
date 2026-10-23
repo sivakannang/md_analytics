@@ -1,0 +1,27 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: Latest
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -4
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakConstructorInitializers: BeforeComma
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Our own headers
+  - Regex: '^<mda/'
+    Priority: 3
+  # Third-party headers (contain a '/' or '.h')
+  - Regex: '^<.*(/|\.h)'
+    Priority: 2
+  # Standard library
+  - Regex: '^<'
+    Priority: 1
+  - Regex: '.*'
+    Priority: 4
+...

@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Binary fixtures (captured Kite packets, recordings) must never be line-ending converted
+*.bin binary
+*.mdrec binary
