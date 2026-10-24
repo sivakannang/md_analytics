@@ -17,16 +17,16 @@ set(_mda_warnings
     -Woverloaded-virtual
     -Wnull-dereference
     -Wimplicit-fallthrough
+    # Designated initialisers that leave members out are intended: those members are
+    # value-initialised. GCC and Clang 19+ warn about them under -Wextra.
+    -Wno-missing-field-initializers
 )
 
 # GCC only:
-# - -Wextra flags designated initialisers that leave members out; we rely on those being
-#   value-initialised, and Clang doesn't warn about them.
 # - -Wnull-dereference, -Wfree-nonheap-object and -Wmismatched-new-delete misfire at -O2
 #   on code inlined from Boost.Asio/Beast (coroutine frames) and std::expected (GCC 14).
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     list(APPEND _mda_warnings
-        -Wno-missing-field-initializers
         -Wno-null-dereference
         -Wno-free-nonheap-object
         -Wno-mismatched-new-delete)
