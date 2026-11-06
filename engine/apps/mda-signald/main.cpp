@@ -81,7 +81,8 @@ struct Market {
     std::set<std::int64_t> pending;  ///< closed spot minutes not yet evaluated
 };
 
-std::vector<std::unique_ptr<signals::Strategy>> make_strategies(const runtime::SignalsConfig& config) {
+std::vector<std::unique_ptr<signals::Strategy>> make_strategies(
+    const runtime::SignalsConfig& config) {
     std::vector<std::unique_ptr<signals::Strategy>> strategies;
     for (const auto& strategy : config.strategies) {
         auto made = signals::make_strategy(strategy.id, strategy.horizon_min, strategy.bullish,
@@ -100,7 +101,8 @@ std::vector<Market> make_markets(const runtime::Config& config,
                                  const instruments::InstrumentRegistry& registry) {
     std::vector<Market> markets;
     for (const auto& underlying : config.signals.underlyings) {
-        const auto chain = std::ranges::find(config.feed.chains, underlying, &runtime::ChainConfig::underlying);
+        const auto chain =
+            std::ranges::find(config.feed.chains, underlying, &runtime::ChainConfig::underlying);
         if (chain == config.feed.chains.end()) {
             spdlog::warn("signals: {} has no feed.chains entry; skipped", underlying);
             continue;
@@ -111,12 +113,12 @@ std::vector<Market> make_markets(const runtime::Config& config,
             spdlog::warn("signals: spot '{}' unknown; {} skipped", chain->spot, underlying);
             continue;
         }
-        markets.push_back(Market{.underlying = underlying,
-                                 .spot_key = chain->spot,
-                                 .expiries = chain->expiries,
-                                 .state = signals::MarketState(
-                                     {.underlying = underlying, .spot = spot, .future = {}}),
-                                 .pending = {}});
+        markets.push_back(Market{
+            .underlying = underlying,
+            .spot_key = chain->spot,
+            .expiries = chain->expiries,
+            .state = signals::MarketState({.underlying = underlying, .spot = spot, .future = {}}),
+            .pending = {}});
     }
     return markets;
 }
@@ -143,10 +145,11 @@ void refresh_instruments(std::vector<Market>& markets, const runtime::Config& co
             if (k.kind == instruments::Kind::Future && (!future || expiry < future->first)) {
                 future = {expiry, instrument.id};
             } else if (k.kind == instruments::Kind::Option) {
-                by_expiry[expiry].push_back({.id = instrument.id,
-                                             .expiry_days = expiry,
-                                             .strike = k.strike.to_double(),
-                                             .call = k.option_type == instruments::OptionType::Call});
+                by_expiry[expiry].push_back(
+                    {.id = instrument.id,
+                     .expiry_days = expiry,
+                     .strike = k.strike.to_double(),
+                     .call = k.option_type == instruments::OptionType::Call});
             }
         }
         market.state.set_future(future ? future->second : core::InstrumentId{});
@@ -252,12 +255,12 @@ std::size_t settle(Market& market, signals::SignalStore& store, bars::BarStore& 
         const std::int64_t from = signals::ist_day_start(minute);
         if (day == signals::ist_day(latest)) {
             for (const auto& point : market.state.spot().between(from, latest)) {
-                it->second.push_back(
-                    {.minute = point.minute,
-                     .close_raw = std::llround(point.value * static_cast<double>(core::Price::kScale))});
+                it->second.push_back({.minute = point.minute,
+                                      .close_raw = std::llround(
+                                          point.value * static_cast<double>(core::Price::kScale))});
             }
         } else if (const auto stored = bar_store.range(market.state.definition().spot.value(), from,
-                                                  from + signals::kSecondsPerDay)) {
+                                                       from + signals::kSecondsPerDay)) {
             for (const auto& bar : *stored) {
                 it->second.push_back({.minute = bar.start, .close_raw = bar.close.raw()});
             }
@@ -269,14 +272,16 @@ std::size_t settle(Market& market, signals::SignalStore& store, bars::BarStore& 
         const auto price = signals::settle_price(closes_of(row.minute), row.minute, row.horizon_min,
                                                  signals::day_closed(row.minute, latest));
         if (price) {
-            updates.push_back({.strategy = row.strategy,
-                               .underlying = row.underlying,
-                               .minute = row.minute,
-                               .outcome = signals::outcome(row.label, row.spot_raw, *price, flat_bp)});
+            updates.push_back(
+                {.strategy = row.strategy,
+                 .underlying = row.underlying,
+                 .minute = row.minute,
+                 .outcome = signals::outcome(row.label, row.spot_raw, *price, flat_bp)});
         }
     }
     if (auto done = store.set_outcomes(updates); !done) {
-        spdlog::error("signals: writing {} outcomes failed: {}", updates.size(), done.error().message);
+        spdlog::error("signals: writing {} outcomes failed: {}", updates.size(),
+                      done.error().message);
         return 0;
     }
     return updates.size();
@@ -368,7 +373,8 @@ int run(const runtime::Config& config) {
     // Drains `md` up to now (bounded, so a flood can't starve the an loop).
     const auto drain_md = [&](std::size_t limit) {
         for (std::size_t i = 0; i < limit; ++i) {
-            const auto polled = md->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+            const auto polled = md->poll([&](bus::MsgType type,
+                                             std::span<const std::byte> payload) {
                 if (auto snapshot = messages::decode<messages::MarketSnapshot>(type, payload)) {
                     for (auto& market : markets) {
                         market.state.on_snapshot(*snapshot);
@@ -442,7 +448,8 @@ int run(const runtime::Config& config) {
         }
         std::size_t settled = 0;
         for (Market* market : touched) {
-            settled += settle(*market, *signal_store, *bar_store, current_minute, config.signals.flat_bp);
+            settled +=
+                settle(*market, *signal_store, *bar_store, current_minute, config.signals.flat_bp);
         }
         spdlog::info("signals {}:{}{}", hh_mm_ist(records.front().signal.minute), line,
                      settled > 0 ? std::format(" · {} outcomes", settled) : std::string());
@@ -451,16 +458,19 @@ int run(const runtime::Config& config) {
             minute % 1800 == 0 && minute != flow_logged) {
             flow_logged = minute;
             for (const auto& market : markets) {
-                signals::FlowMinute day;
-                for (const auto& point : market.state.flow().between(signals::ist_day_start(minute), minute)) {
-                    day.buy += point.value.buy;
-                    day.sell += point.value.sell;
-                    day.unclassified += point.value.unclassified;
+                signals::FlowMinute flow;
+                for (const auto& point :
+                     market.state.flow().between(signals::ist_day_start(minute), minute)) {
+                    flow.buy += point.value.buy;
+                    flow.sell += point.value.sell;
+                    flow.unclassified += point.value.unclassified;
                 }
-                if (const std::int64_t total = day.buy + day.sell + day.unclassified; total > 0) {
+                if (const std::int64_t total = flow.buy + flow.sell + flow.unclassified;
+                    total > 0) {
                     spdlog::info("flow {}: buy {} sell {} unclassified {} ({:.1f}% classified)",
-                                 market.underlying, day.buy, day.sell, day.unclassified,
-                                 100.0 * static_cast<double>(day.buy + day.sell) / static_cast<double>(total));
+                                 market.underlying, flow.buy, flow.sell, flow.unclassified,
+                                 100.0 * static_cast<double>(flow.buy + flow.sell) /
+                                     static_cast<double>(total));
                 }
             }
         }
@@ -472,26 +482,29 @@ int run(const runtime::Config& config) {
     int pending_ticks = 0;
     while (!g_stop.load()) {
         const bool md_idle = drain_md(1'024);
-        const auto result = reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
-            if (auto bar = messages::decode<bars::Bar>(type, payload)) {
-                current_minute = std::max(current_minute, bar->start);
-                const bool closed = (bar->header.flags & bars::kBarForming) == 0;
-                for (auto& market : markets) {
-                    market.state.on_bar(*bar);
-                    if (closed && bar->header.instrument_id == market.state.definition().spot) {
-                        market.pending.insert(bar->start);
-                    }
-                }
-            } else if (auto summary = messages::decode<options::ChainSummaryMessage>(type, payload)) {
-                if (summary->minute != 0) {  // closing ones only: the per-second ones vary by timing
-                    const std::int64_t minute = summary->minute;
-                    closed_through = std::max(closed_through, minute);
+        const auto result =
+            reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+                if (auto bar = messages::decode<bars::Bar>(type, payload)) {
+                    current_minute = std::max(current_minute, bar->start);
+                    const bool closed = (bar->header.flags & bars::kBarForming) == 0;
                     for (auto& market : markets) {
-                        market.state.on_summary(*summary, minute);
+                        market.state.on_bar(*bar);
+                        if (closed && bar->header.instrument_id == market.state.definition().spot) {
+                            market.pending.insert(bar->start);
+                        }
+                    }
+                } else if (auto summary =
+                               messages::decode<options::ChainSummaryMessage>(type, payload)) {
+                    if (summary->minute !=
+                        0) {  // closing ones only: the per-second ones vary by timing
+                        const std::int64_t minute = summary->minute;
+                        closed_through = std::max(closed_through, minute);
+                        for (auto& market : markets) {
+                            market.state.on_summary(*summary, minute);
+                        }
                     }
                 }
-            }
-        });
+            });
         if (result.status == bus::PollStatus::Empty) {
             evaluate_pending();
             pending_ticks = 0;
@@ -522,7 +535,8 @@ int run(const runtime::Config& config) {
                     market.state.prune(signals::ist_day_start(current_minute));
                 }
                 // New expiries and contracts are registered by mda-feedd as they list.
-                if (auto reloaded = instruments::InstrumentRegistry::load(config.kite.registry_file)) {
+                if (auto reloaded =
+                        instruments::InstrumentRegistry::load(config.kite.registry_file)) {
                     loaded = std::move(reloaded);
                 }
                 refresh_instruments(markets, config, loaded->registry, *bar_store, current_minute);

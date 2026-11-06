@@ -113,7 +113,8 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                 std::int64_t session_open = bars::kNseSessionOpen;
             };
             const Contract contract = co_await run_on(db_executor, [&] {
-                auto lookup = db.prepare("SELECT lot_size, exchange FROM instruments WHERE id = ?1");
+                auto lookup =
+                    db.prepare("SELECT lot_size, exchange FROM instruments WHERE id = ?1");
                 if (!lookup) {
                     return Contract{};
                 }
@@ -123,7 +124,8 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                     return Contract{};
                 }
                 if (lookup->column_text(1) == "MCX") {
-                    return Contract{.lot_size = core::Quantity(1), .session_open = bars::kMcxSessionOpen};
+                    return Contract{.lot_size = core::Quantity(1),
+                                    .session_open = bars::kMcxSessionOpen};
                 }
                 return Contract{.lot_size = core::Quantity(lookup->column_int64(0))};
             });

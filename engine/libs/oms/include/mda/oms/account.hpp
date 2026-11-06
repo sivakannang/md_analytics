@@ -57,8 +57,9 @@ struct PositionKey {
 
 struct FillResult {
     ChargeBreakdown charges;
-    Paise realised = 0;        ///< from the average: what reaches cash
-    Paise entry_realised = 0;  ///< from the entry price, before any daily mark: what the trader made
+    Paise realised = 0;  ///< from the average: what reaches cash
+    Paise entry_realised =
+        0;  ///< from the entry price, before any daily mark: what the trader made
 };
 
 class Account {
@@ -71,8 +72,8 @@ public:
     /// Books a fill: position, realised P&L and charges. `order_brokerage` is the brokerage
     /// already charged to the order (the cap is per executed order).
     FillResult apply_fill(const ChargeRates& rates, const Contract& contract, Product product,
-                          Side side, std::int64_t quantity, core::Price price, Paise order_brokerage,
-                          std::int64_t order_id, std::int64_t at);
+                          Side side, std::int64_t quantity, core::Price price,
+                          Paise order_brokerage, std::int64_t order_id, std::int64_t at);
 
     /// Settles every open position in `contract` at the final settlement price `fsp` (the
     /// index's close on expiry day): futures at fsp, options at their intrinsic value, with
@@ -90,7 +91,8 @@ public:
     /// Closes the position in (`instrument`, `product`) at `price` without an order or charges:
     /// an MIS square-off the broker missed while it was down, caught up at that day's close.
     /// Returns the P&L realised.
-    Paise close_at(core::InstrumentId instrument, Product product, core::Price price, std::int64_t at);
+    Paise close_at(core::InstrumentId instrument, Product product, core::Price price,
+                   std::int64_t at);
 
     /// The time of the latest ledger entry for `instrument` (a fill, MTM or settlement); 0 if none.
     [[nodiscard]] std::int64_t last_activity(core::InstrumentId instrument) const noexcept;
@@ -104,7 +106,9 @@ public:
 
     [[nodiscard]] std::int64_t id() const noexcept { return id_; }
     [[nodiscard]] Paise cash() const noexcept { return cash_; }
-    [[nodiscard]] const std::map<PositionKey, Position>& positions() const noexcept { return positions_; }
+    [[nodiscard]] const std::map<PositionKey, Position>& positions() const noexcept {
+        return positions_;
+    }
     /// The position, or nullptr if the account never traded it.
     [[nodiscard]] const Position* position(core::InstrumentId instrument, Product product) const;
     [[nodiscard]] const std::vector<LedgerEntry>& ledger() const noexcept { return ledger_; }

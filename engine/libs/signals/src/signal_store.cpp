@@ -1,10 +1,10 @@
-#include <mda/signals/signal_store.hpp>
-
 #include <array>
 #include <format>
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#include <mda/signals/signal_store.hpp>
 
 namespace mda::signals {
 namespace {
@@ -37,12 +37,12 @@ constexpr std::string_view kColumns =
 
 std::string_view status_name(FactorStatus status) {
     switch (status) {
-    case FactorStatus::Present:
-        return "present";
-    case FactorStatus::Absent:
-        return "absent";
-    case FactorStatus::NotApplicable:
-        return "not_applicable";
+        case FactorStatus::Present:
+            return "present";
+        case FactorStatus::Absent:
+            return "absent";
+        case FactorStatus::NotApplicable:
+            return "not_applicable";
     }
     return "absent";
 }
@@ -79,7 +79,8 @@ std::expected<std::vector<StoredSignal>, DbError> collect(storage::Statement& st
             .factors_json = s.column_text(7),
             .spot_raw = s.column_int64(8),
             .spot_after_raw = optional_int(s, 9),
-            .return_bp = return_bp ? std::optional<int>(static_cast<int>(*return_bp)) : std::nullopt,
+            .return_bp =
+                return_bp ? std::optional<int>(static_cast<int>(*return_bp)) : std::nullopt,
             .hit = hit ? std::optional<bool>(*hit != 0) : std::nullopt,
         });
     }
@@ -93,8 +94,9 @@ std::string factors_json(const Signal& signal) {
         if (json.size() > 1) {
             json += ',';
         }
-        json += std::format(R"({{"factor":"{}","status":"{}","value":{:.4f},"points":{:.2f}}})",
-                            name(factor.id), status_name(factor.status), factor.value, factor.points);
+        json +=
+            std::format(R"({{"factor":"{}","status":"{}","value":{:.4f},"points":{:.2f}}})",
+                        name(factor.id), status_name(factor.status), factor.value, factor.points);
     }
     json += ']';
     return json;
@@ -163,9 +165,10 @@ std::expected<void, DbError> SignalStore::write(std::span<const SignalRecord> re
 std::expected<std::vector<StoredSignal>, DbError> SignalStore::range(std::string_view underlying,
                                                                      std::int64_t from,
                                                                      std::int64_t to) {
-    auto statement = db_.prepare("SELECT " + std::string(kColumns) +
-                                 " FROM signal WHERE underlying = ?1 AND minute >= ?2 AND minute < ?3"
-                                 " ORDER BY minute, strategy");
+    auto statement =
+        db_.prepare("SELECT " + std::string(kColumns) +
+                    " FROM signal WHERE underlying = ?1 AND minute >= ?2 AND minute < ?3"
+                    " ORDER BY minute, strategy");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -187,7 +190,8 @@ std::expected<std::optional<std::int64_t>, DbError> SignalStore::latest_minute(
     return optional_int(*statement, 0);
 }
 
-std::expected<std::vector<StoredSignal>, DbError> SignalStore::pending(std::string_view underlying) {
+std::expected<std::vector<StoredSignal>, DbError> SignalStore::pending(
+    std::string_view underlying) {
     auto statement = db_.prepare("SELECT " + std::string(kColumns) +
                                  " FROM signal WHERE underlying = ?1 AND spot_after IS NULL"
                                  " ORDER BY minute, strategy");

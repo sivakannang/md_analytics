@@ -22,16 +22,28 @@ constexpr core::InstrumentId kCall{2};
 
 std::optional<rms::InstrumentInfo> lookup(core::InstrumentId id) {
     if (id == kFut) {
-        return rms::InstrumentInfo{
-            .contract = {.id = kFut, .segment = oms::Segment::Future, .exchange = oms::Exchange::Nse, .lot_size = 75,
-                         .strike = {}, .call = false},
-            .tick = rupees(0.05), .freeze_quantity = 1800, .listed = true, .expiry_days = kToday + 5};
+        return rms::InstrumentInfo{.contract = {.id = kFut,
+                                                .segment = oms::Segment::Future,
+                                                .exchange = oms::Exchange::Nse,
+                                                .lot_size = 75,
+                                                .strike = {},
+                                                .call = false},
+                                   .tick = rupees(0.05),
+                                   .freeze_quantity = 1800,
+                                   .listed = true,
+                                   .expiry_days = kToday + 5};
     }
     if (id == kCall) {
-        return rms::InstrumentInfo{
-            .contract = {.id = kCall, .segment = oms::Segment::Option, .exchange = oms::Exchange::Nse, .lot_size = 75,
-                         .strike = rupees(22'500), .call = true},
-            .tick = rupees(0.05), .freeze_quantity = 1800, .listed = true, .expiry_days = kToday + 5};
+        return rms::InstrumentInfo{.contract = {.id = kCall,
+                                                .segment = oms::Segment::Option,
+                                                .exchange = oms::Exchange::Nse,
+                                                .lot_size = 75,
+                                                .strike = rupees(22'500),
+                                                .call = true},
+                                   .tick = rupees(0.05),
+                                   .freeze_quantity = 1800,
+                                   .listed = true,
+                                   .expiry_days = kToday + 5};
     }
     return std::nullopt;
 }
@@ -45,8 +57,10 @@ messages::MarketSnapshot snapshot(core::InstrumentId id, double ltp, Millis at) 
     return s;
 }
 
-messages::DepthSnapshot depth(core::InstrumentId id, std::initializer_list<std::pair<double, std::uint32_t>> bids,
-                              std::initializer_list<std::pair<double, std::uint32_t>> asks, Millis at) {
+messages::DepthSnapshot depth(core::InstrumentId id,
+                              std::initializer_list<std::pair<double, std::uint32_t>> bids,
+                              std::initializer_list<std::pair<double, std::uint32_t>> asks,
+                              Millis at) {
     messages::DepthSnapshot d{};
     d.header.instrument_id = id;
     d.receive_ts = core::Timestamp::from_ns(at * 1'000'000);
@@ -80,8 +94,8 @@ OrderRequest request(std::int64_t user, std::uint64_t client, core::InstrumentId
     return r;
 }
 
-OrderRequest control(std::int64_t user, Action action, std::int64_t order_id = 0, std::int64_t qty = 0,
-                     double price = 0) {
+OrderRequest control(std::int64_t user, Action action, std::int64_t order_id = 0,
+                     std::int64_t qty = 0, double price = 0) {
     OrderRequest r{};
     r.header = messages::make_header<OrderRequest>({}, 0);
     r.user = user;
@@ -167,17 +181,21 @@ TEST(BrokerAuto, UsersPositionsDontUseUpTheAutoLimits) {
         return broker.on_request(r, at).value().at(0);
     };
     // The user: 2 lots (₹33.75 L).
-    EXPECT_EQ(send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 150), oms::Source::Ui, kT0).status,
-              oms::OrderStatus::Open);
+    EXPECT_EQ(
+        send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 150), oms::Source::Ui, kT0)
+            .status,
+        oms::OrderStatus::Open);
     ASSERT_EQ(broker.on_tick(kT0 + 100).value().size(), 1u);
     // The auto trader: 2 lots more, though the account already holds ₹33.75 L and 2 lots.
-    EXPECT_EQ(send(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 150), oms::Source::Auto, kT0 + 200)
+    EXPECT_EQ(send(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 150),
+                   oms::Source::Auto, kT0 + 200)
                   .status,
               oms::OrderStatus::Open);
     ASSERT_EQ(broker.on_tick(kT0 + 300).value().size(), 1u);
     EXPECT_EQ(broker.account_of_user(1)->position(kFut, oms::Product::Mis)->quantity(), 300);
     // Its own 2 lots are its limit, and so after a restart.
-    const auto third = send(request(1, 3, kFut, oms::Side::Buy, oms::OrderType::Market, 75), oms::Source::Auto, kT0 + 400);
+    const auto third = send(request(1, 3, kFut, oms::Side::Buy, oms::OrderType::Market, 75),
+                            oms::Source::Auto, kT0 + 400);
     EXPECT_EQ(third.status, oms::OrderStatus::Rejected);
     Broker restarted(config, store, lookup);
     ASSERT_TRUE(restarted.load(kT0 + 500).has_value());
@@ -185,7 +203,8 @@ TEST(BrokerAuto, UsersPositionsDontUseUpTheAutoLimits) {
     restarted.on_depth(depth(kFut, {{22'499.95, 900}}, {{22'500.05, 900}}, kT0 + 500));
     auto again = request(1, 4, kFut, oms::Side::Buy, oms::OrderType::Market, 75);
     again.source = oms::Source::Auto;
-    EXPECT_EQ(restarted.on_request(again, kT0 + 600).value().at(0).status, oms::OrderStatus::Rejected);
+    EXPECT_EQ(restarted.on_request(again, kT0 + 600).value().at(0).status,
+              oms::OrderStatus::Rejected);
 }
 
 TEST_F(BrokerTest, RejectionsAreReportedAndStored) {
@@ -195,7 +214,8 @@ TEST_F(BrokerTest, RejectionsAreReportedAndStored) {
     EXPECT_EQ(r[0].reject_code, static_cast<std::uint8_t>(rms::RejectCode::BadQuantity));
     EXPECT_EQ(text_of(r[0].reason), "quantity must be a multiple of the lot size (75)");
     EXPECT_EQ(broker_.live_orders(), 0u);
-    const auto unknown = send(request(1, 2, core::InstrumentId(99), oms::Side::Buy, oms::OrderType::Market, 75));
+    const auto unknown =
+        send(request(1, 2, core::InstrumentId(99), oms::Side::Buy, oms::OrderType::Market, 75));
     EXPECT_EQ(text_of(unknown[0].reason), "unknown instrument");
     // Stored as rejected (status 5).
     EXPECT_NE(store_.dump().value().find(",1,5,"), std::string::npos);
@@ -216,7 +236,8 @@ TEST_F(BrokerTest, RepeatedClientOrderIdGetsTheSameOrder) {
 }
 
 TEST_F(BrokerTest, LimitRestsModifiesAndFillsWhenTradedThrough) {
-    const auto placed = send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400));
+    const auto placed =
+        send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400));
     const std::int64_t id = placed[0].order_id;
     EXPECT_TRUE(tick(kT0 + 200).empty());  // first look: nothing at 22,400
     const auto modified = send(control(1, Action::Modify, id, 150, 22'450), kT0 + 300);
@@ -234,19 +255,23 @@ TEST_F(BrokerTest, LimitRestsModifiesAndFillsWhenTradedThrough) {
 }
 
 TEST_F(BrokerTest, ModifyIsRiskChecked) {
-    const auto placed = send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400));
-    const auto r = send(control(1, Action::Modify, placed[0].order_id, 75 * 25, 22'400));  // above the freeze
+    const auto placed =
+        send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400));
+    const auto r =
+        send(control(1, Action::Modify, placed[0].order_id, 75 * 25, 22'400));  // above the freeze
     EXPECT_EQ(r[0].event, ReportEvent::Rejected);
     EXPECT_EQ(r[0].status, oms::OrderStatus::Open);  // the order itself is unchanged
     EXPECT_EQ(r[0].reject_code, static_cast<std::uint8_t>(rms::RejectCode::FreezeQuantity));
     EXPECT_EQ(broker_.live_order(placed[0].order_id)->spec().quantity, 75);
-    EXPECT_EQ(send(control(2, Action::Cancel, placed[0].order_id))[0].event, ReportEvent::Rejected);  // not theirs
+    EXPECT_EQ(send(control(2, Action::Cancel, placed[0].order_id))[0].event,
+              ReportEvent::Rejected);  // not theirs
 }
 
 // Above the freeze quantity (1800) a person's order is sliced into legs, as Kite does, up
 // to 10 of them.
 TEST_F(BrokerTest, AnOrderAboveTheFreezeQuantityIsSliced) {
-    const auto legs = send(request(1, 5, kCall, oms::Side::Buy, oms::OrderType::Limit, 75 * 30, 120));
+    const auto legs =
+        send(request(1, 5, kCall, oms::Side::Buy, oms::OrderType::Limit, 75 * 30, 120));
     ASSERT_EQ(legs.size(), 2u);
     EXPECT_EQ(legs[0].event, ReportEvent::Accepted);
     EXPECT_EQ(legs[0].quantity, 1800);
@@ -257,11 +282,13 @@ TEST_F(BrokerTest, AnOrderAboveTheFreezeQuantityIsSliced) {
     EXPECT_EQ(broker_.live_order(legs[1].order_id)->spec().tag, "slice 2/2");
     EXPECT_EQ(broker_.live_orders(), 2u);
 
-    const auto too_many = send(request(1, 6, kCall, oms::Side::Buy, oms::OrderType::Limit, 1800 * 10 + 75, 120));
+    const auto too_many =
+        send(request(1, 6, kCall, oms::Side::Buy, oms::OrderType::Limit, 1800 * 10 + 75, 120));
     ASSERT_EQ(too_many.size(), 1u);
     EXPECT_EQ(too_many[0].event, ReportEvent::Rejected);
     EXPECT_EQ(too_many[0].reject_code, static_cast<std::uint8_t>(rms::RejectCode::FreezeQuantity));
-    EXPECT_EQ(text_of(too_many[0].reason), "quantity above 10 legs of the freeze limit (10 × 1800)");
+    EXPECT_EQ(text_of(too_many[0].reason),
+              "quantity above 10 legs of the freeze limit (10 × 1800)");
 }
 
 TEST_F(BrokerTest, KillSwitchCancelsAndBlocksOpening) {
@@ -275,7 +302,8 @@ TEST_F(BrokerTest, KillSwitchCancelsAndBlocksOpening) {
     EXPECT_EQ(send(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75))[0].reject_code,
               static_cast<std::uint8_t>(rms::RejectCode::KillSwitch));
     (void)send(control(1, Action::KillSwitchOff));
-    EXPECT_EQ(send(request(1, 3, kFut, oms::Side::Buy, oms::OrderType::Market, 75))[0].event, ReportEvent::Accepted);
+    EXPECT_EQ(send(request(1, 3, kFut, oms::Side::Buy, oms::OrderType::Market, 75))[0].event,
+              ReportEvent::Accepted);
 }
 
 TEST_F(BrokerTest, FeedDownCancelsAMarketOrder) {
@@ -293,7 +321,8 @@ TEST_F(BrokerTest, FeedDownCancelsAMarketOrder) {
 using Step = std::function<void(Broker&)>;
 
 std::vector<Step> session() {
-    const auto md = [](core::InstrumentId id, double ltp, double bid, double ask, Millis at) -> Step {
+    const auto md = [](core::InstrumentId id, double ltp, double bid, double ask,
+                       Millis at) -> Step {
         return [=](Broker& b) {
             b.on_snapshot(snapshot(id, ltp, at));
             b.on_depth(depth(id, {{bid, 300}}, {{ask, 300}}, at));
@@ -312,7 +341,8 @@ std::vector<Step> session() {
         md(kCall, 120, 119.95, 120.05, kT0),
         req(request(1, 1, kFut, Side::Buy, OrderType::Market, 75), kT0 + 10),
         tick(kT0 + 200),
-        req(request(1, 2, kFut, Side::Buy, OrderType::Limit, 75, 22'450, 0, oms::Product::Nrml), kT0 + 300),
+        req(request(1, 2, kFut, Side::Buy, OrderType::Limit, 75, 22'450, 0, oms::Product::Nrml),
+            kT0 + 300),
         req(request(1, 3, kFut, Side::Sell, OrderType::StopMarket, 75, 0, 22'400), kT0 + 400),
         req(request(2, 1, kCall, Side::Buy, OrderType::Market, 150), kT0 + 500),
         tick(kT0 + 700),
@@ -330,8 +360,8 @@ std::vector<Step> session() {
 }
 constexpr std::size_t kRestartAt = 8;
 
-OrderRequest convert(std::int64_t user, std::uint64_t client, core::InstrumentId id, std::int64_t qty,
-                     oms::Product to) {
+OrderRequest convert(std::int64_t user, std::uint64_t client, core::InstrumentId id,
+                     std::int64_t qty, oms::Product to) {
     OrderRequest r{};
     r.header = messages::make_header<OrderRequest>(id, client);
     r.user = user;
@@ -394,7 +424,8 @@ TEST(BrokerSession, SameInputsSameState) {
     const auto start = dump.find("[trades]\n") + 9;
     const auto trades = dump.substr(start, dump.find("[positions]") - start);
     EXPECT_EQ(std::count(trades.begin(), trades.end(), '\n'), 5) << trades;
-    for (const char* price : {",225000500,", ",224500000,", ",223949500,", ",1200500,", ",1214500,"}) {
+    for (const char* price :
+         {",225000500,", ",224500000,", ",223949500,", ",1200500,", ",1214500,"}) {
         EXPECT_NE(trades.find(price), std::string::npos) << price << "\n" << trades;
     }
 }
@@ -439,7 +470,8 @@ TEST(BrokerSession, ALostAccountRowIsRebuiltNotReplaced) {
         ASSERT_TRUE(broker.load().has_value());
         broker.on_snapshot(snapshot(kFut, 22'500, kT0));
         broker.on_depth(depth(kFut, {{22'499.95, 300}}, {{22'500.05, 300}}, kT0));
-        ASSERT_TRUE(broker.on_request(request(7, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400), kT0));
+        ASSERT_TRUE(broker.on_request(
+            request(7, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400), kT0));
     }
     ASSERT_TRUE(store.database().prepare("DELETE FROM accounts")->run().has_value());
     EXPECT_TRUE(store.accounts().value().empty());
@@ -479,13 +511,14 @@ protected:
     CloseOfDayTest() : store_(PaperStore::open_in_memory().value()) { restart(); }
 
     void restart() {
-        broker_.emplace(BrokerConfig{}, store_, expiring_lookup,
-                        [this](core::InstrumentId underlying, std::int32_t day) -> std::optional<core::Price> {
-                            if (underlying == kSpot && day == kToday && fsp_) {
-                                return rupees(*fsp_);
-                            }
-                            return std::nullopt;
-                        });
+        broker_.emplace(
+            BrokerConfig{}, store_, expiring_lookup,
+            [this](core::InstrumentId underlying, std::int32_t day) -> std::optional<core::Price> {
+                if (underlying == kSpot && day == kToday && fsp_) {
+                    return rupees(*fsp_);
+                }
+                return std::nullopt;
+            });
         ASSERT_TRUE(broker_->load().has_value());
     }
     void market(Millis at) {
@@ -511,11 +544,17 @@ protected:
 TEST_F(CloseOfDayTest, MisIsSquaredOffOnceEvenAcrossARestart) {
     const Millis t0 = at_ist(10, 0);
     market(t0);
-    (void)send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Mis), t0);
-    (void)send(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)send(
+        request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Mis),
+        t0);
+    (void)send(
+        request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)tick(t0 + 200);
     // A resting MIS order (on the call: a third futures lot would pass the notional cap).
-    const auto limit = send(request(1, 3, kCall, oms::Side::Buy, oms::OrderType::Limit, 75, 115, 0, oms::Product::Mis), t0 + 300);
+    const auto limit = send(
+        request(1, 3, kCall, oms::Side::Buy, oms::OrderType::Limit, 75, 115, 0, oms::Product::Mis),
+        t0 + 300);
     ASSERT_EQ(limit.at(0).event, ReportEvent::Accepted) << text_of(limit.at(0).reason);
     ASSERT_EQ(held(kFut, oms::Product::Mis), 75);
 
@@ -533,7 +572,7 @@ TEST_F(CloseOfDayTest, MisIsSquaredOffOnceEvenAcrossARestart) {
     restart();  // before the closing order fills
     market(square_off + 30'000);
     EXPECT_EQ(broker_->live_orders(), 1u);  // the closing order, restored
-    (void)tick(square_off + 30'000);        // square-off runs again: no second order, this one fills
+    (void)tick(square_off + 30'000);  // square-off runs again: no second order, this one fills
     EXPECT_EQ(held(kFut, oms::Product::Mis), 0);
     EXPECT_EQ(held(kFut, oms::Product::Nrml), 75);  // NRML carries over
     // One closing order in all: id 4, from the system, complete.
@@ -545,7 +584,9 @@ TEST_F(CloseOfDayTest, MisIsSquaredOffOnceEvenAcrossARestart) {
 TEST_F(CloseOfDayTest, DayOrdersExpireAtTheClose) {
     const Millis t0 = at_ist(10, 0);
     market(t0);
-    (void)send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400, 0, oms::Product::Nrml), t0);
+    (void)send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Limit, 75, 22'400, 0,
+                       oms::Product::Nrml),
+               t0);
     (void)tick(t0 + 200);
     EXPECT_TRUE(tick(at_ist(15, 29, 59)).empty());
     const auto reports = tick(at_ist(15, 30));
@@ -558,7 +599,9 @@ TEST_F(CloseOfDayTest, DayOrdersExpireAtTheClose) {
 TEST_F(CloseOfDayTest, ExpiringOptionSettlesAtTheIndexClose) {
     const Millis t0 = at_ist(10, 0);
     market(t0);
-    (void)send(request(1, 1, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)send(
+        request(1, 1, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)tick(t0 + 200);  // bought at 120.05
     const oms::Paise before = broker_->account_of_user(1)->cash();
 
@@ -581,10 +624,12 @@ TEST_F(CloseOfDayTest, ExpiringOptionSettlesAtTheIndexClose) {
 TEST_F(CloseOfDayTest, SettlementWaitsForTheClosingPrice) {
     const Millis t0 = at_ist(10, 0);
     market(t0);
-    (void)send(request(1, 1, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)send(
+        request(1, 1, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)tick(t0 + 200);
     EXPECT_TRUE(tick(at_ist(15, 31, 10)).empty());  // no price yet
-    fsp_ = 22'400;                                   // out of the money: worthless
+    fsp_ = 22'400;                                  // out of the money: worthless
     EXPECT_TRUE(tick(at_ist(15, 31, 50)).empty());  // checked once a minute
     const auto reports = tick(at_ist(15, 32, 15));
     ASSERT_EQ(reports.size(), 1u);
@@ -594,9 +639,13 @@ TEST_F(CloseOfDayTest, SettlementWaitsForTheClosingPrice) {
 TEST_F(CloseOfDayTest, DailySummary) {
     const Millis t0 = at_ist(10, 0);
     market(t0);
-    (void)send(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)send(
+        request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)tick(t0 + 200);
-    (void)send(request(1, 2, kFut, oms::Side::Sell, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0 + 300);
+    (void)send(
+        request(1, 2, kFut, oms::Side::Sell, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0 + 300);
     (void)tick(t0 + 500);
     const auto summaries = broker_->daily_summaries(at_ist(15, 35));
     ASSERT_EQ(summaries.size(), 1u);
@@ -605,7 +654,8 @@ TEST_F(CloseOfDayTest, DailySummary) {
     EXPECT_EQ(summaries[0].realised, -750);  // bought at the ask, sold at the bid: −₹0.10 × 75
     EXPECT_GT(summaries[0].charges, 0);
     EXPECT_EQ(summaries[0].open_positions, 0);
-    EXPECT_TRUE(broker_->daily_summaries(at_ist(15, 35) + 86'400'000).empty());  // nothing the next day
+    EXPECT_TRUE(
+        broker_->daily_summaries(at_ist(15, 35) + 86'400'000).empty());  // nothing the next day
 }
 
 }  // namespace
@@ -625,20 +675,30 @@ std::optional<rms::InstrumentInfo> mcx_lookup(core::InstrumentId id) {
     }
     const bool call = id == kCrudeCall;
     return rms::InstrumentInfo{
-        .contract = {.id = id, .segment = call ? oms::Segment::Option : oms::Segment::Future,
-                     .exchange = oms::Exchange::Mcx, .lot_size = 100, .strike = call ? rupees(9'500) : core::Price{},
+        .contract = {.id = id,
+                     .segment = call ? oms::Segment::Option : oms::Segment::Future,
+                     .exchange = oms::Exchange::Mcx,
+                     .lot_size = 100,
+                     .strike = call ? rupees(9'500) : core::Price{},
                      .call = call},
-        .tick = rupees(call ? 0.1 : 1), .listed = true, .expiry_days = call ? kToday : kToday + 28,
-        .underlying = call ? kCrude : core::InstrumentId{}, .futures_margin = 320'000'000,
-        .market_open = 9 * 3600, .market_close = 23 * 3600 + 30 * 60};
+        .tick = rupees(call ? 0.1 : 1),
+        .listed = true,
+        .expiry_days = call ? kToday : kToday + 28,
+        .underlying = call ? kCrude : core::InstrumentId{},
+        .futures_margin = 320'000'000,
+        .market_open = 9 * 3600,
+        .market_close = 23 * 3600 + 30 * 60};
 }
 
 TEST(BrokerMcx, BarrelsFillAgainstLotsAndTheDayClosesAtMcxsClose) {
     PaperStore store = PaperStore::open_in_memory().value();
     std::optional<double> fsp;
-    Broker broker({}, store, mcx_lookup, [&](core::InstrumentId underlying, std::int32_t day) -> std::optional<core::Price> {
-        return underlying == kCrude && day == kToday && fsp ? std::optional(rupees(*fsp)) : std::nullopt;
-    });
+    Broker broker(
+        {}, store, mcx_lookup,
+        [&](core::InstrumentId underlying, std::int32_t day) -> std::optional<core::Price> {
+            return underlying == kCrude && day == kToday && fsp ? std::optional(rupees(*fsp))
+                                                                : std::nullopt;
+        });
     ASSERT_TRUE(broker.load().has_value());
     const auto market = [&](Millis at) {
         broker.on_snapshot(snapshot(kCrude, 9'600, at));
@@ -652,17 +712,24 @@ TEST(BrokerMcx, BarrelsFillAgainstLotsAndTheDayClosesAtMcxsClose) {
     };
     const Millis t0 = at_ist(21, 0);  // NSE has closed; MCX trades
     market(t0);
-    auto r = broker.on_request(request(1, 1, kCrude, oms::Side::Buy, oms::OrderType::Market, 200, 0, 0,
-                                       oms::Product::Mis, t0), t0).value();
+    auto r = broker
+                 .on_request(request(1, 1, kCrude, oms::Side::Buy, oms::OrderType::Market, 200, 0,
+                                     0, oms::Product::Mis, t0),
+                             t0)
+                 .value();
     ASSERT_EQ(r.at(0).event, ReportEvent::Accepted) << text_of(r.at(0).reason);
-    r = broker.on_request(request(1, 2, kCrudeCall, oms::Side::Buy, oms::OrderType::Market, 100, 0, 0,
-                                  oms::Product::Nrml, t0), t0).value();
+    r = broker
+            .on_request(request(1, 2, kCrudeCall, oms::Side::Buy, oms::OrderType::Market, 100, 0, 0,
+                                oms::Product::Nrml, t0),
+                        t0)
+            .value();
     ASSERT_EQ(r.at(0).event, ReportEvent::Accepted) << text_of(r.at(0).reason);
     (void)broker.on_tick(t0 + 200);
     ASSERT_EQ(held(kCrude, oms::Product::Mis), 200);
     // 1 lot shown at 9,601 is 100 barrels: 100 there and 100 at 9,602 (as lots, 1 + 5 barrels
     // would leave 194 to fill ticks worse).
-    EXPECT_EQ(broker.account_of_user(1)->position(kCrude, oms::Product::Mis)->average_price(), rupees(9'601.5));
+    EXPECT_EQ(broker.account_of_user(1)->position(kCrude, oms::Product::Mis)->average_price(),
+              rupees(9'601.5));
 
     // MIS: not at NSE's 15:25 (already past), but 5 minutes before MCX's close.
     EXPECT_TRUE(broker.on_tick(at_ist(23, 24, 59)).value().empty());
@@ -711,8 +778,12 @@ TEST(BrokerMtm, ACarriedFutureIsMarkedToTheCloseOnce) {
     broker->on_depth(depth(kFut, {{22'499.95, 300}}, {{22'500.05, 300}}, t0));
     broker->on_snapshot(snapshot(kCall, 120, t0));
     broker->on_depth(depth(kCall, {{119.95, 600}}, {{120.05, 600}}, t0));
-    (void)broker->on_request(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
-    (void)broker->on_request(request(1, 2, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)broker->on_request(
+        request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
+    (void)broker->on_request(
+        request(1, 2, kCall, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)broker->on_tick(t0 + 200);  // the future at 22,500.05, the call at 120.05
     const oms::Paise cash = broker->account_of_user(1)->cash();
 
@@ -722,13 +793,16 @@ TEST(BrokerMtm, ACarriedFutureIsMarkedToTheCloseOnce) {
     (void)broker->on_tick(at_ist(15, 41, 30));
     EXPECT_EQ(broker->account_of_user(1)->cash(), cash + 450'000);  // ₹60 × 75
     EXPECT_EQ(broker->account_of_user(1)->ledger().back().kind, oms::LedgerKind::Mtm);
-    EXPECT_EQ(broker->account_of_user(1)->position(kFut, oms::Product::Nrml)->average_price(), rupees(22'560.05));
-    EXPECT_EQ(broker->account_of_user(1)->position(kCall, oms::Product::Nrml)->average_price(), rupees(120.05));
+    EXPECT_EQ(broker->account_of_user(1)->position(kFut, oms::Product::Nrml)->average_price(),
+              rupees(22'560.05));
+    EXPECT_EQ(broker->account_of_user(1)->position(kCall, oms::Product::Nrml)->average_price(),
+              rupees(120.05));
 
     start();  // a restart the same evening marks nothing twice
     (void)broker->on_tick(at_ist(16, 0));
     EXPECT_EQ(broker->account_of_user(1)->cash(), cash + 450'000);
-    EXPECT_EQ(broker->account_of_user(1)->position(kFut, oms::Product::Nrml)->average_price(), rupees(22'560.05));
+    EXPECT_EQ(broker->account_of_user(1)->position(kFut, oms::Product::Nrml)->average_price(),
+              rupees(22'560.05));
 }
 
 }  // namespace
@@ -742,9 +816,11 @@ namespace {
 TEST(BrokerCatchUp, AMissedCloseOfDayIsCaughtUpOnTheNextStart) {
     PaperStore store = PaperStore::open_in_memory().value();
     const Millis day1_close = at_ist(15, 40);  // the future's last minute ended
-    const auto previous = [&](core::InstrumentId id, Millis before) -> std::optional<PreviousClose> {
-        return id == kFut && before > day1_close ? std::optional(PreviousClose{.close = rupees(22'540), .ended = day1_close})
-                                                 : std::nullopt;
+    const auto previous = [&](core::InstrumentId id,
+                              Millis before) -> std::optional<PreviousClose> {
+        return id == kFut && before > day1_close
+                   ? std::optional(PreviousClose{.close = rupees(22'540), .ended = day1_close})
+                   : std::nullopt;
     };
     std::optional<Broker> broker;
     const auto start = [&] {
@@ -755,8 +831,12 @@ TEST(BrokerCatchUp, AMissedCloseOfDayIsCaughtUpOnTheNextStart) {
     const Millis t0 = at_ist(10, 0);
     broker->on_snapshot(snapshot(kFut, 22'500, t0));
     broker->on_depth(depth(kFut, {{22'499.95, 300}}, {{22'500.05, 300}}, t0));
-    (void)broker->on_request(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Mis), t0);
-    (void)broker->on_request(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml), t0);
+    (void)broker->on_request(
+        request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Mis),
+        t0);
+    (void)broker->on_request(
+        request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        t0);
     (void)broker->on_tick(t0 + 200);  // both at 22,500.05; then the broker is down until tomorrow
     const oms::Paise cash = broker->account_of_user(1)->cash();
 
@@ -792,7 +872,8 @@ protected:
         start();
         broker_->on_snapshot(snapshot(kFut, 22'500, kBought));
         broker_->on_depth(depth(kFut, {{22'499.95, 300}}, {{22'500.05, 300}}, kBought));
-        (void)broker_->on_request(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        (void)broker_->on_request(request(1, 1, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0,
+                                          0, oms::Product::Nrml),
                                   kBought);
         (void)broker_->on_tick(kBought + 200);  // at 22,500.05
         cash_ = broker_->account_of_user(1)->cash();
@@ -834,10 +915,12 @@ TEST_F(BrokerKiteClose, AClosingFillKeepsItsPnlFromTheEntryPrice) {
     broker_->on_snapshot(with_close(kFut, 22'600, 22'540, morning));
     (void)broker_->on_tick(morning + 1'000);  // marked to 22,540
     broker_->on_depth(depth(kFut, {{22'599.95, 300}}, {{22'600.05, 300}}, morning + 1'000));
-    (void)broker_->on_request(request(1, 2, kFut, oms::Side::Sell, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
-                              morning + 1'000);
+    (void)broker_->on_request(
+        request(1, 2, kFut, oms::Side::Sell, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        morning + 1'000);
     (void)broker_->on_tick(morning + 1'200);  // sold at 22,599.95
-    const auto trades = store_.trades(broker_->account_of_user(1)->id(), morning, morning + kDay).value();
+    const auto trades =
+        store_.trades(broker_->account_of_user(1)->id(), morning, morning + kDay).value();
     ASSERT_EQ(trades.size(), 1u);
     EXPECT_EQ(trades[0].realised, 449'625);        // (22,599.95 − 22,540) × 75
     EXPECT_EQ(trades[0].entry_realised, 749'250);  // (22,599.95 − 22,500.05) × 75
@@ -861,8 +944,9 @@ TEST_F(BrokerKiteClose, AFillTodayLeavesTheAverageForTonightsMark) {
     const Millis morning = at_ist(9, 20) + kDay;
     broker_->on_snapshot(snapshot(kFut, 22'600, morning));
     broker_->on_depth(depth(kFut, {{22'599.95, 300}}, {{22'600.05, 300}}, morning));
-    (void)broker_->on_request(request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
-                              morning);
+    (void)broker_->on_request(
+        request(1, 2, kFut, oms::Side::Buy, oms::OrderType::Market, 75, 0, 0, oms::Product::Nrml),
+        morning);
     (void)broker_->on_tick(morning + 200);  // added at 22,600.05
     const oms::Paise cash = broker_->account_of_user(1)->cash();
     broker_->on_snapshot(with_close(kFut, 22'600, 22'540, morning + 1'000));

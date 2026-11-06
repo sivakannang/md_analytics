@@ -11,8 +11,8 @@
 
 namespace mda::signals::test {
 
-inline constexpr std::int64_t kMidnightIst = 1'792'607'400;  // 2026-10-22 00:00 IST
-inline constexpr std::int32_t kToday = 20'748;               // ist_day(kMidnightIst)
+inline constexpr std::int64_t kMidnightIst = 1'792'607'400;   // 2026-10-22 00:00 IST
+inline constexpr std::int32_t kToday = 20'748;                // ist_day(kMidnightIst)
 inline constexpr std::int64_t kOpen = kMidnightIst + 33'300;  // 09:15 IST
 
 inline constexpr core::InstrumentId kSpot{1};

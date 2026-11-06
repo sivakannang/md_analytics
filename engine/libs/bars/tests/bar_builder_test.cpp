@@ -201,7 +201,8 @@ TEST(BarBuilderSessions, ASessionPerInstrumentCoversMcxEvenings) {
     std::vector<Bar> closed;
     BuilderOptions options;
     options.session = [](core::InstrumentId id, std::int64_t) {
-        return id.value() == 9 ? std::pair{9 * 60, 23 * 60 + 30} : std::pair{9 * 60 + 15, 15 * 60 + 30};
+        return id.value() == 9 ? std::pair{9 * 60, 23 * 60 + 30}
+                               : std::pair{9 * 60 + 15, 15 * 60 + 30};
     };
     BarBuilder builder(std::move(options), [&](const Bar& bar) { closed.push_back(bar); });
     for (const std::uint32_t id : {7u, 9u}) {

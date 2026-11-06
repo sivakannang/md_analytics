@@ -54,7 +54,8 @@ std::int64_t bucket_start(std::int64_t unix_seconds, Interval interval, std::int
     return session + floored * length;
 }
 
-std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval, std::int64_t session_open) {
+std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval,
+                           std::int64_t session_open) {
     std::vector<Bar> out;
     if (interval == Interval{.minutes = 1}) {
         out.assign(minutes.begin(), minutes.end());

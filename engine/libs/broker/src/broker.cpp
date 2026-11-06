@@ -1,9 +1,8 @@
-#include <mda/broker/broker.hpp>
-
 #include <algorithm>
 #include <cstdlib>
 #include <format>
 
+#include <mda/broker/broker.hpp>
 #include <mda/instruments/session.hpp>
 
 namespace mda::broker {
@@ -26,25 +25,32 @@ Millis millis(core::Timestamp t) {
 }
 
 std::string describe(const OrderRequest& r) {
-    return std::format("user={} client={} action={} order={} instrument={} side={} type={} product={} qty={} "
-                       "price={} trigger={} source={}",
-                       r.user, r.client_order_id, static_cast<int>(r.action), r.order_id,
-                       r.header.instrument_id.value(), oms::name(r.side), oms::name(r.type), oms::name(r.product),
-                       r.quantity, r.price.raw(), r.trigger.raw(), static_cast<int>(r.source));
+    return std::format(
+        "user={} client={} action={} order={} instrument={} side={} type={} product={} qty={} "
+        "price={} trigger={} source={}",
+        r.user, r.client_order_id, static_cast<int>(r.action), r.order_id,
+        r.header.instrument_id.value(), oms::name(r.side), oms::name(r.type), oms::name(r.product),
+        r.quantity, r.price.raw(), r.trigger.raw(), static_cast<int>(r.source));
 }
 
 std::string describe(const ExecutionReport& r) {
-    return std::format("user={} order={} event={} status={} filled={}/{} last={}@{} charges={} reason={}", r.user,
-                       r.order_id, static_cast<int>(r.event), oms::name(r.status), r.filled, r.quantity,
-                       r.last_quantity, r.last_price.raw(), r.charges, text_of(r.reason));
+    return std::format(
+        "user={} order={} event={} status={} filled={}/{} last={}@{} charges={} reason={}", r.user,
+        r.order_id, static_cast<int>(r.event), oms::name(r.status), r.filled, r.quantity,
+        r.last_quantity, r.last_price.raw(), r.charges, text_of(r.reason));
 }
 
 }  // namespace
 
 Broker::Broker(BrokerConfig config, PaperStore& store, InstrumentLookup lookup, FspLookup fsp,
                PreviousCloseLookup previous_close)
-    : config_(std::move(config)), store_(&store), lookup_(std::move(lookup)), venue_(config_.venue),
-      risk_(config_.risk), fsp_(std::move(fsp)), previous_close_(std::move(previous_close)) {}
+    : config_(std::move(config))
+    , store_(&store)
+    , lookup_(std::move(lookup))
+    , venue_(config_.venue)
+    , risk_(config_.risk)
+    , fsp_(std::move(fsp))
+    , previous_close_(std::move(previous_close)) {}
 
 std::expected<void, DbError> Broker::load(Millis now) {
     // A lost accounts row would make the next order open a second account over the old
@@ -70,13 +76,15 @@ std::expected<void, DbError> Broker::load(Millis now) {
             return std::unexpected(!ledger ? ledger.error() : positions.error());
         }
         const std::size_t saved = ledger->size();
-        accounts_.emplace(row.id, AccountState{.row = row,
-                                               .account = oms::Account::restore(row.id, std::move(*ledger),
-                                                                                std::move(*positions)),
-                                               .saved_ledger = saved});
+        accounts_.emplace(row.id,
+                          AccountState{.row = row,
+                                       .account = oms::Account::restore(row.id, std::move(*ledger),
+                                                                        std::move(*positions)),
+                                       .saved_ledger = saved});
         by_user_[row.user_id] = row.id;
         if (now > 0) {
-            const auto today = store_->orders(row.id, ist_day_start(now), ist_day_start(now) + kDayMs);
+            const auto today =
+                store_->orders(row.id, ist_day_start(now), ist_day_start(now) + kDayMs);
             if (!today) {
                 return std::unexpected(today.error());
             }
@@ -97,7 +105,9 @@ std::expected<void, DbError> Broker::load(Millis now) {
     for (const auto& row : *orders) {
         const std::int64_t id = row.order.id;
         venue_.restore(id, row.venue);
-        live_.emplace(id, LiveOrder{.order = oms::Order::restore(row.order), .user = row.user_id, .margin = row.margin});
+        live_.emplace(id, LiveOrder{.order = oms::Order::restore(row.order),
+                                    .user = row.user_id,
+                                    .margin = row.margin});
     }
     const auto max_id = store_->max_order_id();
     if (!max_id) {
@@ -117,8 +127,10 @@ void Broker::on_snapshot(const messages::MarketSnapshot& s) {
         book.ltp_at = at;
     }
     book.updated_at = std::max(book.updated_at, at);
-    if ((s.fields & messages::kFieldOhlc) != 0 && (s.fields & messages::kFieldExchangeTime) != 0 && s.close.raw() > 0) {
-        kite_close_[s.header.instrument_id.value()] = {.close = s.close, .exchange_at = millis(s.exchange_ts)};
+    if ((s.fields & messages::kFieldOhlc) != 0 && (s.fields & messages::kFieldExchangeTime) != 0 &&
+        s.close.raw() > 0) {
+        kite_close_[s.header.instrument_id.value()] = {.close = s.close,
+                                                       .exchange_at = millis(s.exchange_ts)};
     }
 }
 
@@ -190,8 +202,8 @@ Broker::AccountState& Broker::ensure_account(std::int64_t user, Millis now, Chan
     return accounts_.emplace(id, std::move(state)).first->second;
 }
 
-rms::AccountView Broker::view_of(const AccountState& state, core::InstrumentId instrument, oms::Side side,
-                                 std::int64_t except_order, Millis now) const {
+rms::AccountView Broker::view_of(const AccountState& state, core::InstrumentId instrument,
+                                 oms::Side side, std::int64_t except_order, Millis now) const {
     const oms::Account& account = state.account;
     rms::AccountView view{.account = &account, .kill_switch = state.row.kill_switch};
     for (const auto& [key, position] : account.positions()) {
@@ -202,8 +214,9 @@ rms::AccountView Broker::view_of(const AccountState& state, core::InstrumentId i
         const auto quote = quote_of(key.instrument);
         const core::Price mark = quote.ltp.raw() > 0 ? quote.ltp : position.average_price();
         if (info) {
-            view.blocked += risk_.margin(*info, position.quantity() > 0 ? oms::Side::Buy : oms::Side::Sell,
-                                         std::abs(position.quantity()), position.average_price());
+            view.blocked +=
+                risk_.margin(*info, position.quantity() > 0 ? oms::Side::Buy : oms::Side::Sell,
+                             std::abs(position.quantity()), position.average_price());
         }
         if (quote.ltp.raw() > 0) {
             view.unrealised += position.unrealised(quote.ltp);
@@ -213,7 +226,8 @@ rms::AccountView Broker::view_of(const AccountState& state, core::InstrumentId i
         // The auto trader's share: its net quantity, at most the position (a square-off or
         // the user may have closed some of it).
         if (const auto found = auto_net_.find({account.id(), key});
-            auto_day_ == ist_day(now) && found != auto_net_.end() && (found->second > 0) == (position.quantity() > 0)) {
+            auto_day_ == ist_day(now) && found != auto_net_.end() &&
+            (found->second > 0) == (position.quantity() > 0)) {
             const std::int64_t held = std::abs(position.quantity());
             const std::int64_t share = std::min(std::abs(found->second), held);
             view.auto_notional += notional * share / held;
@@ -227,7 +241,8 @@ rms::AccountView Broker::view_of(const AccountState& state, core::InstrumentId i
             continue;
         }
         const auto& spec = live.order.spec();
-        view.blocked += spec.quantity > 0 ? live.margin * live.order.remaining() / spec.quantity : 0;
+        view.blocked +=
+            spec.quantity > 0 ? live.margin * live.order.remaining() / spec.quantity : 0;
         if (spec.instrument == instrument && spec.side == side) {
             view.open_order_quantity += live.order.remaining();
         }
@@ -264,7 +279,8 @@ const oms::Order* Broker::live_order(std::int64_t order_id) const {
 
 // -------------------------------------------------------------------- reports
 
-ExecutionReport Broker::report(const oms::Order& order, std::int64_t user, ReportEvent event, Millis now) const {
+ExecutionReport Broker::report(const oms::Order& order, std::int64_t user, ReportEvent event,
+                               Millis now) const {
     const auto& spec = order.spec();
     ExecutionReport r{};
     r.header = messages::make_header<ExecutionReport>(spec.instrument, 0);
@@ -299,7 +315,8 @@ void Broker::finish(std::int64_t order_id, Changes& changes) {
     if (found == live_.end() || !oms::is_final(found->second.order.status())) {
         return;
     }
-    changes.final_orders.push_back(row_of(found->second.order, found->second.user, found->second.margin));
+    changes.final_orders.push_back(
+        row_of(found->second.order, found->second.user, found->second.margin));
     changes.orders.erase(order_id);
     venue_.forget(order_id);
     live_.erase(found);
@@ -343,216 +360,233 @@ std::expected<Reports, DbError> Broker::on_request(const OrderRequest& request, 
     const std::int64_t account_id = state.row.id;
 
     switch (request.action) {
-    case Action::New: {
-        // A repeat of a known client order id gets that order's state, nothing else.
-        std::optional<OrderRow> known;
-        for (const auto& [id, live] : live_) {
-            if (live.order.spec().account == account_id &&
-                live.order.spec().client_order_id == request.client_order_id) {
-                known = row_of(live.order, live.user, live.margin);
+        case Action::New: {
+            // A repeat of a known client order id gets that order's state, nothing else.
+            std::optional<OrderRow> known;
+            for (const auto& [id, live] : live_) {
+                if (live.order.spec().account == account_id &&
+                    live.order.spec().client_order_id == request.client_order_id) {
+                    known = row_of(live.order, live.user, live.margin);
+                }
             }
-        }
-        if (!known) {
-            auto stored = store_->order_by_client(account_id, request.client_order_id);
-            if (!stored) {
-                return std::unexpected(stored.error());
+            if (!known) {
+                auto stored = store_->order_by_client(account_id, request.client_order_id);
+                if (!stored) {
+                    return std::unexpected(stored.error());
+                }
+                known = std::move(*stored);
             }
-            known = std::move(*stored);
-        }
-        if (known) {
-            reports.push_back(report(oms::Order::restore(known->order), request.user, ReportEvent::Status, now));
-            break;
-        }
-        oms::OrderSpec spec{.account = account_id,
-                            .client_order_id = request.client_order_id,
-                            .source = request.source,
-                            .instrument = request.header.instrument_id,
-                            .side = request.side,
-                            .type = request.type,
-                            .product = request.product,
-                            .quantity = request.quantity,
-                            .price = request.price,
-                            .trigger = request.trigger,
-                            .tag = std::string(text_of(request.tag))};
-        const auto info = lookup_(spec.instrument);
-        // One order (a leg) through risk: accepted, or rejected with `refuse` (when not
-        // empty) or risk's reason; reported either way.
-        const auto place = [&](oms::OrderSpec leg, const std::string& refuse, rms::RejectCode refuse_code) {
-            const std::int64_t id = next_order_id_++;
-            std::expected<rms::Approval, rms::Rejection> approval =
-                std::unexpected(rms::Rejection{.code = refuse_code, .message = refuse});
-            if (info && refuse.empty()) {
-                approval = risk_.check(leg, *info, quote_of(leg.instrument),
-                                       view_of(state, leg.instrument, leg.side, 0, now), now);
-            }
-            if (!approval) {
-                const auto order = oms::Order::rejected(id, std::move(leg), approval.error().message, now);
-                changes.final_orders.push_back(row_of(order, request.user, 0));
-                auto r = report(order, request.user, ReportEvent::Rejected, now);
-                r.reject_code = static_cast<std::uint8_t>(approval.error().code);
-                reports.push_back(r);
-                return;
-            }
-            auto order = oms::Order::accepted(id, std::move(leg), now);
-            venue_.accepted(order, now);
-            reports.push_back(report(order, request.user, ReportEvent::Accepted, now));
-            live_.emplace(id, LiveOrder{.order = std::move(order), .user = request.user, .margin = approval->margin});
-            changes.orders.insert(id);
-        };
-        if (!info) {
-            place(std::move(spec), "unknown instrument", rms::RejectCode::NotTradable);
-            break;
-        }
-        // A person's order above the freeze quantity is sliced as Kite does: legs of at most
-        // the freeze quantity (whole lots), up to kMaxLegs, placed together. Leg k > 0 gets
-        // the client order id + k << 52 (the gateway's ids stay below 2^52).
-        const std::int64_t lot = std::max<std::int64_t>(1, info->contract.lot_size);
-        const std::int64_t freeze = info->freeze_quantity / lot * lot;
-        if (request.source == oms::Source::Ui && freeze > 0 && spec.quantity > freeze && spec.quantity % lot == 0) {
-            const std::int64_t legs = (spec.quantity + freeze - 1) / freeze;
-            if (legs > kMaxLegs) {
-                place(std::move(spec),
-                      std::format("quantity above {} legs of the freeze limit ({} × {})", kMaxLegs, kMaxLegs, freeze),
-                      rms::RejectCode::FreezeQuantity);
+            if (known) {
+                reports.push_back(report(oms::Order::restore(known->order), request.user,
+                                         ReportEvent::Status, now));
                 break;
             }
-            for (std::int64_t k = 0; k < legs; ++k) {
-                oms::OrderSpec leg = spec;
-                leg.quantity = std::min(freeze, spec.quantity - k * freeze);
-                leg.client_order_id = spec.client_order_id + (static_cast<std::uint64_t>(k) << 52);
-                if (leg.tag.empty()) {
-                    leg.tag = std::format("slice {}/{}", k + 1, legs);
+            oms::OrderSpec spec{.account = account_id,
+                                .client_order_id = request.client_order_id,
+                                .source = request.source,
+                                .instrument = request.header.instrument_id,
+                                .side = request.side,
+                                .type = request.type,
+                                .product = request.product,
+                                .quantity = request.quantity,
+                                .price = request.price,
+                                .trigger = request.trigger,
+                                .tag = std::string(text_of(request.tag))};
+            const auto info = lookup_(spec.instrument);
+            // One order (a leg) through risk: accepted, or rejected with `refuse` (when not
+            // empty) or risk's reason; reported either way.
+            const auto place = [&](oms::OrderSpec leg, const std::string& refuse,
+                                   rms::RejectCode refuse_code) {
+                const std::int64_t id = next_order_id_++;
+                std::expected<rms::Approval, rms::Rejection> approval =
+                    std::unexpected(rms::Rejection{.code = refuse_code, .message = refuse});
+                if (info && refuse.empty()) {
+                    approval = risk_.check(leg, *info, quote_of(leg.instrument),
+                                           view_of(state, leg.instrument, leg.side, 0, now), now);
                 }
-                place(std::move(leg), {}, rms::RejectCode::NotTradable);
+                if (!approval) {
+                    const auto order =
+                        oms::Order::rejected(id, std::move(leg), approval.error().message, now);
+                    changes.final_orders.push_back(row_of(order, request.user, 0));
+                    auto r = report(order, request.user, ReportEvent::Rejected, now);
+                    r.reject_code = static_cast<std::uint8_t>(approval.error().code);
+                    reports.push_back(r);
+                    return;
+                }
+                auto order = oms::Order::accepted(id, std::move(leg), now);
+                venue_.accepted(order, now);
+                reports.push_back(report(order, request.user, ReportEvent::Accepted, now));
+                live_.emplace(id, LiveOrder{.order = std::move(order),
+                                            .user = request.user,
+                                            .margin = approval->margin});
+                changes.orders.insert(id);
+            };
+            if (!info) {
+                place(std::move(spec), "unknown instrument", rms::RejectCode::NotTradable);
+                break;
             }
+            // A person's order above the freeze quantity is sliced as Kite does: legs of at most
+            // the freeze quantity (whole lots), up to kMaxLegs, placed together. Leg k > 0 gets
+            // the client order id + k << 52 (the gateway's ids stay below 2^52).
+            const std::int64_t lot = std::max<std::int64_t>(1, info->contract.lot_size);
+            const std::int64_t freeze = info->freeze_quantity / lot * lot;
+            if (request.source == oms::Source::Ui && freeze > 0 && spec.quantity > freeze &&
+                spec.quantity % lot == 0) {
+                const std::int64_t legs = (spec.quantity + freeze - 1) / freeze;
+                if (legs > kMaxLegs) {
+                    place(std::move(spec),
+                          std::format("quantity above {} legs of the freeze limit ({} × {})",
+                                      kMaxLegs, kMaxLegs, freeze),
+                          rms::RejectCode::FreezeQuantity);
+                    break;
+                }
+                for (std::int64_t k = 0; k < legs; ++k) {
+                    oms::OrderSpec leg = spec;
+                    leg.quantity = std::min(freeze, spec.quantity - k * freeze);
+                    leg.client_order_id =
+                        spec.client_order_id + (static_cast<std::uint64_t>(k) << 52);
+                    if (leg.tag.empty()) {
+                        leg.tag = std::format("slice {}/{}", k + 1, legs);
+                    }
+                    place(std::move(leg), {}, rms::RejectCode::NotTradable);
+                }
+                break;
+            }
+            place(std::move(spec), {}, rms::RejectCode::NotTradable);
             break;
         }
-        place(std::move(spec), {}, rms::RejectCode::NotTradable);
-        break;
-    }
-    case Action::Modify:
-    case Action::Cancel: {
-        const auto found = live_.find(request.order_id);
-        if (found == live_.end() || found->second.order.spec().account != account_id) {
-            reject_request(rms::RejectCode::NotTradable, "no such open order");
-            break;
-        }
-        LiveOrder& live = found->second;
-        if (request.action == Action::Cancel) {
-            (void)live.order.cancel(request.source == oms::Source::Auto ? "cancelled by the auto trader" : "cancelled by the user", now);
-            reports.push_back(report(live.order, live.user, ReportEvent::Cancelled, now));
+        case Action::Modify:
+        case Action::Cancel: {
+            const auto found = live_.find(request.order_id);
+            if (found == live_.end() || found->second.order.spec().account != account_id) {
+                reject_request(rms::RejectCode::NotTradable, "no such open order");
+                break;
+            }
+            LiveOrder& live = found->second;
+            if (request.action == Action::Cancel) {
+                (void)live.order.cancel(request.source == oms::Source::Auto
+                                            ? "cancelled by the auto trader"
+                                            : "cancelled by the user",
+                                        now);
+                reports.push_back(report(live.order, live.user, ReportEvent::Cancelled, now));
+                changes.orders.insert(live.order.id());
+                finish(live.order.id(), changes);
+                break;
+            }
+            oms::OrderSpec spec = live.order.spec();
+            spec.quantity = request.quantity;
+            spec.price = request.price;
+            spec.trigger = request.trigger;
+            const auto info = lookup_(spec.instrument);
+            std::expected<rms::Approval, rms::Rejection> approval = std::unexpected(rms::Rejection{
+                .code = rms::RejectCode::NotTradable, .message = "unknown instrument"});
+            if (info) {
+                approval = risk_.check(
+                    spec, *info, quote_of(spec.instrument),
+                    view_of(state, spec.instrument, spec.side, live.order.id(), now), now);
+            }
+            if (!approval || !live.order.modify(spec.quantity, spec.price, spec.trigger, now)) {
+                auto r = report(live.order, live.user, ReportEvent::Rejected, now);
+                set_text(r.reason, "modify rejected: " + (approval ? std::string("invalid quantity")
+                                                                   : approval.error().message));
+                r.reject_code = static_cast<std::uint8_t>(approval ? rms::RejectCode::BadQuantity
+                                                                   : approval.error().code);
+                reports.push_back(r);
+                break;
+            }
+            live.margin = approval->margin;
+            venue_.accepted(live.order, now);  // a modified order looks at the book afresh
+            reports.push_back(report(live.order, live.user, ReportEvent::Modified, now));
             changes.orders.insert(live.order.id());
             finish(live.order.id(), changes);
             break;
         }
-        oms::OrderSpec spec = live.order.spec();
-        spec.quantity = request.quantity;
-        spec.price = request.price;
-        spec.trigger = request.trigger;
-        const auto info = lookup_(spec.instrument);
-        std::expected<rms::Approval, rms::Rejection> approval =
-            std::unexpected(rms::Rejection{.code = rms::RejectCode::NotTradable, .message = "unknown instrument"});
-        if (info) {
-            approval = risk_.check(spec, *info, quote_of(spec.instrument),
-                                   view_of(state, spec.instrument, spec.side, live.order.id(), now), now);
-        }
-        if (!approval || !live.order.modify(spec.quantity, spec.price, spec.trigger, now)) {
-            auto r = report(live.order, live.user, ReportEvent::Rejected, now);
-            set_text(r.reason, "modify rejected: " + (approval ? std::string("invalid quantity") : approval.error().message));
-            r.reject_code = static_cast<std::uint8_t>(approval ? rms::RejectCode::BadQuantity : approval.error().code);
+        case Action::KillSwitchOn:
+        case Action::KillSwitchOff: {
+            const bool on = request.action == Action::KillSwitchOn;
+            state.row.kill_switch = on;
+            changes.accounts.insert(account_id);
+            if (on) {
+                std::vector<std::int64_t> cancel;
+                for (const auto& [id, live] : live_) {
+                    if (live.order.spec().account == account_id) {
+                        cancel.push_back(id);
+                    }
+                }
+                for (const auto id : cancel) {
+                    LiveOrder& live = live_.at(id);
+                    (void)live.order.cancel("kill switch", now);
+                    reports.push_back(report(live.order, live.user, ReportEvent::Cancelled, now));
+                    changes.orders.insert(id);
+                    finish(id, changes);
+                }
+            }
+            ExecutionReport r{};
+            r.header = messages::make_header<ExecutionReport>({}, 0);
+            r.at = now;
+            r.user = request.user;
+            r.client_order_id = request.client_order_id;
+            r.event = on ? ReportEvent::KillSwitchOn : ReportEvent::KillSwitchOff;
+            r.source = request.source;
             reports.push_back(r);
             break;
         }
-        live.margin = approval->margin;
-        venue_.accepted(live.order, now);  // a modified order looks at the book afresh
-        reports.push_back(report(live.order, live.user, ReportEvent::Modified, now));
-        changes.orders.insert(live.order.id());
-        finish(live.order.id(), changes);
-        break;
-    }
-    case Action::KillSwitchOn:
-    case Action::KillSwitchOff: {
-        const bool on = request.action == Action::KillSwitchOn;
-        state.row.kill_switch = on;
-        changes.accounts.insert(account_id);
-        if (on) {
-            std::vector<std::int64_t> cancel;
-            for (const auto& [id, live] : live_) {
-                if (live.order.spec().account == account_id) {
-                    cancel.push_back(id);
-                }
+        case Action::Convert: {
+            // A resend of a conversion already done gets its report again, never a second move.
+            if (const auto done = converted_.find({request.user, request.client_order_id});
+                done != converted_.end()) {
+                reports.push_back(done->second);
+                break;
             }
-            for (const auto id : cancel) {
-                LiveOrder& live = live_.at(id);
-                (void)live.order.cancel("kill switch", now);
-                reports.push_back(report(live.order, live.user, ReportEvent::Cancelled, now));
-                changes.orders.insert(id);
-                finish(id, changes);
+            const core::InstrumentId instrument = request.header.instrument_id;
+            const oms::Product to = request.product;
+            const oms::Product from =
+                to == oms::Product::Mis ? oms::Product::Nrml : oms::Product::Mis;
+            const auto info = lookup_(instrument);
+            if (!info) {
+                reject_request(rms::RejectCode::NotTradable, "unknown instrument");
+                break;
             }
-        }
-        ExecutionReport r{};
-        r.header = messages::make_header<ExecutionReport>({}, 0);
-        r.at = now;
-        r.user = request.user;
-        r.client_order_id = request.client_order_id;
-        r.event = on ? ReportEvent::KillSwitchOn : ReportEvent::KillSwitchOff;
-        r.source = request.source;
-        reports.push_back(r);
-        break;
-    }
-    case Action::Convert: {
-        // A resend of a conversion already done gets its report again, never a second move.
-        if (const auto done = converted_.find({request.user, request.client_order_id}); done != converted_.end()) {
-            reports.push_back(done->second);
+            if (const auto allowed = risk_.check_convert(*info, to, request.quantity, now);
+                !allowed) {
+                reject_request(allowed.error().code, allowed.error().message);
+                break;
+            }
+            const oms::Position* held = state.account.position(instrument, from);
+            if (held == nullptr || std::abs(held->quantity()) < request.quantity) {
+                reject_request(rms::RejectCode::BadQuantity,
+                               std::format("the {} position is {} units", oms::name(from),
+                                           held == nullptr ? 0 : std::abs(held->quantity())));
+                break;
+            }
+            const oms::Side side = held->quantity() > 0 ? oms::Side::Buy : oms::Side::Sell;
+            const core::Price average = held->average_price();
+            (void)state.account.convert(instrument, from, to, request.quantity, now);
+            changes.accounts.insert(account_id);
+            changes.positions.insert({account_id, {.instrument = instrument, .product = from}});
+            changes.positions.insert({account_id, {.instrument = instrument, .product = to}});
+            ExecutionReport r{};
+            r.header = messages::make_header<ExecutionReport>(instrument, 0);
+            r.at = now;
+            r.user = request.user;
+            r.client_order_id = request.client_order_id;
+            r.quantity = request.quantity;
+            r.last_quantity = request.quantity;
+            r.last_price = average;
+            r.average_price = average;
+            r.event = ReportEvent::Converted;
+            r.status = oms::OrderStatus::Complete;
+            r.side = side;
+            r.product = to;
+            r.source = request.source;
+            set_text(r.reason, std::format("converted {} → {}", oms::name(from), oms::name(to)));
+            if (converted_.size() >= 1'000) {
+                converted_.clear();  // only resends within seconds need it
+            }
+            converted_[{request.user, request.client_order_id}] = r;
+            reports.push_back(r);
             break;
         }
-        const core::InstrumentId instrument = request.header.instrument_id;
-        const oms::Product to = request.product;
-        const oms::Product from = to == oms::Product::Mis ? oms::Product::Nrml : oms::Product::Mis;
-        const auto info = lookup_(instrument);
-        if (!info) {
-            reject_request(rms::RejectCode::NotTradable, "unknown instrument");
-            break;
-        }
-        if (const auto allowed = risk_.check_convert(*info, to, request.quantity, now); !allowed) {
-            reject_request(allowed.error().code, allowed.error().message);
-            break;
-        }
-        const oms::Position* held = state.account.position(instrument, from);
-        if (held == nullptr || std::abs(held->quantity()) < request.quantity) {
-            reject_request(rms::RejectCode::BadQuantity,
-                           std::format("the {} position is {} units", oms::name(from),
-                                       held == nullptr ? 0 : std::abs(held->quantity())));
-            break;
-        }
-        const oms::Side side = held->quantity() > 0 ? oms::Side::Buy : oms::Side::Sell;
-        const core::Price average = held->average_price();
-        (void)state.account.convert(instrument, from, to, request.quantity, now);
-        changes.accounts.insert(account_id);
-        changes.positions.insert({account_id, {.instrument = instrument, .product = from}});
-        changes.positions.insert({account_id, {.instrument = instrument, .product = to}});
-        ExecutionReport r{};
-        r.header = messages::make_header<ExecutionReport>(instrument, 0);
-        r.at = now;
-        r.user = request.user;
-        r.client_order_id = request.client_order_id;
-        r.quantity = request.quantity;
-        r.last_quantity = request.quantity;
-        r.last_price = average;
-        r.average_price = average;
-        r.event = ReportEvent::Converted;
-        r.status = oms::OrderStatus::Complete;
-        r.side = side;
-        r.product = to;
-        r.source = request.source;
-        set_text(r.reason, std::format("converted {} → {}", oms::name(from), oms::name(to)));
-        if (converted_.size() >= 1'000) {
-            converted_.clear();  // only resends within seconds need it
-        }
-        converted_[{request.user, request.client_order_id}] = r;
-        reports.push_back(r);
-        break;
-    }
     }
 
     for (auto& r : reports) {
@@ -569,8 +603,9 @@ std::expected<Reports, DbError> Broker::on_request(const OrderRequest& request, 
 
 // ----------------------------------------------------------------------- fills
 
-void Broker::apply_fill(LiveOrder& live, const rms::InstrumentInfo& info, const oms::Execution& fill, Millis now,
-                        Changes& changes, Reports& reports) {
+void Broker::apply_fill(LiveOrder& live, const rms::InstrumentInfo& info,
+                        const oms::Execution& fill, Millis now, Changes& changes,
+                        Reports& reports) {
     oms::Order& order = live.order;
     const auto& spec = order.spec();
     AccountState& state = accounts_.at(spec.account);
@@ -579,10 +614,12 @@ void Broker::apply_fill(LiveOrder& live, const rms::InstrumentInfo& info, const 
             auto_net_.clear();  // MIS: yesterday's auto positions are squared off
             auto_day_ = day;
         }
-        auto_net_[{spec.account, {.instrument = spec.instrument, .product = spec.product}}] += (spec.side == oms::Side::Buy ? 1 : -1) * fill.quantity;
+        auto_net_[{spec.account, {.instrument = spec.instrument, .product = spec.product}}] +=
+            (spec.side == oms::Side::Buy ? 1 : -1) * fill.quantity;
     }
-    const auto result = state.account.apply_fill(config_.rates, info.contract, spec.product, spec.side, fill.quantity,
-                                                 fill.price, order.brokerage(), order.id(), now);
+    const auto result =
+        state.account.apply_fill(config_.rates, info.contract, spec.product, spec.side,
+                                 fill.quantity, fill.price, order.brokerage(), order.id(), now);
     (void)order.fill(fill.quantity, fill.price, now);
     order.add_charges(result.charges.brokerage, result.charges.total());
     changes.trades.push_back({.order_id = order.id(),
@@ -596,7 +633,8 @@ void Broker::apply_fill(LiveOrder& live, const rms::InstrumentInfo& info, const 
                               .realised = result.realised,
                               .at = now,
                               .entry_realised = result.entry_realised});
-    changes.positions.insert({spec.account, {.instrument = spec.instrument, .product = spec.product}});
+    changes.positions.insert(
+        {spec.account, {.instrument = spec.instrument, .product = spec.product}});
     changes.accounts.insert(spec.account);
     auto r = report(order, live.user, ReportEvent::Fill, now);
     r.last_quantity = fill.quantity;
@@ -616,7 +654,8 @@ std::expected<Reports, DbError> Broker::on_tick(Millis now) {
             continue;
         }
         const auto before = venue_.state(id);
-        const auto result = venue_.evaluate(live.order, book_of(live.order.spec().instrument, *info), now);
+        const auto result =
+            venue_.evaluate(live.order, book_of(live.order.spec().instrument, *info), now);
         const auto after = venue_.state(id);
         bool changed = !before || !after || before->eligible_at != after->eligible_at ||
                        before->resting != after->resting;
@@ -680,13 +719,15 @@ void Broker::close_of_day(Millis now, Changes& changes, Reports& reports) {
         const CloseOfDay& t = times[mcx ? 1 : 0];
         // MIS: once a day between the square-off time and the close (a broker started after
         // the close leaves them for the next session's square-off: the market is gone).
-        if (time_of_day >= t.mis_square_off && time_of_day < t.close && squared_off_day_[mcx] != today) {
+        if (time_of_day >= t.mis_square_off && time_of_day < t.close &&
+            squared_off_day_[mcx] != today) {
             squared_off_day_[mcx] = today;
             square_off_mis(today, mcx, now, changes, reports);
         }
         if (time_of_day >= t.close && closed_day_[mcx] != today) {
             closed_day_[mcx] = today;
-            expire_orders(ist_day_start(now) + kDayMs, mcx, "expired at the close", now, changes, reports);
+            expire_orders(ist_day_start(now) + kDayMs, mcx, "expired at the close", now, changes,
+                          reports);
         }
     }
     // Once a minute: orders left from an earlier day, and positions due to settle.
@@ -694,11 +735,13 @@ void Broker::close_of_day(Millis now, Changes& changes, Reports& reports) {
         next_settle_check_ = now + 60'000;
         catch_up(now, changes, reports);
         mark_to_previous_close(today, now, changes);
-        expire_orders(ist_day_start(now), std::nullopt, "expired: placed on an earlier day", now, changes, reports);
-        settle_expired(today, {time_of_day >= times[0].settle, time_of_day >= times[1].settle}, now, changes,
-                       reports);
-        mark_to_market(today, {time_of_day >= times[0].mark_to_market, time_of_day >= times[1].mark_to_market},
-                       now, changes);
+        expire_orders(ist_day_start(now), std::nullopt, "expired: placed on an earlier day", now,
+                      changes, reports);
+        settle_expired(today, {time_of_day >= times[0].settle, time_of_day >= times[1].settle}, now,
+                       changes, reports);
+        mark_to_market(
+            today, {time_of_day >= times[0].mark_to_market, time_of_day >= times[1].mark_to_market},
+            now, changes);
     }
 }
 
@@ -725,7 +768,8 @@ void Broker::catch_up(Millis now, Changes& changes, Reports& reports) {
             }
         }
         for (const auto& [key, previous] : stale) {
-            const std::int64_t quantity = state.account.position(key.instrument, key.product)->quantity();
+            const std::int64_t quantity =
+                state.account.position(key.instrument, key.product)->quantity();
             (void)state.account.close_at(key.instrument, key.product, previous.close, now);
             ExecutionReport r{};
             r.header = messages::make_header<ExecutionReport>(key.instrument, 0);
@@ -758,26 +802,32 @@ void Broker::mark_to_previous_close(std::int32_t today, Millis now, Changes& cha
         for (const std::uint32_t raw : open) {
             const core::InstrumentId instrument(raw);
             const auto info = lookup_(instrument);
-            if (!info || info->contract.segment != oms::Segment::Future || info->expiry_days < today) {
+            if (!info || info->contract.segment != oms::Segment::Future ||
+                info->expiry_days < today) {
                 continue;
             }
-            const int market_open = info->market_open != 0 ? info->market_open : config_.risk.market_open;
-            const int market_close = info->market_close != 0 ? info->market_close : config_.risk.market_close;
+            const int market_open =
+                info->market_open != 0 ? info->market_open : config_.risk.market_open;
+            const int market_close =
+                info->market_close != 0 ? info->market_close : config_.risk.market_close;
             const auto kite = kite_close_.find(raw);
             // Only in the session: Kite's close is the previous day's from the open until
             // the market shuts, and after that tonight's own mark takes over.
-            if (kite == kite_close_.end() || time_of_day < market_open || time_of_day >= market_close ||
+            if (kite == kite_close_.end() || time_of_day < market_open ||
+                time_of_day >= market_close ||
                 kite->second.exchange_at < today_start + market_open * Millis{1000} ||
                 state.account.last_fill(instrument) >= today_start) {
-                continue;  // a fill today: its price is in the average, so tonight's mark settles it
+                continue;  // a fill today: its price is in the average, so tonight's mark settles
+                           // it
             }
             mark_instrument(account_id, state, instrument, kite->second.close, now, changes);
         }
     }
 }
 
-void Broker::mark_instrument(std::int64_t account_id, AccountState& state, core::InstrumentId instrument,
-                             core::Price close, Millis now, Changes& changes) {
+void Broker::mark_instrument(std::int64_t account_id, AccountState& state,
+                             core::InstrumentId instrument, core::Price close, Millis now,
+                             Changes& changes) {
     bool changed = false;
     for (const auto product : {oms::Product::Mis, oms::Product::Nrml}) {
         const auto* p = state.account.position(instrument, product);
@@ -792,7 +842,8 @@ void Broker::mark_instrument(std::int64_t account_id, AccountState& state, core:
     }
 }
 
-void Broker::mark_to_market(std::int32_t today, std::array<bool, 2> due, Millis now, Changes& changes) {
+void Broker::mark_to_market(std::int32_t today, std::array<bool, 2> due, Millis now,
+                            Changes& changes) {
     if (!fsp_ || (!due[0] && !due[1])) {
         return;
     }
@@ -806,7 +857,8 @@ void Broker::mark_to_market(std::int32_t today, std::array<bool, 2> due, Millis 
         for (const std::uint32_t raw : open) {
             const core::InstrumentId instrument(raw);
             const auto info = lookup_(instrument);
-            if (!info || info->contract.segment != oms::Segment::Future || info->expiry_days <= today ||
+            if (!info || info->contract.segment != oms::Segment::Future ||
+                info->expiry_days <= today ||
                 !due[info->contract.exchange == oms::Exchange::Mcx ? 1 : 0]) {
                 continue;  // options aren't marked (the premium is paid); expiring ones settle
             }
@@ -824,11 +876,13 @@ bool Broker::on_mcx(core::InstrumentId instrument) const {
     return info && info->contract.exchange == oms::Exchange::Mcx;
 }
 
-void Broker::square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& changes, Reports& reports) {
+void Broker::square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& changes,
+                            Reports& reports) {
     std::vector<std::int64_t> cancel;
     for (const auto& [id, live] : live_) {
         // The traders' MIS orders; never a closing order of ours (a restart runs this again).
-        if (live.order.spec().product == oms::Product::Mis && live.order.spec().source != oms::Source::System &&
+        if (live.order.spec().product == oms::Product::Mis &&
+            live.order.spec().source != oms::Source::System &&
             on_mcx(live.order.spec().instrument) == mcx) {
             cancel.push_back(id);
         }
@@ -842,12 +896,14 @@ void Broker::square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& c
     }
     for (auto& [account_id, state] : accounts_) {
         for (const auto& [key, position] : state.account.positions()) {
-            if (key.product != oms::Product::Mis || position.quantity() == 0 || on_mcx(key.instrument) != mcx) {
+            if (key.product != oms::Product::Mis || position.quantity() == 0 ||
+                on_mcx(key.instrument) != mcx) {
                 continue;
             }
             // One closing order per account, day and instrument: a restart finds it in
             // paper.db (the same client order id) instead of placing another.
-            const std::uint64_t client = (std::uint64_t{1} << 63) | (static_cast<std::uint64_t>(today) << 24) |
+            const std::uint64_t client = (std::uint64_t{1} << 63) |
+                                         (static_cast<std::uint64_t>(today) << 24) |
                                          key.instrument.value();
             auto known = store_->order_by_client(account_id, client);
             if (!known || *known) {
@@ -868,17 +924,19 @@ void Broker::square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& c
             auto order = oms::Order::accepted(id, std::move(spec), now);
             venue_.accepted(order, now);
             reports.push_back(report(order, state.row.user_id, ReportEvent::Accepted, now));
-            live_.emplace(id, LiveOrder{.order = std::move(order), .user = state.row.user_id, .margin = 0});
+            live_.emplace(
+                id, LiveOrder{.order = std::move(order), .user = state.row.user_id, .margin = 0});
             changes.orders.insert(id);
         }
     }
 }
 
-void Broker::expire_orders(Millis before, std::optional<bool> mcx, std::string_view reason, Millis now,
-                           Changes& changes, Reports& reports) {
+void Broker::expire_orders(Millis before, std::optional<bool> mcx, std::string_view reason,
+                           Millis now, Changes& changes, Reports& reports) {
     std::vector<std::int64_t> expired;
     for (const auto& [id, live] : live_) {
-        if (live.order.created_at() < before && (!mcx || on_mcx(live.order.spec().instrument) == *mcx)) {
+        if (live.order.created_at() < before &&
+            (!mcx || on_mcx(live.order.spec().instrument) == *mcx)) {
             expired.push_back(id);
         }
     }
@@ -891,8 +949,8 @@ void Broker::expire_orders(Millis before, std::optional<bool> mcx, std::string_v
     }
 }
 
-void Broker::settle_expired(std::int32_t today, std::array<bool, 2> after_close, Millis now, Changes& changes,
-                            Reports& reports) {
+void Broker::settle_expired(std::int32_t today, std::array<bool, 2> after_close, Millis now,
+                            Changes& changes, Reports& reports) {
     if (!fsp_) {
         return;
     }
@@ -907,7 +965,8 @@ void Broker::settle_expired(std::int32_t today, std::array<bool, 2> after_close,
             const core::InstrumentId instrument(raw);
             const auto info = lookup_(instrument);
             const bool mcx = info && info->contract.exchange == oms::Exchange::Mcx;
-            if (!info || info->expiry_days > today || (info->expiry_days == today && !after_close[mcx ? 1 : 0])) {
+            if (!info || info->expiry_days > today ||
+                (info->expiry_days == today && !after_close[mcx ? 1 : 0])) {
                 continue;
             }
             // An MCX future settles on its own close (it has no underlying); an option on its
@@ -922,7 +981,8 @@ void Broker::settle_expired(std::int32_t today, std::array<bool, 2> after_close,
             for (const auto product : {oms::Product::Mis, oms::Product::Nrml}) {
                 if (const auto* p = state.account.position(instrument, product); p != nullptr) {
                     quantity += p->quantity();
-                    changes.positions.insert({account_id, {.instrument = instrument, .product = product}});
+                    changes.positions.insert(
+                        {account_id, {.instrument = instrument, .product = product}});
                 }
             }
             (void)state.account.settle_expiry(config_.rates, info->contract, *fsp, now);
@@ -953,7 +1013,8 @@ std::vector<DailySummary> Broker::daily_summaries(Millis now) const {
             if (entry.kind == oms::LedgerKind::Charges) {
                 s.charges -= entry.amount;
                 ++s.fills;
-            } else if (entry.kind == oms::LedgerKind::Pnl || entry.kind == oms::LedgerKind::Expiry ||
+            } else if (entry.kind == oms::LedgerKind::Pnl ||
+                       entry.kind == oms::LedgerKind::Expiry ||
                        entry.kind == oms::LedgerKind::Mtm) {
                 s.realised += entry.amount;
             }
@@ -971,57 +1032,61 @@ std::vector<DailySummary> Broker::daily_summaries(Millis now) const {
 // ------------------------------------------------------------------ persisting
 
 std::expected<void, DbError> Broker::save(Changes& changes, Millis now) {
-    return store_->in_transaction([&]() -> std::expected<void, DbError> {
-        for (const auto account_id : changes.accounts) {
-            AccountState& state = accounts_.at(account_id);
-            if (auto done = store_->upsert_account(state.row); !done) {
-                return done;
+    return store_
+        ->in_transaction([&]() -> std::expected<void, DbError> {
+            for (const auto account_id : changes.accounts) {
+                AccountState& state = accounts_.at(account_id);
+                if (auto done = store_->upsert_account(state.row); !done) {
+                    return done;
+                }
+                const auto& ledger = state.account.ledger();
+                for (std::size_t i = state.saved_ledger; i < ledger.size(); ++i) {
+                    if (auto done = store_->insert_ledger(account_id, ledger[i]); !done) {
+                        return done;
+                    }
+                }
             }
-            const auto& ledger = state.account.ledger();
-            for (std::size_t i = state.saved_ledger; i < ledger.size(); ++i) {
-                if (auto done = store_->insert_ledger(account_id, ledger[i]); !done) {
+            for (const auto id : changes.orders) {
+                const LiveOrder& live = live_.at(id);
+                if (auto done = store_->upsert_order(row_of(live.order, live.user, live.margin));
+                    !done) {
                     return done;
                 }
             }
-        }
-        for (const auto id : changes.orders) {
-            const LiveOrder& live = live_.at(id);
-            if (auto done = store_->upsert_order(row_of(live.order, live.user, live.margin)); !done) {
-                return done;
+            for (const auto& row : changes.final_orders) {
+                if (auto done = store_->upsert_order(row); !done) {
+                    return done;
+                }
             }
-        }
-        for (const auto& row : changes.final_orders) {
-            if (auto done = store_->upsert_order(row); !done) {
-                return done;
+            for (const auto& trade : changes.trades) {
+                if (auto done = store_->insert_trade(trade); !done) {
+                    return done;
+                }
             }
-        }
-        for (const auto& trade : changes.trades) {
-            if (auto done = store_->insert_trade(trade); !done) {
-                return done;
+            for (const auto& [account_id, key] : changes.positions) {
+                const auto* position =
+                    accounts_.at(account_id).account.position(key.instrument, key.product);
+                if (position == nullptr) {
+                    continue;
+                }
+                if (auto done = store_->upsert_position(account_id, key, *position, now); !done) {
+                    return done;
+                }
             }
-        }
-        for (const auto& [account_id, key] : changes.positions) {
-            const auto* position = accounts_.at(account_id).account.position(key.instrument, key.product);
-            if (position == nullptr) {
-                continue;
+            for (const auto& [kind, payload] : changes.events) {
+                if (auto done = store_->insert_event(now, kind, payload); !done) {
+                    return done;
+                }
             }
-            if (auto done = store_->upsert_position(account_id, key, *position, now); !done) {
-                return done;
+            return {};
+        })
+        .and_then([&]() -> std::expected<void, DbError> {
+            for (const auto account_id : changes.accounts) {
+                AccountState& state = accounts_.at(account_id);
+                state.saved_ledger = state.account.ledger().size();
             }
-        }
-        for (const auto& [kind, payload] : changes.events) {
-            if (auto done = store_->insert_event(now, kind, payload); !done) {
-                return done;
-            }
-        }
-        return {};
-    }).and_then([&]() -> std::expected<void, DbError> {
-        for (const auto account_id : changes.accounts) {
-            AccountState& state = accounts_.at(account_id);
-            state.saved_ledger = state.account.ledger().size();
-        }
-        return {};
-    });
+            return {};
+        });
 }
 
 }  // namespace mda::broker

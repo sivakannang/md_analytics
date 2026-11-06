@@ -1,19 +1,20 @@
-#include <mda/signals/outcome.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
 #include <mda/signals/market_state.hpp>
+#include <mda/signals/outcome.hpp>
 
 namespace mda::signals {
 
 Outcome outcome(Label label, std::int64_t spot_raw, std::int64_t spot_after_raw, int flat_bp) {
-    Outcome result{.spot_after_raw = spot_after_raw, .return_bp = std::nullopt, .hit = std::nullopt};
+    Outcome result{
+        .spot_after_raw = spot_after_raw, .return_bp = std::nullopt, .hit = std::nullopt};
     if (spot_raw <= 0 || spot_after_raw <= 0) {
         return result;
     }
-    const double change = static_cast<double>(spot_after_raw - spot_raw) / static_cast<double>(spot_raw);
+    const double change =
+        static_cast<double>(spot_after_raw - spot_raw) / static_cast<double>(spot_raw);
     const int bp = static_cast<int>(std::lround(change * 10'000));
     result.return_bp = bp;
     if (label != Label::Neutral && std::abs(bp) > flat_bp) {

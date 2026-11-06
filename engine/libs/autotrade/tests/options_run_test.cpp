@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-
 #include <map>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include <mda/autotrade/options_run.hpp>
 
@@ -22,8 +22,10 @@ constexpr std::int64_t minute_of(int hour, int minute) {
     return kMidnightIst + hour * 3600 + minute * 60;
 }
 
-const Contract kCall{.id = core::InstrumentId(100), .lot_size = 65, .expiry_days = kToday + 5, .tick = rupees(0.05)};
-const Contract kPut{.id = core::InstrumentId(101), .lot_size = 65, .expiry_days = kToday + 5, .tick = rupees(0.05)};
+const Contract kCall{
+    .id = core::InstrumentId(100), .lot_size = 65, .expiry_days = kToday + 5, .tick = rupees(0.05)};
+const Contract kPut{
+    .id = core::InstrumentId(101), .lot_size = 65, .expiry_days = kToday + 5, .tick = rupees(0.05)};
 
 OptionsRunConfig config() {
     OptionsRunConfig c;
@@ -37,11 +39,13 @@ OptionsRunConfig config() {
 SignalView signal(int hour, int minute, int score) {
     return {.minute = minute_of(hour, minute),
             .score = score,
-            .label = score >= 25 ? signals::Label::Bullish : score <= -25 ? signals::Label::Bearish : signals::Label::Neutral};
+            .label = score >= 25    ? signals::Label::Bullish
+                     : score <= -25 ? signals::Label::Bearish
+                                    : signals::Label::Neutral};
 }
 
-broker::ExecutionReport report(std::uint64_t client, broker::ReportEvent event, oms::OrderStatus status,
-                               std::int64_t order_id = 0) {
+broker::ExecutionReport report(std::uint64_t client, broker::ReportEvent event,
+                               oms::OrderStatus status, std::int64_t order_id = 0) {
     broker::ExecutionReport r{};
     r.user = 1;
     r.client_order_id = client;
@@ -52,7 +56,8 @@ broker::ExecutionReport report(std::uint64_t client, broker::ReportEvent event, 
 }
 
 broker::ExecutionReport fill(std::uint64_t client, oms::Side side, std::int64_t qty, double price,
-                             std::int64_t order_id = 0, oms::OrderStatus status = oms::OrderStatus::Complete) {
+                             std::int64_t order_id = 0,
+                             oms::OrderStatus status = oms::OrderStatus::Complete) {
     auto r = report(client, broker::ReportEvent::Fill, status, order_id);
     r.side = side;
     r.last_quantity = r.filled = r.quantity = qty;
@@ -66,7 +71,10 @@ protected:
 
     /// The index at `spot`; every option quoted bid / ask around `premium`, all fresh at `now`.
     OptionsMarket market(double spot, Millis now) {
-        return {.spot = rupees(spot), .spot_at = now, .feed_ok = true, .quote = [this, now](core::InstrumentId id) {
+        return {.spot = rupees(spot),
+                .spot_at = now,
+                .feed_ok = true,
+                .quote = [this, now](core::InstrumentId id) {
                     const auto it = premium_.find(id.value());
                     return it == premium_.end() ? std::optional<OptionQuote>{}
                                                 : OptionQuote{.ltp = rupees(it->second),
@@ -84,13 +92,16 @@ protected:
         const auto enter = run_.evaluate(market(24'000, at(10, 1, 1)), at(10, 1, 1));
         ASSERT_EQ(enter.actions.size(), 1u);
         entry_client_ = enter.actions[0].client_order_id;
-        (void)run_.on_report(report(entry_client_, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 1), at(10, 1, 1));
+        (void)run_.on_report(
+            report(entry_client_, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 1),
+            at(10, 1, 1));
         (void)run_.on_report(fill(entry_client_, oms::Side::Buy, 65, 120.10, 1), at(10, 1, 2));
         const auto stop = run_.evaluate(market(24'000, at(10, 1, 3)), at(10, 1, 3));
         ASSERT_EQ(stop.actions.size(), 1u);
         stop_ = stop.actions[0];
         stop_client_ = stop_.client_order_id;
-        (void)run_.on_report(report(stop_client_, broker::ReportEvent::Accepted, oms::OrderStatus::TriggerPending, 7),
+        (void)run_.on_report(report(stop_client_, broker::ReportEvent::Accepted,
+                                    oms::OrderStatus::TriggerPending, 7),
                              at(10, 1, 4));
         ASSERT_EQ(run_.state(), State::Long);
     }
@@ -142,15 +153,19 @@ TEST_F(OptionsRunTest, UnfilledEntryIsCancelledAfterTheTimeout) {
     run_.on_signal(signal(10, 0, 38));
     const auto enter = run_.evaluate(market(24'000, at(10, 1, 1)), at(10, 1, 1));
     const auto client = enter.actions[0].client_order_id;
-    (void)run_.on_report(report(client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 3), at(10, 1, 1));
+    (void)run_.on_report(report(client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 3),
+                         at(10, 1, 1));
     EXPECT_TRUE(run_.evaluate(market(24'000, at(10, 1, 9)), at(10, 1, 9)).actions.empty());
     const auto out = run_.evaluate(market(24'000, at(10, 1, 11)), at(10, 1, 11));
     ASSERT_EQ(out.actions.size(), 1u);
     EXPECT_EQ(out.actions[0].kind, broker::Action::Cancel);
     EXPECT_EQ(out.actions[0].order_id, 3);
-    EXPECT_TRUE(run_.evaluate(market(24'000, at(10, 1, 12)), at(10, 1, 12)).actions.empty());  // asked once
+    EXPECT_TRUE(
+        run_.evaluate(market(24'000, at(10, 1, 12)), at(10, 1, 12)).actions.empty());  // asked once
 
-    const auto done = run_.on_report(report(client, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 3), at(10, 1, 12));
+    const auto done = run_.on_report(
+        report(client, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 3),
+        at(10, 1, 12));
     EXPECT_EQ(done.decisions.at(0).action, "entry not filled");
     EXPECT_EQ(run_.state(), State::Flat);
     EXPECT_FALSE(run_.held());
@@ -162,7 +177,8 @@ TEST_F(OptionsRunTest, UnfilledEntryIsCancelledAfterTheTimeout) {
 TEST_F(OptionsRunTest, IndexStopExitsAtTheBidMinusSlip) {
     go_long();
     premium_[100] = 100;
-    EXPECT_TRUE(run_.evaluate(market(23'976, at(10, 5)), at(10, 5)).actions.empty());  // −24: not yet
+    EXPECT_TRUE(
+        run_.evaluate(market(23'976, at(10, 5)), at(10, 5)).actions.empty());  // −24: not yet
     const auto out = run_.evaluate(market(23'975, at(10, 6)), at(10, 6));
     ASSERT_EQ(out.actions.size(), 2u);
     EXPECT_EQ(out.actions[0].kind, broker::Action::Cancel);
@@ -175,8 +191,11 @@ TEST_F(OptionsRunTest, IndexStopExitsAtTheBidMinusSlip) {
     EXPECT_NE(out.decisions[0].reason.find("index stop"), std::string::npos);
     EXPECT_EQ(run_.state(), State::Exiting);
 
-    (void)run_.on_report(report(stop_client_, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 7), at(10, 6));
-    const auto done = run_.on_report(fill(sell.client_order_id, oms::Side::Sell, 65, 99.85, 9), at(10, 6, 1));
+    (void)run_.on_report(
+        report(stop_client_, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 7),
+        at(10, 6));
+    const auto done =
+        run_.on_report(fill(sell.client_order_id, oms::Side::Sell, 65, 99.85, 9), at(10, 6, 1));
     EXPECT_EQ(done.decisions.at(0).action, "flat");
     EXPECT_EQ(run_.state(), State::Flat);
     EXPECT_EQ(run_.realised_today(), -131'625);  // (99.85 − 120.10) × 65 in paise
@@ -186,10 +205,12 @@ TEST_F(OptionsRunTest, PutIsMeasuredTheOtherWay) {
     premium_[101] = 95;
     run_.on_signal(signal(10, 0, -40));
     const auto enter = run_.evaluate(market(24'000, at(10, 1, 1)), at(10, 1, 1));
-    (void)run_.on_report(fill(enter.actions[0].client_order_id, oms::Side::Buy, 65, 95.10, 1), at(10, 1, 2));
+    (void)run_.on_report(fill(enter.actions[0].client_order_id, oms::Side::Buy, 65, 95.10, 1),
+                         at(10, 1, 2));
     (void)run_.evaluate(market(24'000, at(10, 1, 3)), at(10, 1, 3));  // the stop
-    run_.set_options({});                                              // the pair moving on doesn't matter
-    EXPECT_TRUE(run_.evaluate(market(23'950, at(10, 5)), at(10, 5)).actions.empty());  // +50 for a put
+    run_.set_options({});  // the pair moving on doesn't matter
+    EXPECT_TRUE(
+        run_.evaluate(market(23'950, at(10, 5)), at(10, 5)).actions.empty());  // +50 for a put
     const auto out = run_.evaluate(market(24'025, at(10, 6)), at(10, 6));
     ASSERT_FALSE(out.actions.empty());
     EXPECT_EQ(out.actions.back().instrument, kPut.id);
@@ -211,7 +232,8 @@ TEST_F(OptionsRunTest, UnfilledExitIsRepricedWithTheWholeQuantity) {
     premium_[100] = 100;
     const auto out = run_.evaluate(market(23'970, at(10, 6)), at(10, 6));
     const auto exit_client = out.actions[1].client_order_id;
-    (void)run_.on_report(report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
+    (void)run_.on_report(
+        report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
     premium_[100] = 98;
     EXPECT_TRUE(run_.evaluate(market(23'965, at(10, 6, 2)), at(10, 6, 2)).actions.empty());
     const auto again = run_.evaluate(market(23'965, at(10, 6, 3)), at(10, 6, 3));
@@ -227,15 +249,19 @@ TEST_F(OptionsRunTest, StopFillDuringExitCancelsTheExit) {
     premium_[100] = 80;
     const auto out = run_.evaluate(market(23'970, at(10, 6)), at(10, 6));
     const auto exit_client = out.actions[1].client_order_id;
-    (void)run_.on_report(report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
+    (void)run_.on_report(
+        report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
     // The stop triggered before our cancel landed.
-    const auto stopped = run_.on_report(fill(stop_client_, oms::Side::Sell, 65, 84.00, 7), at(10, 6));
+    const auto stopped =
+        run_.on_report(fill(stop_client_, oms::Side::Sell, 65, 84.00, 7), at(10, 6));
     ASSERT_EQ(stopped.actions.size(), 1u);
     EXPECT_EQ(stopped.actions[0].kind, broker::Action::Cancel);
     EXPECT_EQ(stopped.actions[0].order_id, 9);
     EXPECT_EQ(run_.position(), 0);
 
-    const auto done = run_.on_report(report(exit_client, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 9), at(10, 6, 1));
+    const auto done = run_.on_report(
+        report(exit_client, broker::ReportEvent::Cancelled, oms::OrderStatus::Cancelled, 9),
+        at(10, 6, 1));
     EXPECT_EQ(done.decisions.at(0).action, "flat");
     EXPECT_EQ(run_.state(), State::Flat);
 }
@@ -245,7 +271,8 @@ TEST_F(OptionsRunTest, ShortAfterARaceBuysBack) {
     premium_[100] = 80;
     const auto out = run_.evaluate(market(23'970, at(10, 6)), at(10, 6));
     const auto exit_client = out.actions[1].client_order_id;
-    (void)run_.on_report(report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
+    (void)run_.on_report(
+        report(exit_client, broker::ReportEvent::Accepted, oms::OrderStatus::Open, 9), at(10, 6));
     (void)run_.on_report(fill(stop_client_, oms::Side::Sell, 65, 84.00, 7), at(10, 6));
     // Both filled: we're short 65.
     const auto both = run_.on_report(fill(exit_client, oms::Side::Sell, 65, 79.90, 9), at(10, 6));
@@ -306,15 +333,18 @@ TEST_F(OptionsRunTest, RestoreWithoutEntrySpotMeasuresFromNow) {
 
 TEST(ChooseAtm, NearestExpiryAfterTodayAndNearestStrike) {
     const auto option = [](std::uint32_t id, std::int32_t expiry, double strike, bool call) {
-        return ListedOption{.contract = {.id = core::InstrumentId(id), .lot_size = 65, .expiry_days = expiry, .tick = rupees(0.05)},
+        return ListedOption{.contract = {.id = core::InstrumentId(id),
+                                         .lot_size = 65,
+                                         .expiry_days = expiry,
+                                         .tick = rupees(0.05)},
                             .strike = rupees(strike),
                             .call = call};
     };
     const std::vector<ListedOption> listed{
-        option(1, kToday, 24'000, true),       option(2, kToday, 24'000, false),      // expire today
-        option(3, kToday + 7, 23'950, true),   option(4, kToday + 7, 24'000, true),
-        option(5, kToday + 7, 24'000, false),  option(6, kToday + 7, 24'050, false),
-        option(7, kToday + 14, 24'000, true),  option(8, kToday + 14, 24'000, false),
+        option(1, kToday, 24'000, true),      option(2, kToday, 24'000, false),  // expire today
+        option(3, kToday + 7, 23'950, true),  option(4, kToday + 7, 24'000, true),
+        option(5, kToday + 7, 24'000, false), option(6, kToday + 7, 24'050, false),
+        option(7, kToday + 14, 24'000, true), option(8, kToday + 14, 24'000, false),
     };
     auto pair = choose_atm(listed, rupees(24'020), kToday);
     ASSERT_TRUE(pair.call && pair.put);

@@ -10,12 +10,20 @@ namespace {
 using namespace test;
 
 Signal sample() {
-    Signal signal{.spot = kSpot, .minute = at_min(30), .strategy = StrategyId::OiBiasV1,
-                  .horizon_min = 30, .score = 37, .label = Label::Bullish, .factors = {}};
-    const double points[kFactorCount] = {20, 0, 11.4, -14.8, 3.2, 0.3, 6, 0, 0};  // F8, F9 at weight 0
+    Signal signal{.spot = kSpot,
+                  .minute = at_min(30),
+                  .strategy = StrategyId::OiBiasV1,
+                  .horizon_min = 30,
+                  .score = 37,
+                  .label = Label::Bullish,
+                  .factors = {}};
+    const double points[kFactorCount] = {20,  0, 11.4, -14.8, 3.2,
+                                         0.3, 6, 0,    0};  // F8, F9 at weight 0
     for (std::size_t i = 0; i < kFactorCount; ++i) {
-        signal.factors.push_back({.id = static_cast<FactorId>(i + 1), .status = FactorStatus::Present,
-                                  .value = points[i] / 20, .points = points[i]});
+        signal.factors.push_back({.id = static_cast<FactorId>(i + 1),
+                                  .status = FactorStatus::Present,
+                                  .value = points[i] / 20,
+                                  .points = points[i]});
     }
     return signal;
 }

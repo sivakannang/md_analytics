@@ -16,11 +16,11 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
-#include <system_error>
 #include <set>
 #include <span>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -398,7 +398,8 @@ asio::awaitable<void> auto_backfill_loop(
                 const auto* instrument = registry.get(id);
                 const auto exchange =
                     instrument ? instrument->key.exchange : instruments::Exchange::Nse;
-                if (const auto window = apps::auto_backfill_window(now, *coverage, days, exchange)) {
+                if (const auto window =
+                        apps::auto_backfill_window(now, *coverage, days, exchange)) {
                     out.emplace_back(token, id, *window);
                 }
             }
@@ -556,7 +557,8 @@ int run(const runtime::Config& config) {
         const std::string today = instruments::to_string(
             instruments::ist_day(core::Timestamp::now().ns() / 1'000'000'000));
         if (const auto removed = watchlists::remove_expired(*db, today); !removed) {
-            spdlog::warn("watchlists: removing expired contracts failed: {}", removed.error().message);
+            spdlog::warn("watchlists: removing expired contracts failed: {}",
+                         removed.error().message);
         } else if (*removed > 0) {
             spdlog::info("watchlists: {} expired contracts removed", *removed);
         }

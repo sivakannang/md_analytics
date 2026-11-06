@@ -1,7 +1,7 @@
-#include <mda/signals/oi_bias.hpp>
-
 #include <algorithm>
 #include <cmath>
+
+#include <mda/signals/oi_bias.hpp>
 
 namespace mda::signals {
 
@@ -22,8 +22,8 @@ Signal OiBiasV1::evaluate(const MarketState& state, std::int64_t minute) const {
         // An absent factor adds nothing; it stays listed so the UI can say what's missing.
         const double points = config_.weights[i] * value.value;
         total += points;
-        signal.factors.push_back(
-            FactorContribution{.id = factor, .status = value.status, .value = value.value, .points = points});
+        signal.factors.push_back(FactorContribution{
+            .id = factor, .status = value.status, .value = value.value, .points = points});
     }
 
     signal.score = static_cast<int>(std::clamp(std::lround(total), -100L, 100L));

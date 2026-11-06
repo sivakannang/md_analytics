@@ -1,7 +1,7 @@
-#include <mda/oms/position.hpp>
-
 #include <algorithm>
 #include <cstdlib>
+
+#include <mda/oms/position.hpp>
 
 namespace mda::oms {
 
@@ -80,7 +80,8 @@ Position::Taken Position::take(std::int64_t quantity) noexcept {
         return {};
     }
     const Taken out{.cost_raw = taken == open ? cost_raw_ : mul_div_round(cost_raw_, taken, open),
-                    .entry_cost_raw = taken == open ? entry_cost_raw_ : mul_div_round(entry_cost_raw_, taken, open)};
+                    .entry_cost_raw = taken == open ? entry_cost_raw_
+                                                    : mul_div_round(entry_cost_raw_, taken, open)};
     cost_raw_ -= out.cost_raw;
     entry_cost_raw_ -= out.entry_cost_raw;
     quantity_ -= quantity_ > 0 ? taken : -taken;
@@ -103,7 +104,8 @@ Paise Position::put(std::int64_t signed_quantity, Taken taken) noexcept {
     }
     const std::int64_t quantity = std::abs(signed_quantity);
     const std::int64_t rest = quantity - std::min(quantity, std::abs(quantity_));
-    const core::Price average = core::Price::from_raw(mul_div_round(std::abs(taken.cost_raw), 1, quantity));
+    const core::Price average =
+        core::Price::from_raw(mul_div_round(std::abs(taken.cost_raw), 1, quantity));
     const Paise realised = apply(signed_quantity > 0 ? Side::Buy : Side::Sell, quantity, average);
     if (rest > 0) {  // through zero: the rest keeps the entry price it came with
         entry_cost_raw_ = mul_div_round(taken.entry_cost_raw, rest, quantity);

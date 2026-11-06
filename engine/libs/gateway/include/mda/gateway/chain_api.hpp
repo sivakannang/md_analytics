@@ -28,7 +28,8 @@ namespace mda::gateway {
 /// A chain the feed keeps subscribed (from config feed.chains).
 struct ChainInfo {
     std::string underlying;  ///< e.g. NIFTY
-    std::string spot;        ///< contract key, e.g. NSE|CASH|IDX|NIFTY 50; "" = each expiry's future (MCX)
+    std::string
+        spot;  ///< contract key, e.g. NSE|CASH|IDX|NIFTY 50; "" = each expiry's future (MCX)
     int expiries = 1;
 };
 

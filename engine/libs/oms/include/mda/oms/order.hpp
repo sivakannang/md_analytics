@@ -33,8 +33,8 @@ struct OrderSpec {
 };
 
 enum class OrderError : std::uint8_t {
-    NotLive = 1,      ///< the order is complete, cancelled or rejected
-    NotOpen = 2,      ///< a fill on an order that isn't OPEN (still waiting for its trigger)
+    NotLive = 1,  ///< the order is complete, cancelled or rejected
+    NotOpen = 2,  ///< a fill on an order that isn't OPEN (still waiting for its trigger)
     NotTriggerable = 3,
     Overfill = 4,     ///< more than the remaining quantity
     BadQuantity = 5,  ///< zero or negative, or a modify below the filled quantity

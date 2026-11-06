@@ -12,12 +12,20 @@ core::Price rupees(double value) {
 const ChargeRates kRates = zerodha_2026_10();
 constexpr Paise kOpening = 1'000'000 * 100;  // ₹10 lakh
 
-const Contract kFuture{.id = core::InstrumentId(1), .segment = Segment::Future, .exchange = Exchange::Nse,
-                       .lot_size = 75, .strike = {}, .call = false};
+const Contract kFuture{.id = core::InstrumentId(1),
+                       .segment = Segment::Future,
+                       .exchange = Exchange::Nse,
+                       .lot_size = 75,
+                       .strike = {},
+                       .call = false};
 
 Contract option(std::uint32_t id, double strike, bool call) {
-    return {.id = core::InstrumentId(id), .segment = Segment::Option, .exchange = Exchange::Nse,
-            .lot_size = 75, .strike = rupees(strike), .call = call};
+    return {.id = core::InstrumentId(id),
+            .segment = Segment::Option,
+            .exchange = Exchange::Nse,
+            .lot_size = 75,
+            .strike = rupees(strike),
+            .call = call};
 }
 
 TEST(Account, OpensWithItsCash) {
@@ -38,7 +46,7 @@ TEST(Account, FuturesRoundTrip) {
 
     const auto sell = account.apply_fill(kRates, kFuture, Product::Mis, Side::Sell, 75,
                                          rupees(22'603.85), 0, 12, 300);
-    EXPECT_EQ(sell.realised, 648'750);  // ₹86.50 × 75
+    EXPECT_EQ(sell.realised, 648'750);                               // ₹86.50 × 75
     EXPECT_EQ(account.cash(), kOpening + 648'750 - 9'607 - 91'022);  // net ₹5,481.21
     EXPECT_EQ(account.position(kFuture.id, Product::Mis)->quantity(), 0);
     EXPECT_EQ(account.position(kFuture.id, Product::Nrml), nullptr);
@@ -66,12 +74,13 @@ TEST(Account, ConvertMovesAPositionBetweenProductsAtItsAverage) {
     account.apply_fill(kRates, kFuture, Product::Mis, Side::Buy, 75, rupees(22'510), 0, 2, 200);
     const Paise cash = account.cash();
     EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 75, 300), 0);  // half
-    EXPECT_EQ(account.cash(), cash);                                                 // no P&L, no charges
+    EXPECT_EQ(account.cash(), cash);  // no P&L, no charges
     EXPECT_EQ(account.position(kFuture.id, Product::Mis)->quantity(), 75);
     EXPECT_EQ(account.position(kFuture.id, Product::Nrml)->quantity(), 75);
     EXPECT_EQ(account.position(kFuture.id, Product::Nrml)->average_price(), rupees(22'505));
     EXPECT_EQ(account.position(kFuture.id, Product::Mis)->average_price(), rupees(22'505));
-    EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 150, 300), std::nullopt);  // only 75 left
+    EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 150, 300),
+              std::nullopt);  // only 75 left
     EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 75, 300), 0);
     EXPECT_EQ(account.position(kFuture.id, Product::Mis)->quantity(), 0);
     EXPECT_EQ(account.position(kFuture.id, Product::Nrml)->quantity(), 150);
@@ -79,7 +88,8 @@ TEST(Account, ConvertMovesAPositionBetweenProductsAtItsAverage) {
     EXPECT_EQ(account.convert(kFuture.id, Product::Nrml, Product::Mis, 150, 400), 0);
     account.apply_fill(kRates, kFuture, Product::Nrml, Side::Sell, 75, rupees(22'525), 0, 3, 500);
     const Paise before = account.cash();
-    EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 75, 600), 150'000);  // (22,525 − 22,505) × 75
+    EXPECT_EQ(account.convert(kFuture.id, Product::Mis, Product::Nrml, 75, 600),
+              150'000);  // (22,525 − 22,505) × 75
     EXPECT_EQ(account.cash(), before + 150'000);
     EXPECT_EQ(account.position(kFuture.id, Product::Nrml)->quantity(), 0);
 }

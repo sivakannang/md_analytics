@@ -97,8 +97,9 @@ struct IndexReport {
 };
 
 std::string percent(std::size_t part, std::size_t whole) {
-    return whole == 0 ? "   —" : std::format("{:3.0f}%", 100.0 * static_cast<double>(part) /
-                                                         static_cast<double>(whole));
+    return whole == 0 ? "   —"
+                      : std::format("{:3.0f}%",
+                                    100.0 * static_cast<double>(part) / static_cast<double>(whole));
 }
 
 std::string stats_line(std::string_view name, const FactorStats& s, std::size_t evaluated) {
@@ -180,8 +181,8 @@ int main(int argc, char** argv) {
     // Trading days: those with bars of the first index's spot, today excluded.
     const std::int64_t now = core::Timestamp::now().ns() / 1'000'000'000;
     const auto spot_of = [&](const std::string& underlying) -> core::InstrumentId {
-        const auto chain = std::ranges::find(config->feed.chains, underlying,
-                                             &runtime::ChainConfig::underlying);
+        const auto chain =
+            std::ranges::find(config->feed.chains, underlying, &runtime::ChainConfig::underlying);
         if (chain == config->feed.chains.end()) {
             return {};
         }
@@ -191,7 +192,8 @@ int main(int argc, char** argv) {
     std::set<std::int32_t> trading_days;
     if (const auto spot = spot_of(config->signals.underlyings.front()); spot.valid()) {
         const std::int64_t today = signals::ist_day_start(now);
-        if (const auto history = bars->range(spot.value(), today - 90 * signals::kSecondsPerDay, today)) {
+        if (const auto history =
+                bars->range(spot.value(), today - 90 * signals::kSecondsPerDay, today)) {
             for (const auto& bar : *history) {
                 trading_days.insert(signals::ist_day(bar.start));
             }
@@ -224,8 +226,8 @@ int main(int argc, char** argv) {
 
     std::map<std::string, IndexReport> reports;
     for (const auto& underlying : config->signals.underlyings) {
-        const auto chain = std::ranges::find(config->feed.chains, underlying,
-                                             &runtime::ChainConfig::underlying);
+        const auto chain =
+            std::ranges::find(config->feed.chains, underlying, &runtime::ChainConfig::underlying);
         const core::InstrumentId spot = spot_of(underlying);
         if (!spot.valid()) {
             std::printf("%s: no spot; skipped\n", underlying.c_str());
@@ -233,7 +235,8 @@ int main(int argc, char** argv) {
         }
         IndexReport& report = reports[underlying];
         for (const std::int32_t day : days) {
-            const std::int64_t day_start = std::int64_t{day} * signals::kSecondsPerDay - signals::kIstOffset;
+            const std::int64_t day_start =
+                std::int64_t{day} * signals::kSecondsPerDay - signals::kIstOffset;
 
             // That day's instruments: the nearest future, the nearest chain expiries' options.
             std::optional<std::pair<std::int32_t, core::InstrumentId>> future;
@@ -253,9 +256,11 @@ int main(int argc, char** argv) {
                     by_expiry[expiry].push_back(&instrument);
                 }
             }
-            signals::MarketState state(
-                {.underlying = underlying, .spot = spot, .future = future ? future->second : core::InstrumentId{}});
-            options::ChainDefinition definition{.underlying = underlying, .spot = spot, .expiries = {}};
+            signals::MarketState state({.underlying = underlying,
+                                        .spot = spot,
+                                        .future = future ? future->second : core::InstrumentId{}});
+            options::ChainDefinition definition{
+                .underlying = underlying, .spot = spot, .expiries = {}};
             std::vector<core::InstrumentId> ids = {spot};
             if (future) {
                 ids.push_back(future->second);
@@ -265,11 +270,13 @@ int main(int argc, char** argv) {
                     break;
                 }
                 options::ExpiryChain expiry_chain{
-                    .expiry = std::chrono::year_month_day{std::chrono::sys_days{std::chrono::days{expiry}}},
+                    .expiry = std::chrono::year_month_day{std::chrono::sys_days{
+                        std::chrono::days{expiry}}},
                     .options = {}};
                 for (const auto* option : contracts) {
                     const bool call = option->key.option_type == instruments::OptionType::Call;
-                    expiry_chain.options.push_back({.id = option->id, .strike = option->key.strike, .call = call});
+                    expiry_chain.options.push_back(
+                        {.id = option->id, .strike = option->key.strike, .call = call});
                     state.add_option({.id = option->id,
                                       .expiry_days = expiry,
                                       .strike = option->key.strike.to_double(),
@@ -292,7 +299,8 @@ int main(int argc, char** argv) {
             // The day's bars by minute; options also get yesterday's closing OI.
             std::map<std::int64_t, std::vector<bars::Bar>> minutes;
             for (const auto id : ids) {
-                const auto day_bars = bars->range(id.value(), day_start, day_start + signals::kSecondsPerDay);
+                const auto day_bars =
+                    bars->range(id.value(), day_start, day_start + signals::kSecondsPerDay);
                 if (!day_bars) {
                     continue;
                 }
@@ -318,8 +326,9 @@ int main(int argc, char** argv) {
                     volume += bar.volume.value();
                     messages::MarketSnapshot snapshot{};
                     snapshot.header.instrument_id = bar.header.instrument_id;
-                    snapshot.fields = messages::kFieldLtp | messages::kFieldVolume |
-                                      (bar.oi_close.value() > 0 ? messages::kFieldOpenInterest : 0u);
+                    snapshot.fields =
+                        messages::kFieldLtp | messages::kFieldVolume |
+                        (bar.oi_close.value() > 0 ? messages::kFieldOpenInterest : 0u);
                     snapshot.ltp = bar.close;
                     snapshot.volume = core::Quantity(volume);
                     snapshot.oi = bar.oi_close;
@@ -349,7 +358,8 @@ int main(int argc, char** argv) {
             std::vector<signals::OutcomeUpdate> updates;
             for (const auto& record : records) {
                 const auto& signal = record.signal;
-                const auto price = signals::settle_price(spot_closes, signal.minute, signal.horizon_min, true);
+                const auto price =
+                    signals::settle_price(spot_closes, signal.minute, signal.horizon_min, true);
                 if (!price) {
                     continue;
                 }
@@ -375,11 +385,13 @@ int main(int argc, char** argv) {
                 report.score.add(signal.score / 100.0, move, config->signals.flat_bp);
             }
             if (auto written = out->write(records); !written) {
-                std::fprintf(stderr, "error: writing signals: %s\n", written.error().message.c_str());
+                std::fprintf(stderr, "error: writing signals: %s\n",
+                             written.error().message.c_str());
                 return 1;
             }
             if (auto settled = out->set_outcomes(updates); !settled) {
-                std::fprintf(stderr, "error: writing outcomes: %s\n", settled.error().message.c_str());
+                std::fprintf(stderr, "error: writing outcomes: %s\n",
+                             settled.error().message.c_str());
                 return 1;
             }
         }
@@ -387,8 +399,10 @@ int main(int argc, char** argv) {
 
     // Report: per index, each factor's presence, mean, correlation with the forward return,
     // and how often its direction was right on clear readings; then the strategy's record.
-    const std::int64_t from = std::int64_t{days.front()} * signals::kSecondsPerDay - signals::kIstOffset;
-    const std::int64_t to = std::int64_t{days.back() + 1} * signals::kSecondsPerDay - signals::kIstOffset;
+    const std::int64_t from =
+        std::int64_t{days.front()} * signals::kSecondsPerDay - signals::kIstOffset;
+    const std::int64_t to =
+        std::int64_t{days.back() + 1} * signals::kSecondsPerDay - signals::kIstOffset;
     for (const auto& [underlying, report] : reports) {
         std::printf("\n== %s: %zu signals settled\n", underlying.c_str(), report.signals);
         for (std::size_t i = 1; i <= signals::kFactorCount; ++i) {
@@ -402,13 +416,19 @@ int main(int argc, char** argv) {
         if (const auto records = out->record(underlying, from, to)) {
             for (const auto& r : *records) {
                 const int decided = r.hits + r.misses;
-                std::printf("  %s: hit rate %s (%d of %d) · always up %s · momentum %s of %d · %d bullish, %d bearish, %d neutral, %d flat\n",
-                            r.strategy.c_str(),
-                            percent(static_cast<std::size_t>(r.hits), static_cast<std::size_t>(decided)).c_str(),
-                            r.hits, decided,
-                            percent(static_cast<std::size_t>(r.up_moves), static_cast<std::size_t>(decided)).c_str(),
-                            percent(static_cast<std::size_t>(r.momentum_hits), static_cast<std::size_t>(r.momentum_calls)).c_str(),
-                            r.momentum_calls, r.bullish, r.bearish, r.neutral, r.flats);
+                std::printf(
+                    "  %s: hit rate %s (%d of %d) · always up %s · momentum %s of %d · %d bullish, "
+                    "%d bearish, %d neutral, %d flat\n",
+                    r.strategy.c_str(),
+                    percent(static_cast<std::size_t>(r.hits), static_cast<std::size_t>(decided))
+                        .c_str(),
+                    r.hits, decided,
+                    percent(static_cast<std::size_t>(r.up_moves), static_cast<std::size_t>(decided))
+                        .c_str(),
+                    percent(static_cast<std::size_t>(r.momentum_hits),
+                            static_cast<std::size_t>(r.momentum_calls))
+                        .c_str(),
+                    r.momentum_calls, r.bullish, r.bearish, r.neutral, r.flats);
             }
         }
     }

@@ -34,7 +34,7 @@ struct Expected {
     const char* signature;
 };
 constexpr Expected kProcesses[] = {
-    {"feedd", "mda-feedd"},       {"engine", "mda-engine"},     {"signald", "mda-signald"},
+    {"feedd", "mda-feedd"},       {"engine", "mda-engine"},         {"signald", "mda-signald"},
     {"broker", "mda-broker"},     {"autotrader", "mda-autotrader"}, {"gateway", "mda-gateway"},
     {"notifier", "mda-notifier"}, {"recorder", "mda-recorder"},     {"web", "npm"}};
 

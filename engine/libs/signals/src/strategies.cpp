@@ -1,6 +1,5 @@
-#include <mda/signals/strategies.hpp>
-
 #include <mda/signals/oi_bias.hpp>
+#include <mda/signals/strategies.hpp>
 
 namespace mda::signals {
 

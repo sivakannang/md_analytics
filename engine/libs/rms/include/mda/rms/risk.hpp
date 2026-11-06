@@ -47,12 +47,12 @@ struct Limits {
     std::int64_t max_lots_per_order = 0;
     std::int64_t max_open_lots_per_instrument = 0;
     Paise max_gross_notional = 0;
-    Ppb price_band = 0;                          ///< LIMIT / SL price within ±x of the LTP
+    Ppb price_band = 0;  ///< LIMIT / SL price within ±x of the LTP
     int orders_per_minute = 30;
-    Ppb daily_loss = 50'000'000;                 ///< 5% of the day's opening cash
-    int window_start = 9 * 3600 + 15 * 60;       ///< seconds after 00:00 IST (NSE/BSE; an
-    int window_end = 15 * 3600 + 25 * 60;        ///< MCX window keeps the distance from its
-                                                 ///< open/close); after this, reducing only
+    Ppb daily_loss = 50'000'000;            ///< 5% of the day's opening cash
+    int window_start = 9 * 3600 + 15 * 60;  ///< seconds after 00:00 IST (NSE/BSE; an
+    int window_end = 15 * 3600 + 25 * 60;   ///< MCX window keeps the distance from its
+                                            ///< open/close); after this, reducing only
 };
 
 /// The defaults for an automatic trader (§9).
@@ -61,9 +61,10 @@ struct Limits {
 struct RiskConfig {
     Limits ui;
     Limits automatic = auto_limits();
-    Ppb futures_margin = 120'000'000;        ///< index futures: 12% of notional
-    Ppb stock_futures_margin = 200'000'000;  ///< stock futures: 20% (Zerodha's SPAN + exposure, ~15–40%)
-    Ppb market_buffer = 20'000'000;    ///< MARKET option buys block 2% above the ask
+    Ppb futures_margin = 120'000'000;  ///< index futures: 12% of notional
+    Ppb stock_futures_margin =
+        200'000'000;                 ///< stock futures: 20% (Zerodha's SPAN + exposure, ~15–40%)
+    Ppb market_buffer = 20'000'000;  ///< MARKET option buys block 2% above the ask
     int market_open = 9 * 3600 + 15 * 60;
     int market_close = 15 * 3600 + 30 * 60;
 };
@@ -74,11 +75,11 @@ struct InstrumentInfo {
     core::Price tick;
     std::int64_t freeze_quantity = 0;  ///< 0: no limit known
     bool listed = true;
-    std::int32_t expiry_days = 0;      ///< days since 1970-01-01
-    core::InstrumentId underlying;     ///< the index or stock it settles on; invalid if unknown
-    bool index = false;                ///< on an index (else a stock): its futures margin
-    Ppb futures_margin = 0;            ///< MCX: the commodity's margin; 0 = RiskConfig's
-    int market_open = 0;               ///< MCX: seconds after 00:00 IST; 0 = RiskConfig's
+    std::int32_t expiry_days = 0;   ///< days since 1970-01-01
+    core::InstrumentId underlying;  ///< the index or stock it settles on; invalid if unknown
+    bool index = false;             ///< on an index (else a stock): its futures margin
+    Ppb futures_margin = 0;         ///< MCX: the commodity's margin; 0 = RiskConfig's
+    int market_open = 0;            ///< MCX: seconds after 00:00 IST; 0 = RiskConfig's
     int market_close = 0;
 };
 
@@ -94,13 +95,13 @@ struct Quote {
 /// The account's state, kept by the OMS.
 struct AccountView {
     const oms::Account* account = nullptr;
-    Paise blocked = 0;              ///< margin of open orders and positions
-    Paise unrealised = 0;           ///< at the LTP, all positions
-    Paise day_pnl = 0;              ///< realised today + unrealised
-    Paise opening_cash = 0;         ///< cash at the start of the day
-    Paise gross_notional = 0;       ///< of all open positions at the LTP
-    Paise auto_notional = 0;        ///< the auto trader's share of them: its notional limit
-    std::int64_t auto_position = 0; ///< the auto trader's share of the position in this instrument
+    Paise blocked = 0;               ///< margin of open orders and positions
+    Paise unrealised = 0;            ///< at the LTP, all positions
+    Paise day_pnl = 0;               ///< realised today + unrealised
+    Paise opening_cash = 0;          ///< cash at the start of the day
+    Paise gross_notional = 0;        ///< of all open positions at the LTP
+    Paise auto_notional = 0;         ///< the auto trader's share of them: its notional limit
+    std::int64_t auto_position = 0;  ///< the auto trader's share of the position in this instrument
     std::int64_t open_order_quantity = 0;  ///< same instrument and side, still to fill
     bool kill_switch = false;
 };
@@ -151,8 +152,10 @@ public:
     /// A position conversion to `to` (MIS ↔ NRML): a listed contract, whole lots, the
     /// market open; into MIS only before the person's trading window ends (the square-off).
     /// Margin doesn't change: both products block the same.
-    [[nodiscard]] std::expected<void, Rejection> check_convert(const InstrumentInfo& instrument, oms::Product to,
-                                                               std::int64_t quantity, Millis now) const;
+    [[nodiscard]] std::expected<void, Rejection> check_convert(const InstrumentInfo& instrument,
+                                                               oms::Product to,
+                                                               std::int64_t quantity,
+                                                               Millis now) const;
 
     [[nodiscard]] Paise margin(const InstrumentInfo& instrument, oms::Side side,
                                std::int64_t quantity, core::Price price) const noexcept;

@@ -1,9 +1,7 @@
-#include <mda/gateway/signals_api.hpp>
-
 #include <algorithm>
 #include <charconv>
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 
 #include <boost/json.hpp>
@@ -12,6 +10,7 @@
 #include <mda/bus/bus.hpp>
 #include <mda/bus/wait_strategy.hpp>
 #include <mda/gateway/chain_api.hpp>
+#include <mda/gateway/signals_api.hpp>
 #include <mda/signals/market_state.hpp>
 
 #include "api_common.hpp"
@@ -28,8 +27,9 @@ constexpr int kDefaultRecordDays = 30;
 constexpr int kMaxRecordDays = 365;
 
 json::value price_or_null(std::int64_t raw) {
-    return raw > 0 ? json::value(static_cast<double>(raw) / static_cast<double>(core::Price::kScale))
-                   : json::value(nullptr);
+    return raw > 0
+               ? json::value(static_cast<double>(raw) / static_cast<double>(core::Price::kScale))
+               : json::value(nullptr);
 }
 
 std::string date_of(std::int64_t t) {
@@ -51,9 +51,8 @@ std::optional<std::int64_t> day_start_of(std::string_view text) {
                            text.begin() + static_cast<std::ptrdiff_t>(from + count),
                            [](char c) { return c >= '0' && c <= '9'; });
     };
-    if (text.size() != 10 || text[4] != '-' || text[7] != '-' || !digits(0, 4) ||
-        !digits(5, 2) || !digits(8, 2) ||
-        std::sscanf(std::string(text).c_str(), "%4d-%2u-%2u", &y, &m, &d) != 3) {
+    if (text.size() != 10 || text[4] != '-' || text[7] != '-' || !digits(0, 4) || !digits(5, 2) ||
+        !digits(8, 2) || std::sscanf(std::string(text).c_str(), "%4d-%2u-%2u", &y, &m, &d) != 3) {
         return std::nullopt;
     }
     const std::chrono::year_month_day day{std::chrono::year{y}, std::chrono::month{m},
@@ -225,8 +224,8 @@ json::object signal_json(const signals::MarketSignal& signal) {
             {"horizon_min", signal.horizon_min},
             {"score", signal.score},
             {"label", signals::name(signals::label_of(signal))},
-            {"prob", signal.prob_bp > 0 ? json::value(signal.prob_bp / 10'000.0)
-                                        : json::value(nullptr)},
+            {"prob",
+             signal.prob_bp > 0 ? json::value(signal.prob_bp / 10'000.0) : json::value(nullptr)},
             {"top", std::move(top)}};
 }
 
@@ -268,7 +267,8 @@ void register_signal_routes(Router& router, auth::AuthService& auth, storage::Da
                     }
                     json::array newest;
                     if (*latest) {
-                        const auto rows = store.range(indices[i].underlying, **latest, **latest + 60);
+                        const auto rows =
+                            store.range(indices[i].underlying, **latest, **latest + 60);
                         if (!rows) {
                             return internal(rows.error());
                         }
@@ -290,7 +290,8 @@ void register_signal_routes(Router& router, auth::AuthService& auth, storage::Da
                 }
                 json::array factors;
                 for (std::size_t i = 1; i <= signals::kFactorCount; ++i) {
-                    factors.push_back(json::string(signals::name(static_cast<signals::FactorId>(i))));
+                    factors.push_back(
+                        json::string(signals::name(static_cast<signals::FactorId>(i))));
                 }
                 return success(json::object{{"indices", std::move(index_list)},
                                             {"strategies", std::move(strategy_list)},
@@ -317,7 +318,8 @@ void register_signal_routes(Router& router, auth::AuthService& auth, storage::Da
                 }
             }
             const std::string token = token_of(request);
-            const auto user = co_await run_on(db_executor, [&] { return auth.authenticate(token); });
+            const auto user =
+                co_await run_on(db_executor, [&] { return auth.authenticate(token); });
             if (!user) {
                 co_return from_error(user.error());
             }
@@ -362,21 +364,24 @@ void register_signal_routes(Router& router, auth::AuthService& auth, storage::Da
             }
             int days = kDefaultRecordDays;
             if (const auto text = query_param(request, "days")) {
-                const auto [end, error] = std::from_chars(text->data(), text->data() + text->size(), days);
+                const auto [end, error] =
+                    std::from_chars(text->data(), text->data() + text->size(), days);
                 if (error != std::errc{} || end != text->data() + text->size() || days < 1 ||
                     days > kMaxRecordDays) {
                     co_return detail::bad_input("days must be 1-365");
                 }
             }
             const std::string token = token_of(request);
-            const auto user = co_await run_on(db_executor, [&] { return auth.authenticate(token); });
+            const auto user =
+                co_await run_on(db_executor, [&] { return auth.authenticate(token); });
             if (!user) {
                 co_return from_error(user.error());
             }
             const std::int64_t today = signals::ist_day_start(auth::system_clock_seconds());
             const std::int64_t from = today - std::int64_t{days - 1} * signals::kSecondsPerDay;
             co_return co_await run_on(signals_executor, [&]() -> Response {
-                const auto records = store.record(underlying, from, today + signals::kSecondsPerDay);
+                const auto records =
+                    store.record(underlying, from, today + signals::kSecondsPerDay);
                 if (!records) {
                     return internal(records.error());
                 }

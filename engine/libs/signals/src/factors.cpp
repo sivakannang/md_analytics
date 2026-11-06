@@ -1,9 +1,9 @@
-#include <mda/signals/factors.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <utility>
+
+#include <mda/signals/factors.hpp>
 
 namespace mda::signals {
 namespace {
@@ -72,7 +72,8 @@ FactorValue atm_oi_shift(const MarketState& state, std::int64_t t, const FactorP
     // ATM ± N strikes by position in the strike list, so uneven strike steps still work.
     std::size_t atm = 0;
     for (std::size_t i = 1; i < strikes.size(); ++i) {
-        if (std::abs(strikes[i] - summary->atm_strike) < std::abs(strikes[atm] - summary->atm_strike)) {
+        if (std::abs(strikes[i] - summary->atm_strike) <
+            std::abs(strikes[atm] - summary->atm_strike)) {
             atm = i;
         }
     }
@@ -138,7 +139,8 @@ FactorValue atm_iv_change(const MarketState& state, std::int64_t t, const Factor
         return absent(id);
     }
     // Falling IV: fear easing, which tends to go with a rising index.
-    return present(id, -std::tanh((change->first.atm_iv - change->second.atm_iv) / params.iv_scale));
+    return present(id,
+                   -std::tanh((change->first.atm_iv - change->second.atm_iv) / params.iv_scale));
 }
 
 FactorValue max_pain_pull(const MarketState& state, std::int64_t t, const FactorParams& params) {
@@ -218,48 +220,48 @@ FactorValue volume_delta(const MarketState& state, std::int64_t t, const FactorP
 FactorValue evaluate_factor(FactorId id, const MarketState& state, std::int64_t t,
                             const FactorParams& params) {
     switch (id) {
-    case FactorId::FuturesBuildup:
-        return futures_buildup(state, t, params);
-    case FactorId::AtmOiShift:
-        return atm_oi_shift(state, t, params);
-    case FactorId::PcrChange:
-        return pcr_change(state, t, params);
-    case FactorId::FutureVsVwap:
-        return future_vs_vwap(state, t, params);
-    case FactorId::AtmIvChange:
-        return atm_iv_change(state, t, params);
-    case FactorId::MaxPainPull:
-        return max_pain_pull(state, t, params);
-    case FactorId::SectorBreadth:
-        return sector_breadth(state, t, params);
-    case FactorId::VixChange:
-        return vix_change(state, t, params);
-    case FactorId::VolumeDelta:
-        return volume_delta(state, t, params);
+        case FactorId::FuturesBuildup:
+            return futures_buildup(state, t, params);
+        case FactorId::AtmOiShift:
+            return atm_oi_shift(state, t, params);
+        case FactorId::PcrChange:
+            return pcr_change(state, t, params);
+        case FactorId::FutureVsVwap:
+            return future_vs_vwap(state, t, params);
+        case FactorId::AtmIvChange:
+            return atm_iv_change(state, t, params);
+        case FactorId::MaxPainPull:
+            return max_pain_pull(state, t, params);
+        case FactorId::SectorBreadth:
+            return sector_breadth(state, t, params);
+        case FactorId::VixChange:
+            return vix_change(state, t, params);
+        case FactorId::VolumeDelta:
+            return volume_delta(state, t, params);
     }
     return absent(id);
 }
 
 std::string_view name(FactorId id) noexcept {
     switch (id) {
-    case FactorId::FuturesBuildup:
-        return "futures_buildup";
-    case FactorId::AtmOiShift:
-        return "atm_oi_shift";
-    case FactorId::PcrChange:
-        return "pcr_change";
-    case FactorId::FutureVsVwap:
-        return "future_vs_vwap";
-    case FactorId::AtmIvChange:
-        return "atm_iv_change";
-    case FactorId::MaxPainPull:
-        return "max_pain_pull";
-    case FactorId::SectorBreadth:
-        return "sector_breadth";
-    case FactorId::VixChange:
-        return "vix_change";
-    case FactorId::VolumeDelta:
-        return "volume_delta";
+        case FactorId::FuturesBuildup:
+            return "futures_buildup";
+        case FactorId::AtmOiShift:
+            return "atm_oi_shift";
+        case FactorId::PcrChange:
+            return "pcr_change";
+        case FactorId::FutureVsVwap:
+            return "future_vs_vwap";
+        case FactorId::AtmIvChange:
+            return "atm_iv_change";
+        case FactorId::MaxPainPull:
+            return "max_pain_pull";
+        case FactorId::SectorBreadth:
+            return "sector_breadth";
+        case FactorId::VixChange:
+            return "vix_change";
+        case FactorId::VolumeDelta:
+            return "volume_delta";
     }
     return "unknown";
 }

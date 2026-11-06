@@ -1,6 +1,6 @@
-#include <mda/oms/paper_venue.hpp>
-
 #include <algorithm>
+
+#include <mda/oms/paper_venue.hpp>
 
 namespace mda::oms {
 
@@ -49,7 +49,8 @@ std::vector<Execution> PaperVenue::take(const Order& order, const Book& book,
     if (left > 0 && !limited && !fills.empty()) {
         // Beyond the visible book: a few ticks worse than its last level.
         const std::int64_t slip = book.tick.raw() * config_.overflow_ticks;
-        const std::int64_t raw = buy ? last.raw() + slip : std::max(book.tick.raw(), last.raw() - slip);
+        const std::int64_t raw =
+            buy ? last.raw() + slip : std::max(book.tick.raw(), last.raw() - slip);
         fills.push_back({.quantity = left, .price = core::Price::from_raw(raw)});
     }
     return fills;
@@ -61,10 +62,11 @@ VenueResult PaperVenue::evaluate(const Order& order, const Book& book, Millis no
         return result;
     }
     // An order the venue wasn't told about counts from its creation.
-    State& state = states_
-                       .try_emplace(order.id(),
-                                    State{.eligible_at = order.created_at() + config_.latency_ms, .resting = false})
-                       .first->second;
+    State& state =
+        states_
+            .try_emplace(order.id(), State{.eligible_at = order.created_at() + config_.latency_ms,
+                                           .resting = false})
+            .first->second;
     if (now < state.eligible_at) {
         return result;
     }
@@ -79,7 +81,8 @@ VenueResult PaperVenue::evaluate(const Order& order, const Book& book, Millis no
 
     if (order.status() == OrderStatus::TriggerPending) {
         const core::Price trigger = order.spec().trigger;
-        const bool reached = book.ltp.raw() > 0 && (buy ? book.ltp >= trigger : book.ltp <= trigger);
+        const bool reached =
+            book.ltp.raw() > 0 && (buy ? book.ltp >= trigger : book.ltp <= trigger);
         if (reached) {
             result.triggered = true;
             state = {.eligible_at = now + config_.latency_ms, .resting = false};
@@ -105,7 +108,8 @@ VenueResult PaperVenue::evaluate(const Order& order, const Book& book, Millis no
     const Level& best = buy ? book.asks[0] : book.bids[0];
     const bool traded_through = book.ltp_at >= state.eligible_at && book.ltp.raw() > 0 &&
                                 (buy ? book.ltp < limit : book.ltp > limit);
-    const bool quoted_through = best.quantity > 0 && (buy ? best.price < limit : best.price > limit);
+    const bool quoted_through =
+        best.quantity > 0 && (buy ? best.price < limit : best.price > limit);
     if (traded_through || quoted_through) {
         result.fills.push_back({.quantity = order.remaining(), .price = limit});
     }

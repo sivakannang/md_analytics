@@ -3,8 +3,8 @@
 // One underlying's rolling market state for the signal strategies (docs/design/signals.md
 // §2–§3): closed 1-minute bars of the spot, its near-month future, its options, the
 // sector indices and India VIX (§13), plus the future's signed volume from its
-// snapshots and depth (F9, §13), plus the engine's chain summaries. Every query takes the evaluation
-// minute `t` and sees only data stamped at or before `t`, on the same IST day, so a
+// snapshots and depth (F9, §13), plus the engine's chain summaries. Every query takes the
+// evaluation minute `t` and sees only data stamped at or before `t`, on the same IST day, so a
 // strategy can't look ahead.
 
 #include <algorithm>
@@ -72,8 +72,9 @@ public:
     [[nodiscard]] std::span<const Point> between(std::int64_t from, std::int64_t t) const {
         const auto by_minute = [](const Point& p, std::int64_t m) { return p.minute < m; };
         const auto first = std::lower_bound(points_.begin(), points_.end(), from, by_minute);
-        const auto last = std::upper_bound(points_.begin(), points_.end(), t,
-                                           [](std::int64_t m, const Point& p) { return m < p.minute; });
+        const auto last =
+            std::upper_bound(points_.begin(), points_.end(), t,
+                             [](std::int64_t m, const Point& p) { return m < p.minute; });
         if (first >= last) {
             return {};
         }
@@ -92,8 +93,9 @@ public:
 
     /// Drops points stamped before `before`.
     void prune(std::int64_t before) {
-        const auto it = std::lower_bound(points_.begin(), points_.end(), before,
-                                         [](const Point& p, std::int64_t m) { return p.minute < m; });
+        const auto it =
+            std::lower_bound(points_.begin(), points_.end(), before,
+                             [](const Point& p, std::int64_t m) { return p.minute < m; });
         points_.erase(points_.begin(), it);
     }
 
@@ -222,8 +224,8 @@ private:
     struct FlowTracker {
         std::int64_t volume = -1;  ///< cumulative day volume; -1 = no baseline
         std::int64_t ltp = 0;
-        int tick = 0;              ///< sign of the last LTP change
-        std::int64_t bid = 0;      ///< best bid and ask, raw; 0 = none
+        int tick = 0;          ///< sign of the last LTP change
+        std::int64_t bid = 0;  ///< best bid and ask, raw; 0 = none
         std::int64_t ask = 0;
     };
     Series<FlowMinute> flow_;

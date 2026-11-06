@@ -80,9 +80,9 @@ private:
         std::int64_t seeded_volume = -1;  // from seed(), until the first volume tick
         int session_start = -1;           // minute of day; -1 until first seen
         int session_end = -1;
-        core::Price last_close;           // last traded price seen (carried into OI-only bars)
-        std::int64_t last_oi = -1;        // -1 unknown
-        bool priced = false;              // the forming bar has a price
+        core::Price last_close;     // last traded price seen (carried into OI-only bars)
+        std::int64_t last_oi = -1;  // -1 unknown
+        bool priced = false;        // the forming bar has a price
     };
 
     void close(State& state);

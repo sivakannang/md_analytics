@@ -23,7 +23,7 @@ struct MarketSignal {
     std::int64_t minute = 0;  ///< minute start, Unix seconds (UTC)
     std::uint16_t strategy = 0;
     std::uint16_t horizon_min = 0;
-    std::int16_t score = 0;    ///< -100 … +100
+    std::int16_t score = 0;     ///< -100 … +100
     std::uint16_t prob_bp = 0;  ///< calibrated P(up) in basis points; 0 = not calibrated
     WireFactor top[4] = {};     ///< largest |points| first
 };

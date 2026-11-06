@@ -131,13 +131,15 @@ std::expected<Database, DbError> Database::open_with(const std::string& name) {
     sqlite3_busy_timeout(raw, kBusyTimeoutMs);
     // Two connections switching the same fresh file at once is a lock upgrade deadlock:
     // SQLite returns BUSY to one without waiting, so retry until the timeout.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kBusyTimeoutMs);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(kBusyTimeoutMs);
     for (;;) {
         auto wal = db.exec("PRAGMA journal_mode = WAL");
         if (wal) {
             break;
         }
-        if ((wal.error().code & 0xFF) != SQLITE_BUSY || std::chrono::steady_clock::now() >= deadline) {
+        if ((wal.error().code & 0xFF) != SQLITE_BUSY ||
+            std::chrono::steady_clock::now() >= deadline) {
             return std::unexpected(wal.error());
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

@@ -21,14 +21,14 @@ std::string_view name(Side side) noexcept {
 
 std::string_view name(OrderType type) noexcept {
     switch (type) {
-    case OrderType::Market:
-        return "MARKET";
-    case OrderType::Limit:
-        return "LIMIT";
-    case OrderType::StopLimit:
-        return "SL";
-    case OrderType::StopMarket:
-        return "SL-M";
+        case OrderType::Market:
+            return "MARKET";
+        case OrderType::Limit:
+            return "LIMIT";
+        case OrderType::StopLimit:
+            return "SL";
+        case OrderType::StopMarket:
+            return "SL-M";
     }
     return "?";
 }
@@ -39,16 +39,16 @@ std::string_view name(Product product) noexcept {
 
 std::string_view name(OrderStatus status) noexcept {
     switch (status) {
-    case OrderStatus::TriggerPending:
-        return "TRIGGER_PENDING";
-    case OrderStatus::Open:
-        return "OPEN";
-    case OrderStatus::Complete:
-        return "COMPLETE";
-    case OrderStatus::Cancelled:
-        return "CANCELLED";
-    case OrderStatus::Rejected:
-        return "REJECTED";
+        case OrderStatus::TriggerPending:
+            return "TRIGGER_PENDING";
+        case OrderStatus::Open:
+            return "OPEN";
+        case OrderStatus::Complete:
+            return "COMPLETE";
+        case OrderStatus::Cancelled:
+            return "CANCELLED";
+        case OrderStatus::Rejected:
+            return "REJECTED";
     }
     return "?";
 }

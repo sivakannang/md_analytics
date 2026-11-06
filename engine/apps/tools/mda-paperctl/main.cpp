@@ -31,15 +31,18 @@ namespace {
 using namespace mda;
 
 int usage() {
-    std::fprintf(stderr,
-                 "usage: mda-paperctl --config FILE place --user N --key KEY --side BUY|SELL --qty Q\n"
-                 "                    [--type MARKET|LIMIT|SL|SL-M] [--price P] [--trigger T] [--product MIS|NRML]\n"
-                 "       mda-paperctl --config FILE cancel --user N --order ID\n"
-                 "       mda-paperctl --config FILE kill --user N on|off\n");
+    std::fprintf(
+        stderr,
+        "usage: mda-paperctl --config FILE place --user N --key KEY --side BUY|SELL --qty Q\n"
+        "                    [--type MARKET|LIMIT|SL|SL-M] [--price P] [--trigger T] [--product "
+        "MIS|NRML]\n"
+        "       mda-paperctl --config FILE cancel --user N --order ID\n"
+        "       mda-paperctl --config FILE kill --user N on|off\n");
     return 2;
 }
 
-std::optional<core::Price> price_of(const std::map<std::string, std::string>& args, const char* name) {
+std::optional<core::Price> price_of(const std::map<std::string, std::string>& args,
+                                    const char* name) {
     const auto found = args.find(name);
     if (found == args.end()) {
         return core::Price{};
@@ -70,7 +73,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (config->ord_gw_bus.name == "ord-gw") {
-        std::fprintf(stderr, "error: refusing the live bus 'ord-gw'; use a test or replay config\n");
+        std::fprintf(stderr,
+                     "error: refusing the live bus 'ord-gw'; use a test or replay config\n");
         return 1;
     }
     if (!args.contains("user")) {
@@ -85,11 +89,14 @@ int main(int argc, char** argv) {
     if (command == "place") {
         const auto loaded = instruments::InstrumentRegistry::load(config->kite.registry_file);
         const auto key = instruments::parse_contract_key(args["key"]);
-        const core::InstrumentId id = loaded && key ? loaded->registry.find(*key) : core::InstrumentId{};
+        const core::InstrumentId id =
+            loaded && key ? loaded->registry.find(*key) : core::InstrumentId{};
         const auto price = price_of(args, "price");
         const auto trigger = price_of(args, "trigger");
         if (!id.valid() || !price || !trigger || !args.contains("side") || !args.contains("qty")) {
-            std::fprintf(stderr, "error: unknown --key, or a bad --price / --trigger, or no --side / --qty\n");
+            std::fprintf(
+                stderr,
+                "error: unknown --key, or a bad --price / --trigger, or no --side / --qty\n");
             return usage();
         }
         const std::string type = args.contains("type") ? args["type"] : "MARKET";
@@ -111,21 +118,25 @@ int main(int argc, char** argv) {
         request.order_id = std::atoll(args["order"].c_str());
     } else if (command == "kill" && (kill_state == "on" || kill_state == "off")) {
         request.header = messages::make_header<broker::OrderRequest>({}, 1);
-        request.action = kill_state == "on" ? broker::Action::KillSwitchOn : broker::Action::KillSwitchOff;
+        request.action =
+            kill_state == "on" ? broker::Action::KillSwitchOn : broker::Action::KillSwitchOff;
     } else {
         return usage();
     }
 
-    auto reports = bus::Reader::attach(config->exec_bus.name, {.name = "mda-paperctl", .register_slot = false});
-    auto writer = bus::Writer::create_or_attach(
-        {.name = config->ord_gw_bus.name, .capacity = config->ord_gw_bus.capacity_mb * 1024 * 1024});
+    auto reports = bus::Reader::attach(config->exec_bus.name,
+                                       {.name = "mda-paperctl", .register_slot = false});
+    auto writer =
+        bus::Writer::create_or_attach({.name = config->ord_gw_bus.name,
+                                       .capacity = config->ord_gw_bus.capacity_mb * 1024 * 1024});
     if (!writer) {
         std::fprintf(stderr, "error: bus %s: %s\n", config->ord_gw_bus.name.c_str(),
                      std::string(bus::to_string(writer.error())).c_str());
         return 1;
     }
     if (!reports) {
-        (void)writer->publish(messages::to_wire(messages::MessageType::OrderRequest), messages::as_bytes(request));
+        (void)writer->publish(messages::to_wire(messages::MessageType::OrderRequest),
+                              messages::as_bytes(request));
         std::printf("sent (no exec bus yet: is mda-broker running with this config?)\n");
         return 0;
     }
@@ -138,12 +149,16 @@ int main(int argc, char** argv) {
         }
         answered = answered || r->client_order_id == request.client_order_id;
         const std::string last =
-            r->last_quantity > 0 ? std::format(" last {} @ {:.2f}", r->last_quantity, r->last_price.to_double()) : "";
-        const std::string reason = broker::text_of(r->reason).empty() ? "" : " — " + std::string(broker::text_of(r->reason));
-        std::printf("order %lld: event %d %s filled %lld/%lld%s%s\n", static_cast<long long>(r->order_id),
-                    static_cast<int>(r->event), std::string(oms::name(r->status)).c_str(),
-                    static_cast<long long>(r->filled), static_cast<long long>(r->quantity), last.c_str(),
-                    reason.c_str());
+            r->last_quantity > 0
+                ? std::format(" last {} @ {:.2f}", r->last_quantity, r->last_price.to_double())
+                : "";
+        const std::string reason = broker::text_of(r->reason).empty()
+                                       ? ""
+                                       : " — " + std::string(broker::text_of(r->reason));
+        std::printf("order %lld: event %d %s filled %lld/%lld%s%s\n",
+                    static_cast<long long>(r->order_id), static_cast<int>(r->event),
+                    std::string(oms::name(r->status)).c_str(), static_cast<long long>(r->filled),
+                    static_cast<long long>(r->quantity), last.c_str(), reason.c_str());
     };
     const auto read_for = [&](std::chrono::milliseconds span, bool until_answered) {
         const auto until = std::chrono::steady_clock::now() + span;
@@ -156,7 +171,8 @@ int main(int argc, char** argv) {
     // The bus is lossy (a reader attaching late misses earlier messages): send again, with
     // the same client order id, until mda-broker answers; a repeat is never a new order.
     for (int attempt = 1; attempt <= 3 && !answered; ++attempt) {
-        (void)writer->publish(messages::to_wire(messages::MessageType::OrderRequest), messages::as_bytes(request));
+        (void)writer->publish(messages::to_wire(messages::MessageType::OrderRequest),
+                              messages::as_bytes(request));
         std::printf("sent: user %lld client %llu (try %d)\n", static_cast<long long>(request.user),
                     static_cast<unsigned long long>(request.client_order_id), attempt);
         read_for(std::chrono::seconds(1), true);

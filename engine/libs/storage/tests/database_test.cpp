@@ -131,14 +131,15 @@ TEST(DatabaseTest, FileDatabasePersistsAcrossOpens) {
 // Two processes once created bars.db together and one failed with "database is locked":
 // opening must wait for another connection's lock instead of failing at once.
 TEST(DatabaseTest, OpeningWaitsForAnotherConnectionsLock) {
-    const auto dir = std::filesystem::temp_directory_path() /
-                     ("mda_db_lock_" + std::to_string(::getpid()));
+    const auto dir =
+        std::filesystem::temp_directory_path() / ("mda_db_lock_" + std::to_string(::getpid()));
     std::filesystem::create_directories(dir);
     const auto path = dir / "fresh.db";
     sqlite3* holder = nullptr;
     ASSERT_EQ(sqlite3_open(path.string().c_str(), &holder), SQLITE_OK);
-    ASSERT_EQ(sqlite3_exec(holder, "BEGIN EXCLUSIVE; CREATE TABLE t (x);", nullptr, nullptr, nullptr),
-              SQLITE_OK);
+    ASSERT_EQ(
+        sqlite3_exec(holder, "BEGIN EXCLUSIVE; CREATE TABLE t (x);", nullptr, nullptr, nullptr),
+        SQLITE_OK);
     std::jthread release([holder] {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         sqlite3_exec(holder, "COMMIT", nullptr, nullptr, nullptr);
@@ -153,8 +154,8 @@ TEST(DatabaseTest, OpeningWaitsForAnotherConnectionsLock) {
 // The engine and mda-signald create a replay's bars.db at the same moment: both must open it
 // and the migrations must run once.
 TEST(DatabaseTest, TwoConnectionsCreateAndMigrateAFreshFileTogether) {
-    const auto dir = std::filesystem::temp_directory_path() /
-                     ("mda_db_race_" + std::to_string(::getpid()));
+    const auto dir =
+        std::filesystem::temp_directory_path() / ("mda_db_race_" + std::to_string(::getpid()));
     for (int round = 0; round < 20; ++round) {
         std::filesystem::remove_all(dir);
         const auto path = dir / "fresh.db";

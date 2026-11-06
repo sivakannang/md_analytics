@@ -22,7 +22,8 @@ struct McxMargins {
     std::map<std::string, oms::Ppb> by_commodity;
     oms::Ppb fallback = 150'000'000;  ///< 15%: a commodity not listed
 
-    [[nodiscard]] static McxMargins from_percent(const std::map<std::string, double>& percent, double fallback) {
+    [[nodiscard]] static McxMargins from_percent(const std::map<std::string, double>& percent,
+                                                 double fallback) {
         const auto ppb = [](double p) { return static_cast<oms::Ppb>(p * 10'000'000.0); };
         McxMargins out{.by_commodity = {}, .fallback = ppb(fallback)};
         for (const auto& [name, p] : percent) {
@@ -35,7 +36,8 @@ struct McxMargins {
 class InstrumentCatalog {
 public:
     /// `freeze`: the exchange freeze quantity per underlying (config paper.freeze_quantity).
-    InstrumentCatalog(storage::Database& db, std::map<std::string, std::int64_t> freeze, McxMargins mcx = {});
+    InstrumentCatalog(storage::Database& db, std::map<std::string, std::int64_t> freeze,
+                      McxMargins mcx = {});
 
     [[nodiscard]] std::optional<rms::InstrumentInfo> get(core::InstrumentId id);
     void clear() { cache_.clear(); }

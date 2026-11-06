@@ -7,17 +7,32 @@ namespace {
 
 TEST(DecisionStore, SavesDecisionsAndTheDay) {
     auto store = DecisionStore::open_in_memory().value();
-    const Decision decisions[] = {
-        {.at = 100, .before = State::Flat, .action = "enter long", .reason = "Bullish +38", .client_order_id = 5,
-         .price = core::Price::from_raw(226'000'000)},
-        {.at = 200, .before = State::Entering, .action = "long", .reason = "entry filled", .client_order_id = 5}};
-    ASSERT_TRUE(store.save("nifty-follow", decisions,
-                           {.day = 20'748, .entries = 1, .realised = 0, .charges = 9'600, .last_exit = 0,
-                            .counter = 1, .last_entry = 200})
+    const Decision decisions[] = {{.at = 100,
+                                   .before = State::Flat,
+                                   .action = "enter long",
+                                   .reason = "Bullish +38",
+                                   .client_order_id = 5,
+                                   .price = core::Price::from_raw(226'000'000)},
+                                  {.at = 200,
+                                   .before = State::Entering,
+                                   .action = "long",
+                                   .reason = "entry filled",
+                                   .client_order_id = 5}};
+    ASSERT_TRUE(store
+                    .save("nifty-follow", decisions,
+                          {.day = 20'748,
+                           .entries = 1,
+                           .realised = 0,
+                           .charges = 9'600,
+                           .last_exit = 0,
+                           .counter = 1,
+                           .last_entry = 200})
                     .has_value());
-    ASSERT_TRUE(store.save("nifty-follow", {}, {.day = 20'748, .entries = 1, .charges = 9'700, .counter = 2,
-                                                .last_entry = 200})
-                    .has_value());  // the day row is replaced
+    ASSERT_TRUE(
+        store
+            .save("nifty-follow", {},
+                  {.day = 20'748, .entries = 1, .charges = 9'700, .counter = 2, .last_entry = 200})
+            .has_value());  // the day row is replaced
 
     const auto day = store.day("nifty-follow", 20'748).value();
     ASSERT_TRUE(day.has_value());

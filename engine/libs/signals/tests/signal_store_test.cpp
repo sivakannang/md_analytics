@@ -10,25 +10,34 @@ namespace {
 using namespace test;
 
 SignalRecord record(std::string underlying, std::int64_t minute, int score) {
-    Signal signal{.spot = kSpot, .minute = minute, .strategy = StrategyId::OiBiasV1,
-                  .horizon_min = 30, .score = score,
-                  .label = score >= 25 ? Label::Bullish : Label::Neutral, .factors = {}};
-    signal.factors.push_back({.id = FactorId::PcrChange, .status = FactorStatus::Present,
-                              .value = 0.7616, .points = 11.42});
+    Signal signal{.spot = kSpot,
+                  .minute = minute,
+                  .strategy = StrategyId::OiBiasV1,
+                  .horizon_min = 30,
+                  .score = score,
+                  .label = score >= 25 ? Label::Bullish : Label::Neutral,
+                  .factors = {}};
+    signal.factors.push_back({.id = FactorId::PcrChange,
+                              .status = FactorStatus::Present,
+                              .value = 0.7616,
+                              .points = 11.42});
     signal.factors.push_back({.id = FactorId::MaxPainPull, .status = FactorStatus::NotApplicable});
-    return {.underlying = std::move(underlying), .signal = std::move(signal), .spot_raw = 250'000'000};
+    return {
+        .underlying = std::move(underlying), .signal = std::move(signal), .spot_raw = 250'000'000};
 }
 
 TEST(SignalStore, FactorsAsJson) {
-    EXPECT_EQ(factors_json(record("NIFTY", 0, 0).signal),
-              R"([{"factor":"pcr_change","status":"present","value":0.7616,"points":11.42},)"
-              R"({"factor":"max_pain_pull","status":"not_applicable","value":0.0000,"points":0.00}])");
+    EXPECT_EQ(
+        factors_json(record("NIFTY", 0, 0).signal),
+        R"([{"factor":"pcr_change","status":"present","value":0.7616,"points":11.42},)"
+        R"({"factor":"max_pain_pull","status":"not_applicable","value":0.0000,"points":0.00}])");
 }
 
 TEST(SignalStore, WritesAndReadsBack) {
     auto store = SignalStore::open_in_memory();
     ASSERT_TRUE(store.has_value());
-    const std::vector<SignalRecord> records = {record("NIFTY", at_min(1), 30), record("NIFTY", at_min(0), 10),
+    const std::vector<SignalRecord> records = {record("NIFTY", at_min(1), 30),
+                                               record("NIFTY", at_min(0), 10),
                                                record("SENSEX", at_min(0), -5)};
     ASSERT_TRUE(store->write(records).has_value());
 
@@ -71,11 +80,11 @@ TEST(SignalStore, OutcomesAndTrackRecord) {
         std::optional<double> after;  // empty: still open
     };
     const Case cases[] = {
-        {at_min(0), Label::Bullish, 100, 101},     // hit; nothing a horizon earlier
-        {at_min(30), Label::Bearish, 101, 100},    // hit; momentum (100 -> 101, up) wrong
+        {at_min(0), Label::Bullish, 100, 101},   // hit; nothing a horizon earlier
+        {at_min(30), Label::Bearish, 101, 100},  // hit; momentum (100 -> 101, up) wrong
         {at_min(45), Label::Neutral, 100.5, 100.5},
-        {at_min(60), Label::Bullish, 100, 99},     // miss; momentum (101 -> 100, down) right
-        {at_min(90), Label::Bearish, 99, 99.03},   // +3 bp: flat
+        {at_min(60), Label::Bullish, 100, 99},    // miss; momentum (101 -> 100, down) right
+        {at_min(90), Label::Bearish, 99, 99.03},  // +3 bp: flat
         {at_min(120), Label::Bullish, 99, std::nullopt},
     };
     std::vector<SignalRecord> records;
@@ -86,7 +95,9 @@ TEST(SignalStore, OutcomesAndTrackRecord) {
         r.spot_raw = raw(c.spot);
         records.push_back(r);
         if (c.after) {
-            outcomes.push_back({.strategy = "oi-bias-v1", .underlying = "NIFTY", .minute = c.minute,
+            outcomes.push_back({.strategy = "oi-bias-v1",
+                                .underlying = "NIFTY",
+                                .minute = c.minute,
                                 .outcome = outcome(c.label, raw(c.spot), raw(*c.after), 5)});
         }
     }
@@ -128,7 +139,9 @@ TEST(SignalStore, ReEvaluatedMinuteLosesItsOutcome) {
     auto store = SignalStore::open_in_memory();
     ASSERT_TRUE(store.has_value());
     ASSERT_TRUE(store->write(std::vector{record("NIFTY", at_min(0), 30)}).has_value());
-    const OutcomeUpdate update{.strategy = "oi-bias-v1", .underlying = "NIFTY", .minute = at_min(0),
+    const OutcomeUpdate update{.strategy = "oi-bias-v1",
+                               .underlying = "NIFTY",
+                               .minute = at_min(0),
                                .outcome = outcome(Label::Bullish, 250'000'000, 251'000'000, 5)};
     ASSERT_TRUE(store->set_outcomes(std::span(&update, 1)).has_value());
     EXPECT_TRUE(store->pending("NIFTY")->empty());

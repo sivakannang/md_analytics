@@ -1,8 +1,8 @@
-#include <mda/autotrade/decision_store.hpp>
-
 #include <array>
 #include <system_error>
 #include <utility>
+
+#include <mda/autotrade/decision_store.hpp>
 
 namespace mda::autotrade {
 namespace {
@@ -71,7 +71,8 @@ std::expected<DecisionStore, DbError> DecisionStore::open_in_memory() {
     return prepare(std::move(*db));
 }
 
-std::expected<void, DbError> DecisionStore::save(std::string_view run, std::span<const Decision> decisions,
+std::expected<void, DbError> DecisionStore::save(std::string_view run,
+                                                 std::span<const Decision> decisions,
                                                  const RunDay& day) {
     auto transaction = storage::Transaction::begin(db_);
     if (!transaction) {
@@ -98,7 +99,8 @@ std::expected<void, DbError> DecisionStore::save(std::string_view run, std::span
         }
     }
     auto upsert = db_.prepare(
-        "INSERT OR REPLACE INTO runs_day (run, day, entries, realised, charges, last_exit, counter, last_entry) "
+        "INSERT OR REPLACE INTO runs_day (run, day, entries, realised, charges, last_exit, "
+        "counter, last_entry) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)");
     if (!upsert) {
         return std::unexpected(upsert.error());
@@ -118,9 +120,11 @@ std::expected<void, DbError> DecisionStore::save(std::string_view run, std::span
     return transaction->commit();
 }
 
-std::expected<std::optional<RunDay>, DbError> DecisionStore::day(std::string_view run, std::int32_t day) {
+std::expected<std::optional<RunDay>, DbError> DecisionStore::day(std::string_view run,
+                                                                 std::int32_t day) {
     auto statement = db_.prepare(
-        "SELECT entries, realised, charges, last_exit, counter, last_entry FROM runs_day WHERE run = ?1 AND day = ?2");
+        "SELECT entries, realised, charges, last_exit, counter, last_entry FROM runs_day WHERE run "
+        "= ?1 AND day = ?2");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -142,7 +146,8 @@ std::expected<std::optional<RunDay>, DbError> DecisionStore::day(std::string_vie
                   .last_entry = s.column_int64(5)};
 }
 
-std::expected<std::vector<Decision>, DbError> DecisionStore::decisions(std::string_view run, Millis from, Millis to) {
+std::expected<std::vector<Decision>, DbError> DecisionStore::decisions(std::string_view run,
+                                                                       Millis from, Millis to) {
     auto statement = db_.prepare(
         "SELECT at, state_before, action, reason, client_order_id, price_raw FROM decisions "
         "WHERE run = ?1 AND at >= ?2 AND at < ?3 ORDER BY id");

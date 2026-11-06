@@ -16,6 +16,7 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/json/object.hpp>
+
 #include <mda/auth/auth_service.hpp>
 #include <mda/gateway/http.hpp>
 #include <mda/gateway/quote_cache.hpp>

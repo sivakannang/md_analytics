@@ -186,8 +186,9 @@ TEST_F(WatchlistsTest, SetOrderRearrangesGroupsAndItems) {
 TEST(WatchlistsExpiry, ContractsExpiredBeforeTodayAreRemoved) {
     auto db = storage::Database::open_in_memory().value();
     ASSERT_TRUE(db.migrate(appdb::migrations()).has_value());
-    ASSERT_TRUE(db.exec("INSERT INTO users (username, password_hash, created_at, password_changed_at) "
-                        "VALUES ('asha', 'x', 0, 0)"));
+    ASSERT_TRUE(
+        db.exec("INSERT INTO users (username, password_hash, created_at, password_changed_at) "
+                "VALUES ('asha', 'x', 0, 0)"));
     instruments::InstrumentRegistry registry;
     const auto add = [&](instruments::ContractKey key, const char* symbol) {
         const auto id = registry.assign(key);
@@ -205,8 +206,11 @@ TEST(WatchlistsExpiry, ContractsExpiredBeforeTodayAreRemoved) {
                                         .underlying = "NIFTY",
                                         .expiry = expiry};
     };
-    add({.exchange = instruments::Exchange::Nse, .market = instruments::Market::Cash,
-         .kind = instruments::Kind::Equity, .underlying = "INFY"}, "INFY");
+    add({.exchange = instruments::Exchange::Nse,
+         .market = instruments::Market::Cash,
+         .kind = instruments::Kind::Equity,
+         .underlying = "INFY"},
+        "INFY");
     add(future(2026y / 10 / 27), "NIFTY26OCTFUT");
     add(future(2026y / 10 / 28), "NIFTY26OCT28FUT");
     ASSERT_TRUE(catalog::sync(db, registry, 0).has_value());

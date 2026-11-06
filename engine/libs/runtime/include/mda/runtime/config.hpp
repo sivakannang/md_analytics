@@ -127,8 +127,8 @@ struct PaperConfig {
     std::int64_t stale_after_ms = 5'000;
     double futures_margin_percent = 12.0;        ///< index futures
     double stock_futures_margin_percent = 20.0;  ///< stock futures
-    int mis_square_off = 15 * 3600 + 25 * 60;  ///< seconds after 00:00 IST ("15:25" in the file)
-    int daily_summary = 15 * 3600 + 35 * 60;   ///< when each trader's day is sent ("15:35")
+    int mis_square_off = 15 * 3600 + 25 * 60;    ///< seconds after 00:00 IST ("15:25" in the file)
+    int daily_summary = 15 * 3600 + 35 * 60;     ///< when each trader's day is sent ("15:35")
     /// Exchange freeze quantity per underlying (units); missing = no limit.
     std::map<std::string, std::int64_t> freeze_quantity;
     /// MCX futures margin per commodity (ADR-0031); "default" for the rest.
@@ -138,24 +138,24 @@ struct PaperConfig {
 
 /// One auto-trader run (ADR-0030, docs/design/auto-trader.md §3).
 struct AutoRunConfig {
-    std::string id;                         ///< stable: tags its orders "auto:<id>"
-    std::int64_t user = 0;                  ///< whose paper account (app.db user id)
+    std::string id;         ///< stable: tags its orders "auto:<id>"
+    std::int64_t user = 0;  ///< whose paper account (app.db user id)
     std::string strategy = "follow-signal";
-    std::string signal = "oi-bias-v1";      ///< the signald strategy it follows
-    std::string underlying;                 ///< trades this index's near-month future
+    std::string signal = "oi-bias-v1";  ///< the signald strategy it follows
+    std::string underlying;             ///< trades this index's near-month future
     std::int64_t lots = 1;
     std::string product = "MIS";
     double stop_points = 40;
-    double target_points = 80;              ///< 0 = none
+    double target_points = 80;  ///< 0 = none
     int max_hold_min = 45;
     int max_trades_per_day = 6;
     int cooldown_min = 10;
-    int exit_score = 10;                    ///< hysteresis: held until the score falls through this
-    std::int64_t daily_loss_stop = 5'000;   ///< rupees, P&L after charges
+    int exit_score = 10;                   ///< hysteresis: held until the score falls through this
+    std::int64_t daily_loss_stop = 5'000;  ///< rupees, P&L after charges
     bool enabled = true;
     // follow-signal-options only (auto-trader.md §10); stop_points is not used there.
-    double index_stop_points = 25;          ///< the index moves this far against: exit
-    double premium_stop_percent = 30;       ///< the resting SL below the entry premium
+    double index_stop_points = 25;     ///< the index moves this far against: exit
+    double premium_stop_percent = 30;  ///< the resting SL below the entry premium
     int entry_slip_ticks = 2;
     int entry_timeout_s = 10;
     int stop_limit_ticks = 10;
@@ -173,11 +173,12 @@ struct Config {
     LoggingConfig logging;
     DatabaseConfig database;
     BusConfig md_bus;
-    BusConfig an_bus{.name = "an", .capacity_mb = 64};  ///< analytics: mda-engine -> gateway
-    BusConfig sig_bus{.name = "sig", .capacity_mb = 4};  ///< signals: mda-signald -> gateway
-    BusConfig ord_gw_bus{.name = "ord-gw", .capacity_mb = 4};      ///< orders: gateway -> mda-broker
-    BusConfig ord_auto_bus{.name = "ord-auto", .capacity_mb = 4};  ///< orders: auto trader -> mda-broker
-    BusConfig exec_bus{.name = "exec", .capacity_mb = 8};          ///< reports: mda-broker -> all
+    BusConfig an_bus{.name = "an", .capacity_mb = 64};         ///< analytics: mda-engine -> gateway
+    BusConfig sig_bus{.name = "sig", .capacity_mb = 4};        ///< signals: mda-signald -> gateway
+    BusConfig ord_gw_bus{.name = "ord-gw", .capacity_mb = 4};  ///< orders: gateway -> mda-broker
+    BusConfig ord_auto_bus{.name = "ord-auto",
+                           .capacity_mb = 4};              ///< orders: auto trader -> mda-broker
+    BusConfig exec_bus{.name = "exec", .capacity_mb = 8};  ///< reports: mda-broker -> all
     KiteConfig kite;
     FeedConfig feed;
     EngineConfig engine;

@@ -12,7 +12,8 @@ using namespace test;
 constexpr std::int64_t k100 = 100 * core::Price::kScale;
 
 TEST(Outcome, BullishUpIsAHit) {
-    const auto result = outcome(Label::Bullish, k100, 1001 * core::Price::kScale / 10, 5);  // +10 bp
+    const auto result =
+        outcome(Label::Bullish, k100, 1001 * core::Price::kScale / 10, 5);  // +10 bp
     EXPECT_EQ(result.return_bp, 10);
     EXPECT_EQ(result.hit, true);
 }
@@ -47,11 +48,12 @@ TEST(DayClosed, AfterTheLastCashMinuteOrALaterDay) {
 }
 
 TEST(SettlePrice, FirstCloseAtOrAfterTheHorizon) {
-    const std::vector<SpotClose> day = {{at_min(0), 1}, {at_min(29), 2}, {at_min(31), 3}, {at_min(40), 4}};
+    const std::vector<SpotClose> day = {
+        {at_min(0), 1}, {at_min(29), 2}, {at_min(31), 3}, {at_min(40), 4}};
     EXPECT_EQ(settle_price(day, at_min(0), 30, false), 3);  // minute 30 missing: the next bar
     EXPECT_EQ(settle_price(day, at_min(0), 29, false), 2);
     EXPECT_FALSE(settle_price(day, at_min(20), 30, false).has_value());  // not yet
-    EXPECT_EQ(settle_price(day, at_min(20), 30, true), 4);  // day over: its last close
+    EXPECT_EQ(settle_price(day, at_min(20), 30, true), 4);               // day over: its last close
     EXPECT_FALSE(settle_price({}, at_min(20), 30, true).has_value());
 }
 

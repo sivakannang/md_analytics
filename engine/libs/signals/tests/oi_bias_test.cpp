@@ -17,8 +17,10 @@ using namespace test;
 MarketState trending(int direction) {
     auto state = make_state();
     const double d = direction;
-    state.on_bar(bar({.id = kFuture, .minute = at_min(15), .close = 100, .oi = 1000, .volume = 10}));
-    state.on_bar(bar({.id = kFuture, .minute = at_min(30), .close = 100 + d, .oi = 1100, .volume = 10}));
+    state.on_bar(
+        bar({.id = kFuture, .minute = at_min(15), .close = 100, .oi = 1000, .volume = 10}));
+    state.on_bar(
+        bar({.id = kFuture, .minute = at_min(30), .close = 100 + d, .oi = 1100, .volume = 10}));
     state.on_summary(summary({.pcr = 1.0 - 0.05 * d}), at_min(0));
     state.on_summary(summary({.pcr = 1.0 + 0.05 * d}), at_min(30));
     return state;
@@ -52,8 +54,8 @@ TEST(OiBiasV1, BullishTrend) {
     EXPECT_EQ(signal.spot, kSpot);
     EXPECT_EQ(signal.minute, at_min(30));
     EXPECT_EQ(signal.horizon_min, 30);
-    EXPECT_DOUBLE_EQ(signal.factors[0].points, 20);  // futures long buildup
-    EXPECT_EQ(signal.factors[1].status, FactorStatus::Absent);  // no options
+    EXPECT_DOUBLE_EQ(signal.factors[0].points, 20);                    // futures long buildup
+    EXPECT_EQ(signal.factors[1].status, FactorStatus::Absent);         // no options
     EXPECT_EQ(signal.factors[5].status, FactorStatus::NotApplicable);  // expiry a week out
 }
 
@@ -61,7 +63,8 @@ TEST(OiBiasV1, CandidateVixFactorIsScoredButWeighsNothing) {
     auto state = trending(+1);
     state.set_vix(core::InstrumentId{300});
     state.on_bar(bar({.id = core::InstrumentId{300}, .minute = at_min(0), .close = 14}));
-    state.on_bar(bar({.id = core::InstrumentId{300}, .minute = at_min(30), .close = 15}));  // +7 %: bearish
+    state.on_bar(
+        bar({.id = core::InstrumentId{300}, .minute = at_min(30), .close = 15}));  // +7 %: bearish
     const auto signal = OiBiasV1{}.evaluate(state, at_min(30));
     EXPECT_EQ(signal.score, expected_score(+1));
     const auto& vix = signal.factors[static_cast<std::size_t>(FactorId::VixChange) - 1];

@@ -18,8 +18,13 @@ constexpr Millis kLive = kT0 + 100;        // eligible (100 ms latency)
 /// A fresh book: LTP, bids and asks as {price, quantity} (best first).
 Book book(double ltp, std::initializer_list<std::pair<double, std::int64_t>> bids,
           std::initializer_list<std::pair<double, std::int64_t>> asks, Millis at = kLive) {
-    Book b{.ltp = rupees(ltp), .ltp_at = at, .bids = {}, .asks = {}, .updated_at = at,
-           .tick = rupees(0.05), .feed_ok = true};
+    Book b{.ltp = rupees(ltp),
+           .ltp_at = at,
+           .bids = {},
+           .asks = {},
+           .updated_at = at,
+           .tick = rupees(0.05),
+           .feed_ok = true};
     std::size_t i = 0;
     for (const auto& [price, qty] : bids) {
         b.bids[i++] = {.price = rupees(price), .quantity = qty};
@@ -33,14 +38,22 @@ Book book(double ltp, std::initializer_list<std::pair<double, std::int64_t>> bid
 
 Order order(Side side, OrderType type, std::int64_t qty, double price = 0, double trigger = 0) {
     return Order::accepted(1,
-                           {.account = 1, .client_order_id = 1, .source = Source::Ui,
-                            .instrument = core::InstrumentId(9), .side = side, .type = type,
-                            .product = Product::Mis, .quantity = qty, .price = rupees(price),
-                            .trigger = rupees(trigger), .tag = {}},
+                           {.account = 1,
+                            .client_order_id = 1,
+                            .source = Source::Ui,
+                            .instrument = core::InstrumentId(9),
+                            .side = side,
+                            .type = type,
+                            .product = Product::Mis,
+                            .quantity = qty,
+                            .price = rupees(price),
+                            .trigger = rupees(trigger),
+                            .tag = {}},
                            kT0);
 }
 
-const Book kMarket = book(100.00, {{99.95, 40}, {99.90, 60}}, {{100.00, 50}, {100.05, 50}, {100.10, 100}});
+const Book kMarket =
+    book(100.00, {{99.95, 40}, {99.90, 60}}, {{100.00, 50}, {100.05, 50}, {100.10, 100}});
 
 TEST(PaperVenue, NothingBeforeTheLatency) {
     PaperVenue venue;
@@ -87,7 +100,8 @@ TEST(PaperVenue, MarketRejectedWithoutLiquidityOrFreshData) {
     const auto o = order(Side::Buy, OrderType::Market, 10);
     PaperVenue venue;
     venue.accepted(o, kT0);
-    EXPECT_EQ(venue.evaluate(o, book(100, {{99.95, 10}}, {}), kLive).reject, "no liquidity on the other side");
+    EXPECT_EQ(venue.evaluate(o, book(100, {{99.95, 10}}, {}), kLive).reject,
+              "no liquidity on the other side");
 
     Book stale = kMarket;
     stale.updated_at = kLive - 6'000;
@@ -110,8 +124,10 @@ TEST(PaperVenue, MarketableLimitTakesThenRestsUntilQuotedThrough) {
     const auto same = book(100.05, {{100.00, 10}}, {{100.10, 100}}, kLive + 1'000);
     EXPECT_TRUE(venue.evaluate(o, same, kLive + 1'000).fills.empty());
     // An ask at the limit only touches it; an ask below it is through it.
-    EXPECT_TRUE(venue.evaluate(o, book(100.05, {}, {{100.05, 100}}, kLive + 2'000), kLive + 2'000).fills.empty());
-    const auto through = venue.evaluate(o, book(100.05, {}, {{100.00, 100}}, kLive + 3'000), kLive + 3'000);
+    EXPECT_TRUE(venue.evaluate(o, book(100.05, {}, {{100.05, 100}}, kLive + 2'000), kLive + 2'000)
+                    .fills.empty());
+    const auto through =
+        venue.evaluate(o, book(100.05, {}, {{100.00, 100}}, kLive + 3'000), kLive + 3'000);
     ASSERT_EQ(through.fills.size(), 1u);
     EXPECT_EQ(through.fills[0].quantity, 50);
     EXPECT_EQ(through.fills[0].price, rupees(100.05));  // at its own price
@@ -121,7 +137,8 @@ TEST(PaperVenue, RestingLimitFillsOnlyWhenTradedThrough) {
     PaperVenue venue;
     const auto o = order(Side::Buy, OrderType::Limit, 75, 99.50);
     venue.accepted(o, kT0);
-    EXPECT_TRUE(venue.evaluate(o, kMarket, kLive).fills.empty());  // its first look: nothing at 99.50
+    EXPECT_TRUE(
+        venue.evaluate(o, kMarket, kLive).fills.empty());  // its first look: nothing at 99.50
 
     const auto touch = book(99.50, {{99.45, 10}}, {{99.55, 10}}, kLive + 1'000);
     EXPECT_TRUE(venue.evaluate(o, touch, kLive + 1'000).fills.empty());
@@ -129,7 +146,8 @@ TEST(PaperVenue, RestingLimitFillsOnlyWhenTradedThrough) {
     Book early = book(99.40, {{99.45, 10}}, {{99.55, 10}}, kLive + 2'000);
     early.ltp_at = kT0;
     EXPECT_TRUE(venue.evaluate(o, early, kLive + 2'000).fills.empty());
-    const auto r = venue.evaluate(o, book(99.45, {{99.40, 10}}, {{99.55, 10}}, kLive + 3'000), kLive + 3'000);
+    const auto r =
+        venue.evaluate(o, book(99.45, {{99.40, 10}}, {{99.55, 10}}, kLive + 3'000), kLive + 3'000);
     ASSERT_EQ(r.fills.size(), 1u);
     EXPECT_EQ(r.fills[0].quantity, 75);
     EXPECT_EQ(r.fills[0].price, rupees(99.50));
@@ -140,7 +158,8 @@ TEST(PaperVenue, RestingSellLimitMirrors) {
     const auto o = order(Side::Sell, OrderType::Limit, 75, 100.50);
     venue.accepted(o, kT0);
     EXPECT_TRUE(venue.evaluate(o, kMarket, kLive).fills.empty());
-    const auto r = venue.evaluate(o, book(100.55, {{100.50, 10}}, {{100.60, 10}}, kLive + 1'000), kLive + 1'000);
+    const auto r = venue.evaluate(o, book(100.55, {{100.50, 10}}, {{100.60, 10}}, kLive + 1'000),
+                                  kLive + 1'000);
     ASSERT_EQ(r.fills.size(), 1u);
     EXPECT_EQ(r.fills[0].price, rupees(100.50));
 }

@@ -19,7 +19,10 @@ constexpr std::int64_t minute_of(int hour, int minute) {
     return kMidnightIst + hour * 3600 + minute * 60;
 }
 
-const Contract kFuture{.id = core::InstrumentId(18486), .lot_size = 65, .expiry_days = kToday + 5, .tick = rupees(0.10)};
+const Contract kFuture{.id = core::InstrumentId(18486),
+                       .lot_size = 65,
+                       .expiry_days = kToday + 5,
+                       .tick = rupees(0.10)};
 
 RunConfig config() {
     RunConfig c;
@@ -37,11 +40,13 @@ Market market(double ltp, Millis now) {
 SignalView signal(int hour, int minute, int score) {
     return {.minute = minute_of(hour, minute),
             .score = score,
-            .label = score >= 25 ? signals::Label::Bullish : score <= -25 ? signals::Label::Bearish : signals::Label::Neutral};
+            .label = score >= 25    ? signals::Label::Bullish
+                     : score <= -25 ? signals::Label::Bearish
+                                    : signals::Label::Neutral};
 }
 
-broker::ExecutionReport report(std::uint64_t client, broker::ReportEvent event, oms::OrderStatus status,
-                               std::int64_t order_id = 0) {
+broker::ExecutionReport report(std::uint64_t client, broker::ReportEvent event,
+                               oms::OrderStatus status, std::int64_t order_id = 0) {
     broker::ExecutionReport r{};
     r.user = 1;
     r.client_order_id = client;
@@ -70,11 +75,14 @@ protected:
         run_.on_signal(signal(10, 0, 38));
         const auto enter = run_.evaluate(market(price, at(10, 1, 1)), at(10, 1, 1));
         ASSERT_EQ(enter.actions.size(), 1u);
-        (void)run_.on_report(fill(enter.actions[0].client_order_id, oms::Side::Buy, 65, price, 1, 9'600), at(10, 1, 2));
+        (void)run_.on_report(
+            fill(enter.actions[0].client_order_id, oms::Side::Buy, 65, price, 1, 9'600),
+            at(10, 1, 2));
         const auto stop = run_.evaluate(market(price, at(10, 1, 3)), at(10, 1, 3));
         ASSERT_EQ(stop.actions.size(), 1u);
         stop_client_ = stop.actions[0].client_order_id;
-        (void)run_.on_report(report(stop_client_, broker::ReportEvent::Accepted, oms::OrderStatus::TriggerPending, 7),
+        (void)run_.on_report(report(stop_client_, broker::ReportEvent::Accepted,
+                                    oms::OrderStatus::TriggerPending, 7),
                              at(10, 1, 4));
         ASSERT_EQ(run_.state(), State::Long);
     }
@@ -97,7 +105,8 @@ TEST_F(RunTest, EntersOnAFreshSignalAndPlacesAStop) {
     EXPECT_EQ(out.decisions[0].action, "enter long");
     EXPECT_EQ(out.decisions[0].reason, "Bullish +38");
     EXPECT_EQ(run_.state(), State::Entering);
-    EXPECT_TRUE(run_.evaluate(market(22'600, at(10, 1, 2)), at(10, 1, 2)).actions.empty());  // waits for the fill
+    EXPECT_TRUE(run_.evaluate(market(22'600, at(10, 1, 2)), at(10, 1, 2))
+                    .actions.empty());  // waits for the fill
 
     (void)run_.on_report(fill(a.client_order_id, oms::Side::Buy, 65, 22'600.05), at(10, 1, 2));
     EXPECT_EQ(run_.state(), State::Long);
@@ -105,7 +114,8 @@ TEST_F(RunTest, EntersOnAFreshSignalAndPlacesAStop) {
     ASSERT_EQ(stop.actions.size(), 1u);
     EXPECT_EQ(stop.actions[0].type, oms::OrderType::StopMarket);
     EXPECT_EQ(stop.actions[0].side, oms::Side::Sell);
-    EXPECT_EQ(stop.actions[0].trigger, rupees(22'560.0));  // 40 points below, on the 0.10 tick (away from the market)
+    EXPECT_EQ(stop.actions[0].trigger,
+              rupees(22'560.0));  // 40 points below, on the 0.10 tick (away from the market)
     EXPECT_EQ(stop.decisions[0].action, "place stop");
 }
 
@@ -146,7 +156,8 @@ TEST_F(RunTest, ExitsWhenTheSignalTurns) {
     EXPECT_EQ(out.actions[1].side, oms::Side::Sell);
     EXPECT_EQ(out.actions[1].quantity, 65);
     EXPECT_EQ(out.decisions[0].reason, "signal changed: Neutral +5");
-    (void)run_.on_report(fill(out.actions[1].client_order_id, oms::Side::Sell, 65, 22'610, 2, 9'700), at(10, 6, 2));
+    (void)run_.on_report(
+        fill(out.actions[1].client_order_id, oms::Side::Sell, 65, 22'610, 2, 9'700), at(10, 6, 2));
     EXPECT_EQ(run_.state(), State::Flat);
     EXPECT_EQ(run_.position(), 0);
     EXPECT_EQ(run_.pnl_today(), 65'000 - 9'600 - 9'700);  // ₹10 × 65 less both fills' charges
@@ -156,14 +167,16 @@ TEST_F(RunTest, CooldownAndOneEntryPerSignal) {
     go_long();
     run_.on_signal(signal(10, 5, 5));
     const auto exit = run_.evaluate(market(22'610, at(10, 6, 1)), at(10, 6, 1));
-    (void)run_.on_report(fill(exit.actions[1].client_order_id, oms::Side::Sell, 65, 22'610), at(10, 6, 2));
+    (void)run_.on_report(fill(exit.actions[1].client_order_id, oms::Side::Sell, 65, 22'610),
+                         at(10, 6, 2));
 
     run_.on_signal(signal(10, 8, 40));
     const auto blocked = run_.evaluate(market(22'610, at(10, 9, 1)), at(10, 9, 1));
     EXPECT_TRUE(blocked.actions.empty());
     ASSERT_EQ(blocked.decisions.size(), 1u);
     EXPECT_EQ(blocked.decisions[0].reason, "Bullish +40: cooldown");
-    EXPECT_TRUE(run_.evaluate(market(22'610, at(10, 9, 2)), at(10, 9, 2)).decisions.empty());  // recorded once
+    EXPECT_TRUE(run_.evaluate(market(22'610, at(10, 9, 2)), at(10, 9, 2))
+                    .decisions.empty());  // recorded once
 
     run_.on_signal(signal(10, 15, 40));  // after the 10-minute cooldown
     const auto again = run_.evaluate(market(22'610, at(10, 16, 10)), at(10, 16, 10));
@@ -189,24 +202,29 @@ TEST_F(RunTest, Guards) {
     autotrade::Run early(config());
     early.set_contract(kFuture);
     early.on_signal(signal(9, 16, 38));
-    EXPECT_EQ(reason(early, market(22'600, at(9, 17, 5)), at(9, 17, 5)), "Bullish +38: outside the entry window");
+    EXPECT_EQ(reason(early, market(22'600, at(9, 17, 5)), at(9, 17, 5)),
+              "Bullish +38: outside the entry window");
 
     autotrade::Run quiet(config());
     quiet.set_contract(kFuture);
     quiet.on_signal(signal(10, 0, -38));
-    EXPECT_EQ(reason(quiet, {.ltp = rupees(22'600), .quote_at = at(10, 0, 50), .feed_ok = true}, at(10, 1, 5)),
+    EXPECT_EQ(reason(quiet, {.ltp = rupees(22'600), .quote_at = at(10, 0, 50), .feed_ok = true},
+                     at(10, 1, 5)),
               "Bearish -38: no fresh quote");
 
     autotrade::Run killed(config());
     killed.set_contract(kFuture);
     killed.set_kill_switch(true);
     killed.on_signal(signal(10, 0, 38));
-    EXPECT_EQ(reason(killed, market(22'600, at(10, 1, 5)), at(10, 1, 5)), "Bullish +38: kill switch");
+    EXPECT_EQ(reason(killed, market(22'600, at(10, 1, 5)), at(10, 1, 5)),
+              "Bullish +38: kill switch");
 
     autotrade::Run expiring(config());
-    expiring.set_contract({.id = kFuture.id, .lot_size = 65, .expiry_days = kToday, .tick = rupees(0.10)});
+    expiring.set_contract(
+        {.id = kFuture.id, .lot_size = 65, .expiry_days = kToday, .tick = rupees(0.10)});
     expiring.on_signal(signal(10, 0, 38));
-    EXPECT_EQ(reason(expiring, market(22'600, at(10, 1, 5)), at(10, 1, 5)), "Bullish +38: contract expires today");
+    EXPECT_EQ(reason(expiring, market(22'600, at(10, 1, 5)), at(10, 1, 5)),
+              "Bullish +38: contract expires today");
 }
 
 TEST_F(RunTest, TradesPerDayAndDailyLossStop) {
@@ -227,7 +245,9 @@ TEST_F(RunTest, TradesPerDayAndDailyLossStop) {
               "Bullish +38: daily loss stop");
     // A new day starts fresh.
     loser.on_signal(signal(10, 0, 38));
-    EXPECT_EQ(loser.evaluate(market(22'600, at(10, 1, 5) + 86'400'000), at(10, 1, 5) + 86'400'000).actions.size(), 0u)
+    EXPECT_EQ(loser.evaluate(market(22'600, at(10, 1, 5) + 86'400'000), at(10, 1, 5) + 86'400'000)
+                  .actions.size(),
+              0u)
         << "yesterday's signal is stale today";
 }
 
@@ -241,13 +261,15 @@ TEST_F(RunTest, ARejectedEntryIsNoTrade) {
     run.on_signal(signal(10, 0, 38));
     const auto enter = run.evaluate(market(22'600, at(10, 1, 1)), at(10, 1, 1));
     ASSERT_EQ(enter.actions.size(), 1u);
-    const auto failed = run.on_report(report(enter.actions[0].client_order_id, broker::ReportEvent::Rejected,
-                                             oms::OrderStatus::Rejected),
-                                      at(10, 1, 1));
+    const auto failed =
+        run.on_report(report(enter.actions[0].client_order_id, broker::ReportEvent::Rejected,
+                             oms::OrderStatus::Rejected),
+                      at(10, 1, 1));
     EXPECT_EQ(failed.decisions.at(0).action, "entry failed");
     EXPECT_EQ(run.entries_today(), 0);
     run.on_signal(signal(10, 5, 38));
-    EXPECT_EQ(run.evaluate(market(22'600, at(10, 6, 1)), at(10, 6, 1)).decisions.at(0).reason, "Bullish +38: cooldown");
+    EXPECT_EQ(run.evaluate(market(22'600, at(10, 6, 1)), at(10, 6, 1)).decisions.at(0).reason,
+              "Bullish +38: cooldown");
     run.on_signal(signal(10, 11, 38));
     EXPECT_EQ(run.evaluate(market(22'600, at(10, 12, 1)), at(10, 12, 1)).actions.size(), 1u);
 }
@@ -262,13 +284,16 @@ TEST_F(RunTest, TargetMaxHoldAndEndOfDay) {
     held.set_contract(kFuture);
     held.restore(65, rupees(22'600), at(10, 1), 7, 99);
     EXPECT_TRUE(held.evaluate(market(22'620, at(10, 45)), at(10, 45)).actions.empty());
-    EXPECT_EQ(held.evaluate(market(22'620, at(10, 46)), at(10, 46)).decisions.at(0).reason, "max hold");
+    EXPECT_EQ(held.evaluate(market(22'620, at(10, 46)), at(10, 46)).decisions.at(0).reason,
+              "max hold");
 
     autotrade::Run late(config());
     late.set_contract(kFuture);
     late.restore(-65, rupees(22'600), at(15, 5), 7, 99);
-    EXPECT_EQ(late.evaluate(market(22'590, at(15, 10)), at(15, 10)).decisions.at(0).reason, "end of day");
-    EXPECT_EQ(late.evaluate(market(22'590, at(15, 10)), at(15, 10)).actions.size(), 0u);  // already exiting
+    EXPECT_EQ(late.evaluate(market(22'590, at(15, 10)), at(15, 10)).decisions.at(0).reason,
+              "end of day");
+    EXPECT_EQ(late.evaluate(market(22'590, at(15, 10)), at(15, 10)).actions.size(),
+              0u);  // already exiting
 }
 
 TEST_F(RunTest, StoppedOut) {
@@ -285,15 +310,18 @@ TEST_F(RunTest, StopFillingDuringAnExitEndsFlatAnyway) {
     const auto exit = run_.evaluate(market(22'565, at(10, 6, 1)), at(10, 6, 1));
     // The stop fills before our cancel arrives; then our market exit fills too: short 65.
     (void)run_.on_report(fill(stop_client_, oms::Side::Sell, 65, 22'560, 7), at(10, 6, 2));
-    const auto turned = run_.on_report(fill(exit.actions[1].client_order_id, oms::Side::Sell, 65, 22'558), at(10, 6, 2));
+    const auto turned = run_.on_report(
+        fill(exit.actions[1].client_order_id, oms::Side::Sell, 65, 22'558), at(10, 6, 2));
     EXPECT_EQ(turned.decisions.at(0).action, "not flat");
     EXPECT_EQ(run_.position(), -65);
-    EXPECT_TRUE(run_.evaluate(market(22'558, at(10, 6, 4)), at(10, 6, 4)).actions.empty());  // waits 5 s
+    EXPECT_TRUE(
+        run_.evaluate(market(22'558, at(10, 6, 4)), at(10, 6, 4)).actions.empty());  // waits 5 s
     const auto fix = run_.evaluate(market(22'558, at(10, 6, 8)), at(10, 6, 8));
     ASSERT_EQ(fix.actions.size(), 1u);
     EXPECT_EQ(fix.actions[0].side, oms::Side::Buy);
     EXPECT_EQ(fix.actions[0].quantity, 65);
-    (void)run_.on_report(fill(fix.actions[0].client_order_id, oms::Side::Buy, 65, 22'560), at(10, 6, 9));
+    (void)run_.on_report(fill(fix.actions[0].client_order_id, oms::Side::Buy, 65, 22'560),
+                         at(10, 6, 9));
     EXPECT_EQ(run_.position(), 0);
     EXPECT_EQ(run_.state(), State::Flat);
 }
@@ -301,7 +329,8 @@ TEST_F(RunTest, StopFillingDuringAnExitEndsFlatAnyway) {
 TEST_F(RunTest, RejectedEntryAndLostStop) {
     run_.on_signal(signal(10, 0, 38));
     const auto enter = run_.evaluate(market(22'600, at(10, 1, 1)), at(10, 1, 1));
-    auto rejected = report(enter.actions[0].client_order_id, broker::ReportEvent::Rejected, oms::OrderStatus::Rejected);
+    auto rejected = report(enter.actions[0].client_order_id, broker::ReportEvent::Rejected,
+                           oms::OrderStatus::Rejected);
     broker::set_text(rejected.reason, "the kill switch is on");
     const auto out = run_.on_report(rejected, at(10, 1, 2));
     EXPECT_EQ(run_.state(), State::Flat);
@@ -330,9 +359,10 @@ TEST_F(RunTest, RestoredPositionGetsAStopAndAcknowledgedCancelFollows) {
     restored.on_signal(signal(10, 5, 30));
     const auto exit = restored.evaluate(market(22'600, at(10, 6, 1)), at(10, 6, 1));
     ASSERT_EQ(exit.actions.size(), 1u);  // only the market exit for now
-    const auto ack = restored.on_report(
-        report(out.actions[0].client_order_id, broker::ReportEvent::Accepted, oms::OrderStatus::TriggerPending, 12),
-        at(10, 6, 2));
+    const auto ack =
+        restored.on_report(report(out.actions[0].client_order_id, broker::ReportEvent::Accepted,
+                                  oms::OrderStatus::TriggerPending, 12),
+                           at(10, 6, 2));
     ASSERT_EQ(ack.actions.size(), 1u);
     EXPECT_EQ(ack.actions[0].kind, broker::Action::Cancel);
     EXPECT_EQ(ack.actions[0].order_id, 12);
@@ -366,7 +396,7 @@ TEST_F(RunTest, FailedExitsBackOffAndWaitForTheMarket) {
     autotrade::Run late(config());
     late.set_contract(kFuture);
     late.restore(-65, rupees(22'600), at(15, 0), 0, 0);
-    (void)late.evaluate(market(22'600, at(15, 5)), at(15, 5));  // places its stop
+    (void)late.evaluate(market(22'600, at(15, 5)), at(15, 5));               // places its stop
     const auto out = late.evaluate(market(22'600, at(15, 10)), at(15, 10));  // end of day: exit
     reject(out.actions.back().client_order_id, at(15, 10, 1));
     EXPECT_TRUE(late.evaluate(market(22'600, at(15, 31)), at(15, 31)).actions.empty());
@@ -380,8 +410,10 @@ TEST_F(RunTest, ReasonsNameTheFactorsBehindTheSignal) {
                    {.factor = signals::FactorId::SectorBreadth, .points = 5}};
     run_.on_signal(bearish);
     const auto enter = run_.evaluate(market(22'600, at(10, 1, 1)), at(10, 1, 1));
-    EXPECT_EQ(enter.decisions.at(0).reason, "Bearish -30: OI shift -20, futures vs VWAP -15, sector breadth +5");
-    (void)run_.on_report(fill(enter.actions[0].client_order_id, oms::Side::Sell, 65, 22'600), at(10, 1, 2));
+    EXPECT_EQ(enter.decisions.at(0).reason,
+              "Bearish -30: OI shift -20, futures vs VWAP -15, sector breadth +5");
+    (void)run_.on_report(fill(enter.actions[0].client_order_id, oms::Side::Sell, 65, 22'600),
+                         at(10, 1, 2));
     (void)run_.evaluate(market(22'600, at(10, 1, 3)), at(10, 1, 3));  // its stop
 
     SignalView neutral = signal(10, 5, 4);
@@ -402,11 +434,16 @@ TEST(ChooseFuture, NearestNotExpiringToday) {
 }
 
 TEST(ClientOrderId, StableAndDistinct) {
-    EXPECT_EQ(client_order_id("nifty-follow", kToday, 1), client_order_id("nifty-follow", kToday, 1));
-    EXPECT_NE(client_order_id("nifty-follow", kToday, 1), client_order_id("nifty-follow", kToday, 2));
-    EXPECT_NE(client_order_id("nifty-follow", kToday, 1), client_order_id("nifty-follow", kToday + 1, 1));
-    EXPECT_NE(client_order_id("nifty-follow", kToday, 1), client_order_id("sensex-follow", kToday, 1));
-    EXPECT_EQ(client_order_id("nifty-follow", kToday, 1) >> 63, 0u);  // the broker's bit stays clear
+    EXPECT_EQ(client_order_id("nifty-follow", kToday, 1),
+              client_order_id("nifty-follow", kToday, 1));
+    EXPECT_NE(client_order_id("nifty-follow", kToday, 1),
+              client_order_id("nifty-follow", kToday, 2));
+    EXPECT_NE(client_order_id("nifty-follow", kToday, 1),
+              client_order_id("nifty-follow", kToday + 1, 1));
+    EXPECT_NE(client_order_id("nifty-follow", kToday, 1),
+              client_order_id("sensex-follow", kToday, 1));
+    EXPECT_EQ(client_order_id("nifty-follow", kToday, 1) >> 63,
+              0u);  // the broker's bit stays clear
 }
 
 }  // namespace

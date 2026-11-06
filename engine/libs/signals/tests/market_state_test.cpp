@@ -45,7 +45,8 @@ TEST(Series, PruneDropsOlderPoints) {
 
 TEST(MarketState, RoutesBarsByRole) {
     auto state = make_state();
-    state.add_option({.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1000, .call = true});
+    state.add_option(
+        {.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1000, .call = true});
     state.add_sector(core::InstrumentId{200}, 50);
 
     state.on_bar(bar({.id = kSpot, .minute = at_min(0), .close = 1000}));
@@ -62,7 +63,8 @@ TEST(MarketState, RoutesBarsByRole) {
 
 TEST(MarketState, IgnoresFormingUnknownAndOiLessBars) {
     auto state = make_state();
-    state.add_option({.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1000, .call = true});
+    state.add_option(
+        {.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1000, .call = true});
 
     state.on_bar(bar({.id = kSpot, .minute = at_min(0), .close = 1000, .forming = true}));
     state.on_bar(bar({.id = core::InstrumentId{999}, .minute = at_min(0), .close = 1}));
@@ -86,7 +88,7 @@ TEST(MarketState, NewFutureStartsAfresh) {
 TEST(MarketState, NearestExpiryNeedsATodaySummaryByT) {
     auto state = make_state();
     const auto t = at_min(10);
-    state.on_summary(summary({.expiry_days = kToday - 1, .pcr = 1}), t);   // expired
+    state.on_summary(summary({.expiry_days = kToday - 1, .pcr = 1}), t);  // expired
     state.on_summary(summary({.expiry_days = kToday + 7, .pcr = 1}), t);
     state.on_summary(summary({.expiry_days = kToday + 2, .pcr = 1}), t + 60);  // after t
     ASSERT_TRUE(state.nearest_expiry(t).has_value());
@@ -104,10 +106,14 @@ TEST(MarketState, SummariesOfOtherSpotsIgnored) {
 
 TEST(MarketState, StrikesAreDistinctAndSorted) {
     auto state = make_state();
-    state.add_option({.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1100, .call = true});
-    state.add_option({.id = core::InstrumentId{101}, .expiry_days = kToday, .strike = 1000, .call = true});
-    state.add_option({.id = core::InstrumentId{102}, .expiry_days = kToday, .strike = 1000, .call = false});
-    state.add_option({.id = core::InstrumentId{103}, .expiry_days = kToday + 7, .strike = 900, .call = false});
+    state.add_option(
+        {.id = core::InstrumentId{100}, .expiry_days = kToday, .strike = 1100, .call = true});
+    state.add_option(
+        {.id = core::InstrumentId{101}, .expiry_days = kToday, .strike = 1000, .call = true});
+    state.add_option(
+        {.id = core::InstrumentId{102}, .expiry_days = kToday, .strike = 1000, .call = false});
+    state.add_option(
+        {.id = core::InstrumentId{103}, .expiry_days = kToday + 7, .strike = 900, .call = false});
     EXPECT_EQ(state.strikes(kToday), (std::vector<double>{1000, 1100}));
 }
 

@@ -96,14 +96,16 @@ std::vector<autotrade::ListedOption> listed_of(storage::Database& db, const std:
         if (std::sscanf(expiry.c_str(), "%d-%u-%u", &y, &m, &d) != 3) {
             continue;
         }
-        const std::chrono::year_month_day day{std::chrono::year{y}, std::chrono::month{m}, std::chrono::day{d}};
-        out.push_back(
-            {.contract = {.id = core::InstrumentId(static_cast<std::uint32_t>(statement->column_int64(0))),
-                          .lot_size = statement->column_int64(1),
-                          .expiry_days = static_cast<std::int32_t>(std::chrono::sys_days{day}.time_since_epoch().count()),
-                          .tick = core::Price::from_raw(statement->column_int64(3))},
-             .strike = core::Price::from_raw(statement->column_int64(4)),
-             .call = statement->column_text(5) == "CE"});
+        const std::chrono::year_month_day day{std::chrono::year{y}, std::chrono::month{m},
+                                              std::chrono::day{d}};
+        out.push_back({.contract = {.id = core::InstrumentId(
+                                        static_cast<std::uint32_t>(statement->column_int64(0))),
+                                    .lot_size = statement->column_int64(1),
+                                    .expiry_days = static_cast<std::int32_t>(
+                                        std::chrono::sys_days{day}.time_since_epoch().count()),
+                                    .tick = core::Price::from_raw(statement->column_int64(3))},
+                       .strike = core::Price::from_raw(statement->column_int64(4)),
+                       .call = statement->column_text(5) == "CE"});
     }
     return out;
 }
@@ -128,7 +130,8 @@ struct Slot {
     std::variant<autotrade::Run, autotrade::OptionsRun> run;
     std::string tag;
     core::InstrumentId spot;
-    std::vector<autotrade::ListedOption> options;  ///< options runs: the index's listed options today
+    std::vector<autotrade::ListedOption>
+        options;  ///< options runs: the index's listed options today
     Millis last_entry = 0;
     bool restored = false;
 
@@ -170,10 +173,11 @@ autotrade::OptionsRunConfig run_config(const runtime::AutoRunConfig& c) {
 
 /// Rebuilds a run from paper.db (its tagged orders: position, instrument, entry, resting
 /// stop) and autotrader.db (today's counters).
-void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& decisions, storage::Database& app_db,
-             Millis now) {
+void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& decisions,
+             storage::Database& app_db, Millis now) {
     const std::int32_t today = ist_day(now);
-    const autotrade::RunConfig& config = slot.with([](auto& run) -> const autotrade::RunConfig& { return run.config(); });
+    const autotrade::RunConfig& config =
+        slot.with([](auto& run) -> const autotrade::RunConfig& { return run.config(); });
     const auto account = paper.account_for_user(config.user).value_or(std::nullopt);
     std::int64_t position = 0;
     core::Price entry;
@@ -197,8 +201,10 @@ void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& de
                 position += signed_qty;
                 traded = o.spec.instrument;
             }
-            const bool live = o.status == oms::OrderStatus::Open || o.status == oms::OrderStatus::TriggerPending;
-            if (live && (o.spec.type == oms::OrderType::StopMarket || o.spec.type == oms::OrderType::StopLimit)) {
+            const bool live =
+                o.status == oms::OrderStatus::Open || o.status == oms::OrderStatus::TriggerPending;
+            if (live && (o.spec.type == oms::OrderType::StopMarket ||
+                         o.spec.type == oms::OrderType::StopLimit)) {
                 stop_order = o.id;
                 stop_client = o.spec.client_order_id;
             }
@@ -207,7 +213,8 @@ void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& de
     const auto day = decisions.day(config.id, today).value_or(std::nullopt);
     if (day) {
         slot.with([&](auto& run) {
-                run.restore_day(today, day->entries, day->realised, day->charges, day->last_exit, day->counter);
+            run.restore_day(today, day->entries, day->realised, day->charges, day->last_exit,
+                            day->counter);
         });
         slot.last_entry = day->last_entry;
     }
@@ -219,7 +226,8 @@ void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& de
         const auto futures = futures_of(app_db, config.underlying);
         std::optional<autotrade::Contract> contract;
         if (position != 0) {
-            if (const auto held = std::ranges::find(futures, traded, &autotrade::Contract::id); held != futures.end()) {
+            if (const auto held = std::ranges::find(futures, traded, &autotrade::Contract::id);
+                held != futures.end()) {
                 contract = *held;
             }
         } else {
@@ -235,21 +243,25 @@ void recover(Slot& slot, broker::PaperStore& paper, autotrade::DecisionStore& de
         slot.options = listed_of(app_db, config.underlying, "OPT");
         what = std::format("{} listed options", slot.options.size());
         if (position != 0) {
-            const auto held = std::ranges::find(slot.options, traded,
-                                                [](const autotrade::ListedOption& o) { return o.contract.id; });
+            const auto held =
+                std::ranges::find(slot.options, traded,
+                                  [](const autotrade::ListedOption& o) { return o.contract.id; });
             if (held != slot.options.end()) {
                 // The index level at entry isn't stored: exits are measured from now.
-                options.restore(held->contract, held->call, position, entry, entered, core::Price{}, stop_order,
-                                stop_client);
+                options.restore(held->contract, held->call, position, entry, entered, core::Price{},
+                                stop_order, stop_client);
             } else {
-                spdlog::error("auto {}: holds {} of instrument {}, not a listed option; close it by hand", config.id,
-                              position, traded.value());
+                spdlog::error(
+                    "auto {}: holds {} of instrument {}, not a listed option; close it by hand",
+                    config.id, position, traded.value());
             }
         }
     }
-    spdlog::info("auto {}: {}{}{}", config.id, what,
-                 position != 0 ? std::format(", restored {} at {:.2f}", position, entry.to_double()) : std::string(),
-                 stop_order != 0 ? std::format(" with its stop (order {})", stop_order) : std::string());
+    spdlog::info(
+        "auto {}: {}{}{}", config.id, what,
+        position != 0 ? std::format(", restored {} at {:.2f}", position, entry.to_double())
+                      : std::string(),
+        stop_order != 0 ? std::format(" with its stop (order {})", stop_order) : std::string());
 }
 
 int run(const runtime::Config& config) {
@@ -269,8 +281,11 @@ int run(const runtime::Config& config) {
             spdlog::info("auto {}: disabled (autotrader.runs: enabled: false)", c.id);
             continue;  // not loaded at all: no decisions, no orders
         }
-        const auto chain = std::ranges::find(config.feed.chains, c.underlying, &runtime::ChainConfig::underlying);
-        const auto key = chain != config.feed.chains.end() ? instruments::parse_contract_key(chain->spot) : std::nullopt;
+        const auto chain =
+            std::ranges::find(config.feed.chains, c.underlying, &runtime::ChainConfig::underlying);
+        const auto key = chain != config.feed.chains.end()
+                             ? instruments::parse_contract_key(chain->spot)
+                             : std::nullopt;
         const core::InstrumentId spot = key ? loaded->registry.find(*key) : core::InstrumentId{};
         if (!spot.valid()) {
             spdlog::error("auto {}: {} has no feed.chains spot; run skipped", c.id, c.underlying);
@@ -281,7 +296,9 @@ int run(const runtime::Config& config) {
             slot.run.emplace<autotrade::OptionsRun>(run_config(c));
         }
         if (!tags.insert(slot.tag).second) {
-            spdlog::error("autotrader: runs share the order tag '{}'; make their ids differ earlier", slot.tag);
+            spdlog::error(
+                "autotrader: runs share the order tag '{}'; make their ids differ earlier",
+                slot.tag);
             return 1;
         }
         slots.push_back(std::move(slot));
@@ -290,8 +307,9 @@ int run(const runtime::Config& config) {
         spdlog::info("autotrader: no runs configured; nothing to do");
     }
 
-    auto ord_auto = bus::Writer::create_or_attach(
-        {.name = config.ord_auto_bus.name, .capacity = config.ord_auto_bus.capacity_mb * 1024 * 1024});
+    auto ord_auto =
+        bus::Writer::create_or_attach({.name = config.ord_auto_bus.name,
+                                       .capacity = config.ord_auto_bus.capacity_mb * 1024 * 1024});
     if (!ord_auto) {
         spdlog::error("bus: {}: {}", config.ord_auto_bus.name, bus::to_string(ord_auto.error()));
         return 1;
@@ -320,7 +338,8 @@ int run(const runtime::Config& config) {
     const auto send = [&](broker::OrderRequest request, Millis now) {
         request.header.schema_version = messages::MessageTraits<broker::OrderRequest>::version;
         request.header.sequence = ++sequence;
-        (void)ord_auto->publish(messages::to_wire(messages::MessageType::OrderRequest), messages::as_bytes(request));
+        (void)ord_auto->publish(messages::to_wire(messages::MessageType::OrderRequest),
+                                messages::as_bytes(request));
         auto& p = pending[request.client_order_id];
         if (p.first_sent == 0) {
             p.first_sent = now;
@@ -332,53 +351,55 @@ int run(const runtime::Config& config) {
     // Sends what a run wants, records its decisions and day counters.
     const auto apply = [&](Slot& slot, const autotrade::Output& out, Millis now) {
         slot.with([&](auto& run) {
-        for (const auto& a : out.actions) {
-            broker::OrderRequest r{};
-            r.header.instrument_id = a.instrument;
-            r.at = now;
-            r.user = run.config().user;
-            r.action = a.kind;
-            r.source = oms::Source::Auto;
-            if (a.kind == broker::Action::Cancel) {
-                r.order_id = a.order_id;
-                r.client_order_id = (std::uint64_t{1} << 62) | static_cast<std::uint64_t>(a.order_id);
-            } else if (a.kind == broker::Action::Modify) {
-                // Each re-price is its own request (the broker doesn't dedupe modifies).
-                r.order_id = a.order_id;
-                r.client_order_id = (std::uint64_t{1} << 61) | ++modifies;
-                r.quantity = a.quantity;
-                r.price = a.price;
-                r.trigger = a.trigger;
-            } else {
-                r.client_order_id = a.client_order_id;
-                r.side = a.side;
-                r.type = a.type;
-                r.product = run.config().product;
-                r.quantity = a.quantity;
-                r.price = a.price;
-                r.trigger = a.trigger;
+            for (const auto& a : out.actions) {
+                broker::OrderRequest r{};
+                r.header.instrument_id = a.instrument;
+                r.at = now;
+                r.user = run.config().user;
+                r.action = a.kind;
+                r.source = oms::Source::Auto;
+                if (a.kind == broker::Action::Cancel) {
+                    r.order_id = a.order_id;
+                    r.client_order_id =
+                        (std::uint64_t{1} << 62) | static_cast<std::uint64_t>(a.order_id);
+                } else if (a.kind == broker::Action::Modify) {
+                    // Each re-price is its own request (the broker doesn't dedupe modifies).
+                    r.order_id = a.order_id;
+                    r.client_order_id = (std::uint64_t{1} << 61) | ++modifies;
+                    r.quantity = a.quantity;
+                    r.price = a.price;
+                    r.trigger = a.trigger;
+                } else {
+                    r.client_order_id = a.client_order_id;
+                    r.side = a.side;
+                    r.type = a.type;
+                    r.product = run.config().product;
+                    r.quantity = a.quantity;
+                    r.price = a.price;
+                    r.trigger = a.trigger;
+                }
+                broker::set_text(r.tag, slot.tag);
+                send(r, now);
             }
-            broker::set_text(r.tag, slot.tag);
-            send(r, now);
-        }
-        for (const auto& d : out.decisions) {
-            spdlog::info("auto {}: {} ({})", run.config().id, d.action, d.reason);
-            if (d.action.starts_with("long") || d.action == "short") {
-                slot.last_entry = d.at;
+            for (const auto& d : out.decisions) {
+                spdlog::info("auto {}: {} ({})", run.config().id, d.action, d.reason);
+                if (d.action.starts_with("long") || d.action == "short") {
+                    slot.last_entry = d.at;
+                }
             }
-        }
-        if (!out.decisions.empty() || !out.actions.empty()) {
-            const autotrade::RunDay day{.day = run.day(),
-                                        .entries = run.entries_today(),
-                                        .realised = run.realised_today(),
-                                        .charges = run.charges_today(),
-                                        .last_exit = run.last_exit(),
-                                        .counter = run.counter(),
-                                        .last_entry = slot.last_entry};
-            if (auto saved = decisions->save(run.config().id, out.decisions, day); !saved) {
-                spdlog::error("auto {}: saving decisions failed: {}", run.config().id, saved.error().message);
+            if (!out.decisions.empty() || !out.actions.empty()) {
+                const autotrade::RunDay day{.day = run.day(),
+                                            .entries = run.entries_today(),
+                                            .realised = run.realised_today(),
+                                            .charges = run.charges_today(),
+                                            .last_exit = run.last_exit(),
+                                            .counter = run.counter(),
+                                            .last_entry = slot.last_entry};
+                if (auto saved = decisions->save(run.config().id, out.decisions, day); !saved) {
+                    spdlog::error("auto {}: saving decisions failed: {}", run.config().id,
+                                  saved.error().message);
+                }
             }
-        }
         });
     };
 
@@ -423,16 +444,20 @@ int run(const runtime::Config& config) {
             if (!m) {
                 return;
             }
-            const std::string_view strategy = signals::name(static_cast<signals::StrategyId>(m->strategy));
+            const std::string_view strategy =
+                signals::name(static_cast<signals::StrategyId>(m->strategy));
             for (auto& slot : slots) {
                 if (slot.spot == m->header.instrument_id &&
                     slot.with([](auto& run) { return run.config().signal; }) == strategy) {
-                    autotrade::SignalView view{
-                        .minute = m->minute, .score = m->score, .label = signals::label_of(*m), .top = {}};
+                    autotrade::SignalView view{.minute = m->minute,
+                                               .score = m->score,
+                                               .label = signals::label_of(*m),
+                                               .top = {}};
                     for (const auto& factor : m->top) {
                         if (factor.factor != 0) {
                             view.top.push_back(
-                                {.factor = static_cast<signals::FactorId>(factor.factor), .points = factor.points});
+                                {.factor = static_cast<signals::FactorId>(factor.factor),
+                                 .points = factor.points});
                         }
                     }
                     slot.with([&](auto& run) { run.on_signal(view); });
@@ -446,15 +471,19 @@ int run(const runtime::Config& config) {
             }
             std::erase_if(pending, [&](const auto& entry) {
                 return entry.first == r->client_order_id ||
-                       (entry.second.request.action != broker::Action::New && entry.second.request.order_id == r->order_id);
+                       (entry.second.request.action != broker::Action::New &&
+                        entry.second.request.order_id == r->order_id);
             });
             const Millis now = now_ms();
             for (auto& slot : slots) {
                 if (r->user != slot.with([](auto& run) { return run.config().user; })) {
                     continue;
                 }
-                if (r->event == broker::ReportEvent::KillSwitchOn || r->event == broker::ReportEvent::KillSwitchOff) {
-                    slot.with([&](auto& run) { run.set_kill_switch(r->event == broker::ReportEvent::KillSwitchOn); });
+                if (r->event == broker::ReportEvent::KillSwitchOn ||
+                    r->event == broker::ReportEvent::KillSwitchOff) {
+                    slot.with([&](auto& run) {
+                        run.set_kill_switch(r->event == broker::ReportEvent::KillSwitchOn);
+                    });
                     continue;
                 }
                 apply(slot, slot.with([&](auto& run) { return run.on_report(*r, now); }), now);
@@ -476,7 +505,8 @@ int run(const runtime::Config& config) {
                 if (auto* futures = std::get_if<autotrade::Run>(&slot.run)) {
                     autotrade::Market market;
                     if (const auto contract = futures->contract()) {
-                        if (const auto found = markets.find(contract->id.value()); found != markets.end()) {
+                        if (const auto found = markets.find(contract->id.value());
+                            found != markets.end()) {
                             market.ltp = found->second.ltp;
                             market.quote_at = found->second.at;
                         }
@@ -486,28 +516,32 @@ int run(const runtime::Config& config) {
                     continue;
                 }
                 auto& options = std::get<autotrade::OptionsRun>(slot.run);
-                autotrade::OptionsMarket market{.feed_ok = feed_ok, .quote = [&](core::InstrumentId id) {
-                                                    const auto found = markets.find(id.value());
-                                                    if (found == markets.end()) {
-                                                        return std::optional<autotrade::OptionQuote>{};
-                                                    }
-                                                    const Quote& q = found->second;
-                                                    return std::optional<autotrade::OptionQuote>{
-                                                        {.ltp = q.ltp, .bid = q.bid, .ask = q.ask, .at = q.at}};
-                                                }};
+                autotrade::OptionsMarket market{
+                    .feed_ok = feed_ok, .quote = [&](core::InstrumentId id) {
+                        const auto found = markets.find(id.value());
+                        if (found == markets.end()) {
+                            return std::optional<autotrade::OptionQuote>{};
+                        }
+                        const Quote& q = found->second;
+                        return std::optional<autotrade::OptionQuote>{
+                            {.ltp = q.ltp, .bid = q.bid, .ask = q.ask, .at = q.at}};
+                    }};
                 if (const auto found = markets.find(slot.spot.value()); found != markets.end()) {
                     market.spot = found->second.ltp;
                     market.spot_at = found->second.at;
                 }
-                if (options.state() == autotrade::State::Flat && options.position() == 0 && market.spot.raw() > 0) {
-                    options.set_options(autotrade::choose_atm(slot.options, market.spot, ist_day(now)));
+                if (options.state() == autotrade::State::Flat && options.position() == 0 &&
+                    market.spot.raw() > 0) {
+                    options.set_options(
+                        autotrade::choose_atm(slot.options, market.spot, ist_day(now)));
                 }
                 apply(slot, options.evaluate(market, now), now);
             }
             // Resend what mda-broker hasn't answered (the same request: never a new order).
             for (auto it = pending.begin(); it != pending.end();) {
                 if (now - it->second.first_sent > 2'000) {
-                    spdlog::warn("autotrader: no answer from mda-broker to request {}; giving up", it->first);
+                    spdlog::warn("autotrader: no answer from mda-broker to request {}; giving up",
+                                 it->first);
                     it = pending.erase(it);
                 } else if (now - it->second.last_sent >= 500) {
                     const auto request = it->second.request;
@@ -527,13 +561,15 @@ int run(const runtime::Config& config) {
                     }
                     if (auto* futures = std::get_if<autotrade::Run>(&slot.run)) {
                         if (futures->state() == autotrade::State::Flat) {
-                            if (const auto contract =
-                                    autotrade::choose_future(futures_of(*app_db, futures->config().underlying), today)) {
+                            if (const auto contract = autotrade::choose_future(
+                                    futures_of(*app_db, futures->config().underlying), today)) {
                                 futures->set_contract(*contract);
                             }
                         }
                     } else {
-                        slot.options = listed_of(*app_db, std::get<autotrade::OptionsRun>(slot.run).config().underlying, "OPT");
+                        slot.options = listed_of(
+                            *app_db, std::get<autotrade::OptionsRun>(slot.run).config().underlying,
+                            "OPT");
                     }
                 }
             }
@@ -576,7 +612,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     runtime::setup_logging("mda-autotrader", config->logging);
-    spdlog::info("mda-autotrader starting (config {}, log level {})", config->source.string(), config->logging.level);
+    spdlog::info("mda-autotrader starting (config {}, log level {})", config->source.string(),
+                 config->logging.level);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     const int code = run(*config);

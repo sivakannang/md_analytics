@@ -56,8 +56,7 @@ std::int64_t chain_spot_id(storage::Database& db, std::string_view key_text) {
         return 0;
     }
     const std::string_view kind = key->kind == instruments::Kind::Index ? "IDX" : "EQ";
-    statement
-        ->bind(1, instruments::to_string(key->exchange))
+    statement->bind(1, instruments::to_string(key->exchange))
         .bind(2, kind)
         .bind(3, std::string_view(key->underlying));
     return statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row
@@ -150,38 +149,39 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                            asio::any_io_executor db_executor, const QuoteCache& quotes,
                            const ChainSummaries& summaries, std::vector<ChainInfo> chains) {
     // GET /chains — underlyings with chains, their spot and listed expiries.
-    router.add(http::verb::get, "/api/v1/chains",
-               [&auth, &db, db_executor, chains](const Request& request,
-                                                 const PathParams&) -> asio::awaitable<Response> {
-                   co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
-                       json::array out;
-                       for (const auto& chain : chains) {
-                           auto expiries = db.prepare(
-                               "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND "
-                               "underlying = ?1 "
-                               "AND listed = 1 ORDER BY expiry LIMIT ?2");
-                           if (!expiries) {
-                               continue;
-                           }
-                           expiries->bind(1, std::string_view(chain.underlying))
-                               .bind(2, static_cast<std::int64_t>(chain.expiries));
-                           json::array list;
-                           std::string nearest;
-                           while (expiries->step().value_or(storage::StepResult::Done) ==
-                                  storage::StepResult::Row) {
-                               if (nearest.empty()) {
-                                   nearest = expiries->column_text(0);
-                               }
-                               list.emplace_back(expiries->column_text(0));
-                           }
-                           // MCX: the nearest expiry's future (each expiry has its own).
-                           out.push_back(json::object{{"underlying", chain.underlying},
-                                                      {"spot_id", chain_spot_id(db, chain, nearest)},
-                                                      {"expiries", std::move(list)}});
-                       }
-                       return success(std::move(out));
-                   });
-               });
+    router.add(
+        http::verb::get, "/api/v1/chains",
+        [&auth, &db, db_executor, chains](const Request& request,
+                                          const PathParams&) -> asio::awaitable<Response> {
+            co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
+                json::array out;
+                for (const auto& chain : chains) {
+                    auto expiries = db.prepare(
+                        "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND "
+                        "underlying = ?1 "
+                        "AND listed = 1 ORDER BY expiry LIMIT ?2");
+                    if (!expiries) {
+                        continue;
+                    }
+                    expiries->bind(1, std::string_view(chain.underlying))
+                        .bind(2, static_cast<std::int64_t>(chain.expiries));
+                    json::array list;
+                    std::string nearest;
+                    while (expiries->step().value_or(storage::StepResult::Done) ==
+                           storage::StepResult::Row) {
+                        if (nearest.empty()) {
+                            nearest = expiries->column_text(0);
+                        }
+                        list.emplace_back(expiries->column_text(0));
+                    }
+                    // MCX: the nearest expiry's future (each expiry has its own).
+                    out.push_back(json::object{{"underlying", chain.underlying},
+                                               {"spot_id", chain_spot_id(db, chain, nearest)},
+                                               {"expiries", std::move(list)}});
+                }
+                return success(std::move(out));
+            });
+        });
 
     // GET /chains/{underlying}/{expiry}?strikes=20 — strike rows around ATM.
     router.add(

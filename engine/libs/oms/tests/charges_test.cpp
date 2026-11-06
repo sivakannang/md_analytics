@@ -52,7 +52,7 @@ TEST(Charges, OptionsLegs) {
     EXPECT_EQ(buy.total(), 2'741);
 
     const auto sell = leg(Segment::Option, Side::Sell, 149.95, 75);  // ₹11,246.25
-    EXPECT_EQ(sell.stt, 1'700);  // 0.15% = ₹16.87, to the rupee
+    EXPECT_EQ(sell.stt, 1'700);                                      // 0.15% = ₹16.87, to the rupee
     EXPECT_EQ(sell.exchange, 394 + 6);
     EXPECT_EQ(sell.gst, 432);
     EXPECT_EQ(sell.total(), 4'533);
@@ -97,9 +97,9 @@ TEST(Charges, McxRates) {
     EXPECT_EQ(buy.sebi, 96);          // ₹10 / crore
     EXPECT_EQ(buy.stamp, 1'900);      // 0.002% = ₹19.20 → ₹19
     EXPECT_EQ(buy.stt, 0);
-    EXPECT_EQ(buy.gst, 740);          // 18% of ₹41.12
+    EXPECT_EQ(buy.gst, 740);  // 18% of ₹41.12
     const auto sell = leg(Segment::Future, Side::Sell, 9'600, 100, Exchange::Mcx);
-    EXPECT_EQ(sell.stt, 9'600);       // CTT 0.01% = ₹96
+    EXPECT_EQ(sell.stt, 9'600);  // CTT 0.01% = ₹96
     EXPECT_EQ(sell.stamp, 0);
     // An option sold at ₹200 × 100: CTT 0.05% of ₹20,000 = ₹10; MCX 0.0418% = ₹8.36.
     const auto option = leg(Segment::Option, Side::Sell, 200, 100, Exchange::Mcx);

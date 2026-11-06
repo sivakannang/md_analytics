@@ -48,7 +48,8 @@ struct ContractKey {
     Exchange exchange = Exchange::Nse;
     Market market = Market::Cash;
     Kind kind = Kind::Equity;
-    std::string underlying;  ///< "NIFTY 50" for an index, "RELIANCE", or the F&O name "NIFTY" / "CRUDEOIL"
+    std::string
+        underlying;  ///< "NIFTY 50" for an index, "RELIANCE", or the F&O name "NIFTY" / "CRUDEOIL"
     std::chrono::year_month_day expiry{};  ///< derivatives only; default (invalid) otherwise
     core::Price strike;                    ///< options only
     OptionType option_type = OptionType::None;

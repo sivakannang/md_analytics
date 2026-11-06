@@ -198,7 +198,8 @@ Config parse(const YAML::Node& root) {
     }
 
     const YAML::Node signals = root["signals"];
-    check_keys(signals, "signals", {"db", "underlyings", "sectors", "vix", "flat_bp", "strategies"});
+    check_keys(signals, "signals",
+               {"db", "underlyings", "sectors", "vix", "flat_bp", "strategies"});
     read_path(signals, "db", config.signals.db);
     read_list(signals, "underlyings", config.signals.underlyings);
     read_list(signals, "sectors", config.signals.sectors);
@@ -236,8 +237,8 @@ Config parse(const YAML::Node& root) {
     const YAML::Node paper = root["paper"];
     check_keys(paper, "paper",
                {"db", "opening_cash", "latency_ms", "overflow_ticks", "stale_after_ms",
-                "futures_margin_percent", "stock_futures_margin_percent", "freeze_quantity", "mcx_margin_percent",
-                "mis_square_off", "daily_summary"});
+                "futures_margin_percent", "stock_futures_margin_percent", "freeze_quantity",
+                "mcx_margin_percent", "mis_square_off", "daily_summary"});
     read_path(paper, "db", config.paper.db);
     read(paper, "opening_cash", config.paper.opening_cash);
     read(paper, "latency_ms", config.paper.latency_ms);
@@ -254,18 +255,21 @@ Config parse(const YAML::Node& root) {
         }
         int hour = 0;
         int minute = 0;
-        if (std::sscanf(text.c_str(), "%d:%d", &hour, &minute) != 2 || hour < 0 || hour > 23 || minute < 0 ||
-            minute > 59) {
+        if (std::sscanf(text.c_str(), "%d:%d", &hour, &minute) != 2 || hour < 0 || hour > 23 ||
+            minute < 0 || minute > 59) {
             fail(paper[key], std::string("paper.") + key + " must be HH:MM (IST)");
         }
         *target = hour * 3600 + minute * 60;
     }
-    if (config.paper.opening_cash <= 0 || config.paper.latency_ms < 0 || config.paper.overflow_ticks < 0 ||
-        config.paper.stale_after_ms <= 0 || config.paper.futures_margin_percent <= 0 ||
-        config.paper.futures_margin_percent > 100 || config.paper.stock_futures_margin_percent <= 0 ||
+    if (config.paper.opening_cash <= 0 || config.paper.latency_ms < 0 ||
+        config.paper.overflow_ticks < 0 || config.paper.stale_after_ms <= 0 ||
+        config.paper.futures_margin_percent <= 0 || config.paper.futures_margin_percent > 100 ||
+        config.paper.stock_futures_margin_percent <= 0 ||
         config.paper.stock_futures_margin_percent > 100) {
-        fail(paper, "paper: opening_cash, stale_after_ms and the futures margins (0-100] must be positive; "
-                    "latency_ms and overflow_ticks not negative");
+        fail(
+            paper,
+            "paper: opening_cash, stale_after_ms and the futures margins (0-100] must be positive; "
+            "latency_ms and overflow_ticks not negative");
     }
     if (paper && paper.IsMap() && paper["freeze_quantity"]) {
         const YAML::Node freeze = paper["freeze_quantity"];
@@ -273,13 +277,15 @@ Config parse(const YAML::Node& root) {
             fail(freeze, "'freeze_quantity' must map underlyings to quantities");
         }
         for (const auto& item : freeze) {
-            config.paper.freeze_quantity[item.first.as<std::string>()] = item.second.as<std::int64_t>();
+            config.paper.freeze_quantity[item.first.as<std::string>()] =
+                item.second.as<std::int64_t>();
         }
     }
     if (paper && paper.IsMap() && paper["mcx_margin_percent"]) {
         const YAML::Node margins = paper["mcx_margin_percent"];
         if (!margins.IsMap()) {
-            fail(margins, "'mcx_margin_percent' must map commodities (and 'default') to percentages");
+            fail(margins,
+                 "'mcx_margin_percent' must map commodities (and 'default') to percentages");
         }
         for (const auto& item : margins) {
             const auto name = item.first.as<std::string>();
@@ -305,10 +311,27 @@ Config parse(const YAML::Node& root) {
         }
         for (const auto& node : runs) {
             check_keys(node, "autotrader.runs[]",
-                       {"id", "user", "strategy", "signal", "underlying", "lots", "product", "stop_points",
-                        "target_points", "max_hold_min", "max_trades_per_day", "cooldown_min", "exit_score", "daily_loss_stop",
-                        "enabled", "index_stop_points", "premium_stop_percent", "entry_slip_ticks",
-                        "entry_timeout_s", "stop_limit_ticks", "reprice_s"});
+                       {"id",
+                        "user",
+                        "strategy",
+                        "signal",
+                        "underlying",
+                        "lots",
+                        "product",
+                        "stop_points",
+                        "target_points",
+                        "max_hold_min",
+                        "max_trades_per_day",
+                        "cooldown_min",
+                        "exit_score",
+                        "daily_loss_stop",
+                        "enabled",
+                        "index_stop_points",
+                        "premium_stop_percent",
+                        "entry_slip_ticks",
+                        "entry_timeout_s",
+                        "stop_limit_ticks",
+                        "reprice_s"});
             AutoRunConfig run;
             read(node, "id", run.id);
             read(node, "user", run.user);
@@ -337,10 +360,13 @@ Config parse(const YAML::Node& root) {
             if (run.strategy != "follow-signal" && run.strategy != "follow-signal-options") {
                 fail(node, "run 'strategy' must be follow-signal or follow-signal-options");
             }
-            if (run.index_stop_points <= 0 || run.premium_stop_percent <= 0 || run.premium_stop_percent >= 100 ||
-                run.entry_slip_ticks < 0 || run.entry_timeout_s < 1 || run.stop_limit_ticks < 1 || run.reprice_s < 1) {
-                fail(node, "run: index_stop_points positive, premium_stop_percent 0-100, entry_slip_ticks not "
-                           "negative; entry_timeout_s, stop_limit_ticks and reprice_s at least 1");
+            if (run.index_stop_points <= 0 || run.premium_stop_percent <= 0 ||
+                run.premium_stop_percent >= 100 || run.entry_slip_ticks < 0 ||
+                run.entry_timeout_s < 1 || run.stop_limit_ticks < 1 || run.reprice_s < 1) {
+                fail(node,
+                     "run: index_stop_points positive, premium_stop_percent 0-100, "
+                     "entry_slip_ticks not "
+                     "negative; entry_timeout_s, stop_limit_ticks and reprice_s at least 1");
             }
             if (run.exit_score < 0 || run.exit_score > 100) {
                 fail(node, "run 'exit_score' must be 0-100");
@@ -351,13 +377,17 @@ Config parse(const YAML::Node& root) {
             if (run.lots < 1 || run.lots > 10 || run.stop_points <= 0 || run.target_points < 0 ||
                 run.max_hold_min < 1 || run.max_trades_per_day < 1 || run.cooldown_min < 0 ||
                 run.daily_loss_stop <= 0) {
-                fail(node, "run: lots 1-10; stop_points, max_hold_min, max_trades_per_day, daily_loss_stop "
-                           "positive; target_points and cooldown_min not negative");
+                fail(node,
+                     "run: lots 1-10; stop_points, max_hold_min, max_trades_per_day, "
+                     "daily_loss_stop "
+                     "positive; target_points and cooldown_min not negative");
             }
             for (const auto& other : config.autotrader.runs) {
                 if (other.id == run.id ||
-                    (other.user == run.user && other.underlying == run.underlying && other.strategy == run.strategy)) {
-                    fail(node, "run ids must be unique, and one run per user, underlying and strategy");
+                    (other.user == run.user && other.underlying == run.underlying &&
+                     other.strategy == run.strategy)) {
+                    fail(node,
+                         "run ids must be unique, and one run per user, underlying and strategy");
                 }
             }
             config.autotrader.runs.push_back(std::move(run));

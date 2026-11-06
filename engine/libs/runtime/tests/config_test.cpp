@@ -93,8 +93,8 @@ TEST_F(ConfigTest, ReadsAndChecksSignals) {
 
     EXPECT_FALSE(load("signals:\n  strategies:\n    - { horizon_min: 15 }\n").has_value());
     EXPECT_FALSE(load("signals:\n  strategies:\n    - { id: x, horizon_min: 0 }\n").has_value());
-    EXPECT_FALSE(load("signals:\n  strategies:\n    - { id: x, bullish: -30, bearish: 30 }\n")
-                     .has_value());
+    EXPECT_FALSE(
+        load("signals:\n  strategies:\n    - { id: x, bullish: -30, bearish: 30 }\n").has_value());
     EXPECT_FALSE(load("signals:\n  strategys: []\n").has_value());  // typo
     EXPECT_FALSE(load("signals:\n  flat_bp: -1\n").has_value());
 }
@@ -127,7 +127,8 @@ TEST_F(ConfigTest, ReadsAndChecksPaper) {
 TEST_F(ConfigTest, ReadsAndChecksAutotraderRuns) {
     const auto config = load(
         "autotrader:\n  db: /tmp/a.db\n  runs:\n"
-        "    - { id: nifty-follow, user: 1, underlying: NIFTY, stop_points: 30, enabled: false }\n");
+        "    - { id: nifty-follow, user: 1, underlying: NIFTY, stop_points: 30, enabled: false "
+        "}\n");
     ASSERT_TRUE(config.has_value()) << config.error();
     EXPECT_EQ(config->autotrader.db, "/tmp/a.db");
     ASSERT_EQ(config->autotrader.runs.size(), 1u);
@@ -136,8 +137,11 @@ TEST_F(ConfigTest, ReadsAndChecksAutotraderRuns) {
     EXPECT_EQ(run.product, "MIS");
     EXPECT_DOUBLE_EQ(run.stop_points, 30);
     EXPECT_FALSE(run.enabled);
-    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, underlying: NIFTY }\n").has_value());  // no user
-    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, lots: 20 }\n").has_value());
+    EXPECT_FALSE(
+        load("autotrader:\n  runs:\n    - { id: x, underlying: NIFTY }\n").has_value());  // no user
+    EXPECT_FALSE(
+        load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, lots: 20 }\n")
+            .has_value());
     EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY }\n"
                       "    - { id: y, user: 1, underlying: NIFTY }\n")
                      .has_value());  // two runs on one account and index
@@ -159,10 +163,14 @@ TEST_F(ConfigTest, ReadsOptionsRuns) {
     EXPECT_EQ(run.reprice_s, 5);
     EXPECT_EQ(run.exit_score, 5);
     EXPECT_EQ(config->autotrader.runs[0].exit_score, 10);
-    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, exit_score: -1 }\n").has_value());
-    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, strategy: sell-straddle }\n")
+    EXPECT_FALSE(
+        load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, exit_score: -1 }\n")
+            .has_value());
+    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, strategy: "
+                      "sell-straddle }\n")
                      .has_value());
-    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, strategy: follow-signal-options,"
+    EXPECT_FALSE(load("autotrader:\n  runs:\n    - { id: x, user: 1, underlying: NIFTY, strategy: "
+                      "follow-signal-options,"
                       " premium_stop_percent: 100 }\n")
                      .has_value());
 }

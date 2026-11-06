@@ -76,13 +76,16 @@ Message render(std::string_view type, std::string_view payload) {
                                                    "). Run mda-login, then restart mda-feedd.");
     }
     if (type == "paper.daily_summary") {
-        return message("Paper P&L " + field(object, "date") + ": net " + field(object, "net"),
-                       hello + "\n\nYour paper trading on " + field(object, "date") + ": " + field(object, "fills") +
-                           " fills, realised " + field(object, "realised") + ", charges " +
-                           field(object, "charges") + ", net " + field(object, "net") + ". Open positions: " +
-                           field(object, "open_positions") + ". Cash: " + field(object, "cash") +
-                           "." + (field(object, "auto").empty() ? std::string() : "\nAuto trader: " + field(object, "auto") + ".") +
-                           "\n\nSimulated by mda-broker; no real orders.");
+        return message(
+            "Paper P&L " + field(object, "date") + ": net " + field(object, "net"),
+            hello + "\n\nYour paper trading on " + field(object, "date") + ": " +
+                field(object, "fills") + " fills, realised " + field(object, "realised") +
+                ", charges " + field(object, "charges") + ", net " + field(object, "net") +
+                ". Open positions: " + field(object, "open_positions") +
+                ". Cash: " + field(object, "cash") + "." +
+                (field(object, "auto").empty() ? std::string()
+                                               : "\nAuto trader: " + field(object, "auto") + ".") +
+                "\n\nSimulated by mda-broker; no real orders.");
     }
     if (type == "system.login_reminder") {
         return message("Kite login needed",

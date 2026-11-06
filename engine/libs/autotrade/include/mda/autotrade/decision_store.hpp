@@ -37,16 +37,19 @@ struct StoredDecision {
 
 class DecisionStore {
 public:
-    [[nodiscard]] static std::expected<DecisionStore, DbError> open(const std::filesystem::path& path);
+    [[nodiscard]] static std::expected<DecisionStore, DbError> open(
+        const std::filesystem::path& path);
     [[nodiscard]] static std::expected<DecisionStore, DbError> open_in_memory();
 
     /// Saves a run's decisions and its day counters in one transaction.
-    [[nodiscard]] std::expected<void, DbError> save(std::string_view run, std::span<const Decision> decisions,
+    [[nodiscard]] std::expected<void, DbError> save(std::string_view run,
+                                                    std::span<const Decision> decisions,
                                                     const RunDay& day);
-    [[nodiscard]] std::expected<std::optional<RunDay>, DbError> day(std::string_view run, std::int32_t day);
+    [[nodiscard]] std::expected<std::optional<RunDay>, DbError> day(std::string_view run,
+                                                                    std::int32_t day);
     /// One run's decisions in [from, to) (Unix ms), oldest first.
-    [[nodiscard]] std::expected<std::vector<Decision>, DbError> decisions(std::string_view run, Millis from,
-                                                                          Millis to);
+    [[nodiscard]] std::expected<std::vector<Decision>, DbError> decisions(std::string_view run,
+                                                                          Millis from, Millis to);
 
 private:
     explicit DecisionStore(storage::Database db) : db_(std::move(db)) {}

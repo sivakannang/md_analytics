@@ -18,8 +18,12 @@ public:
     Position() = default;
     /// As stored (paper.db): quantity, cost of the open quantity and realised P&L, and the
     /// open quantity's cost at its fill prices.
-    Position(std::int64_t quantity, std::int64_t cost_raw, Paise realised, std::int64_t entry_cost_raw) noexcept
-        : quantity_(quantity), cost_raw_(cost_raw), realised_(realised), entry_cost_raw_(entry_cost_raw) {}
+    Position(std::int64_t quantity, std::int64_t cost_raw, Paise realised,
+             std::int64_t entry_cost_raw) noexcept
+        : quantity_(quantity)
+        , cost_raw_(cost_raw)
+        , realised_(realised)
+        , entry_cost_raw_(entry_cost_raw) {}
     /// Never marked: the entry cost is the cost.
     Position(std::int64_t quantity, std::int64_t cost_raw, Paise realised) noexcept
         : Position(quantity, cost_raw, realised, cost_raw) {}
@@ -47,7 +51,8 @@ public:
 
     /// What `apply` would realise if the average were still the entry price: a closing fill's
     /// P&L from what the fills paid, before any daily mark. 0 for an opening fill.
-    [[nodiscard]] Paise entry_pnl(Side side, std::int64_t quantity, core::Price price) const noexcept;
+    [[nodiscard]] Paise entry_pnl(Side side, std::int64_t quantity,
+                                  core::Price price) const noexcept;
 
     /// Net quantity: positive long, negative short, 0 flat.
     [[nodiscard]] std::int64_t quantity() const noexcept { return quantity_; }

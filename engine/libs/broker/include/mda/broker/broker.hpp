@@ -47,7 +47,8 @@ struct CloseOfDay {
     int mis_square_off = 15 * 3600 + 25 * 60;  ///< MIS orders cancelled, MIS positions closed
     int close = 15 * 3600 + 30 * 60;           ///< DAY orders expire
     int settle = 15 * 3600 + 31 * 60;          ///< positions in contracts expiring today settle
-    int mark_to_market = 15 * 3600 + 41 * 60;  ///< open futures marked to the close (after F&O's 15:40)
+    int mark_to_market =
+        15 * 3600 + 41 * 60;  ///< open futures marked to the close (after F&O's 15:40)
 };
 
 struct BrokerConfig {
@@ -61,7 +62,8 @@ struct BrokerConfig {
 /// The final settlement price of contracts on `underlying` expiring on `expiry_day` (days
 /// since 1970-01-01): the underlying's closing value that day; nullopt until known. An MCX
 /// future settles on its own close; an MCX option on its future's.
-using FspLookup = std::function<std::optional<core::Price>(core::InstrumentId underlying, std::int32_t expiry_day)>;
+using FspLookup = std::function<std::optional<core::Price>(core::InstrumentId underlying,
+                                                           std::int32_t expiry_day)>;
 
 /// An instrument's last close before `before` (Unix ms) and when that minute ended; nullopt
 /// if none. For an MIS square-off missed while the broker was down.
@@ -69,7 +71,8 @@ struct PreviousClose {
     core::Price close;
     Millis ended = 0;
 };
-using PreviousCloseLookup = std::function<std::optional<PreviousClose>(core::InstrumentId, Millis before)>;
+using PreviousCloseLookup =
+    std::function<std::optional<PreviousClose>(core::InstrumentId, Millis before)>;
 
 /// One account's day, for the daily summary.
 struct DailySummary {
@@ -100,7 +103,8 @@ public:
     void on_circuit(const messages::CircuitLimits& limits);
 
     /// A request from a source; its reports (persisted first).
-    [[nodiscard]] std::expected<Reports, DbError> on_request(const OrderRequest& request, Millis now);
+    [[nodiscard]] std::expected<Reports, DbError> on_request(const OrderRequest& request,
+                                                             Millis now);
     /// Runs the close of the day when due, then the paper venue over every live order;
     /// reports for what changed.
     [[nodiscard]] std::expected<Reports, DbError> on_tick(Millis now);
@@ -139,23 +143,26 @@ private:
 
     AccountState& ensure_account(std::int64_t user, Millis now, Changes& changes);
     [[nodiscard]] rms::AccountView view_of(const AccountState& state, core::InstrumentId instrument,
-                                           oms::Side side, std::int64_t except_order, Millis now) const;
-    [[nodiscard]] oms::Book book_of(core::InstrumentId instrument, const rms::InstrumentInfo& info) const;
+                                           oms::Side side, std::int64_t except_order,
+                                           Millis now) const;
+    [[nodiscard]] oms::Book book_of(core::InstrumentId instrument,
+                                    const rms::InstrumentInfo& info) const;
     [[nodiscard]] rms::Quote quote_of(core::InstrumentId instrument) const;
-    [[nodiscard]] ExecutionReport report(const oms::Order& order, std::int64_t user, ReportEvent event,
-                                         Millis now) const;
+    [[nodiscard]] ExecutionReport report(const oms::Order& order, std::int64_t user,
+                                         ReportEvent event, Millis now) const;
     [[nodiscard]] OrderRow row_of(const oms::Order& order, std::int64_t user, Paise margin) const;
     void finish(std::int64_t order_id, Changes& changes);
-    void apply_fill(LiveOrder& live, const rms::InstrumentInfo& info, const oms::Execution& fill, Millis now,
-                    Changes& changes, Reports& reports);
+    void apply_fill(LiveOrder& live, const rms::InstrumentInfo& info, const oms::Execution& fill,
+                    Millis now, Changes& changes, Reports& reports);
     [[nodiscard]] std::expected<void, DbError> save(Changes& changes, Millis now);
     void close_of_day(Millis now, Changes& changes, Reports& reports);
     /// Whether an instrument trades on MCX (its close of day is MCX's).
     [[nodiscard]] bool on_mcx(core::InstrumentId instrument) const;
-    void square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& changes, Reports& reports);
+    void square_off_mis(std::int32_t today, bool mcx, Millis now, Changes& changes,
+                        Reports& reports);
     /// Cancels live orders created before `before`; `mcx` limits it to one side's orders.
-    void expire_orders(Millis before, std::optional<bool> mcx, std::string_view reason, Millis now, Changes& changes,
-                       Reports& reports);
+    void expire_orders(Millis before, std::optional<bool> mcx, std::string_view reason, Millis now,
+                       Changes& changes, Reports& reports);
     /// Zerodha's daily MTM: open futures (not expiring today) settle their P&L against the
     /// day's last close and carry on from it. `due[mcx]`: that exchange's time has passed.
     /// Idempotent: a position already at the close is left alone.
@@ -169,11 +176,12 @@ private:
     /// price recorded before the Mac slept (paper-trading.md §6). Idempotent.
     void mark_to_previous_close(std::int32_t today, Millis now, Changes& changes);
     /// Marks every open position in `instrument` to `close`, unless they are all at it already.
-    void mark_instrument(std::int64_t account_id, AccountState& state, core::InstrumentId instrument, core::Price close,
-                         Millis now, Changes& changes);
+    void mark_instrument(std::int64_t account_id, AccountState& state,
+                         core::InstrumentId instrument, core::Price close, Millis now,
+                         Changes& changes);
     /// `after_close[mcx]`: whether that exchange's settlement time has passed today.
-    void settle_expired(std::int32_t today, std::array<bool, 2> after_close, Millis now, Changes& changes,
-                        Reports& reports);
+    void settle_expired(std::int32_t today, std::array<bool, 2> after_close, Millis now,
+                        Changes& changes, Reports& reports);
 
     BrokerConfig config_;
     PaperStore* store_;
@@ -184,7 +192,8 @@ private:
     std::unordered_map<std::int64_t, std::int64_t> by_user_;  ///< user → account id
     std::map<std::int64_t, LiveOrder> live_;                  ///< by order id, oldest first
     std::unordered_map<std::uint32_t, oms::Book> books_;
-    std::unordered_map<std::uint32_t, std::pair<core::Price, core::Price>> circuits_;  ///< lower, upper
+    std::unordered_map<std::uint32_t, std::pair<core::Price, core::Price>>
+        circuits_;  ///< lower, upper
     /// The auto trader's net filled quantity by account and position on `auto_day_`: its
     /// share of a position, so its limits aren't used up by the user's own trades.
     std::map<std::pair<std::int64_t, oms::PositionKey>, std::int64_t> auto_net_;

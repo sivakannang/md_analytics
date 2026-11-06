@@ -24,12 +24,12 @@ enum class MessageType : std::uint32_t {
     DepthSnapshot = 3,
     FeedStatus = 4,
     CircuitLimits = 5,
-    Bar = 6,              ///< bars::Bar on the analytics bus (mda-engine)
-    OptionAnalytics = 7,  ///< options::OptionAnalyticsMessage (mda-engine)
-    ChainSummary = 8,     ///< options::ChainSummaryMessage (mda-engine)
-    MarketSignal = 9,     ///< signals::MarketSignal on the signals bus (mda-signald)
-    OrderRequest = 10,    ///< broker::OrderRequest on ord-gw / ord-auto (to mda-broker)
-    ExecutionReport = 11, ///< broker::ExecutionReport on exec (mda-broker)
+    Bar = 6,               ///< bars::Bar on the analytics bus (mda-engine)
+    OptionAnalytics = 7,   ///< options::OptionAnalyticsMessage (mda-engine)
+    ChainSummary = 8,      ///< options::ChainSummaryMessage (mda-engine)
+    MarketSignal = 9,      ///< signals::MarketSignal on the signals bus (mda-signald)
+    OrderRequest = 10,     ///< broker::OrderRequest on ord-gw / ord-auto (to mda-broker)
+    ExecutionReport = 11,  ///< broker::ExecutionReport on exec (mda-broker)
 };
 
 [[nodiscard]] constexpr std::uint32_t to_wire(MessageType type) noexcept {

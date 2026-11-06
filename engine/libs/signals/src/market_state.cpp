@@ -1,11 +1,11 @@
-#include <mda/signals/market_state.hpp>
-
 #include <utility>
+
+#include <mda/signals/market_state.hpp>
 
 namespace mda::signals {
 
-Aggressor classify_trade(std::int64_t ltp, std::int64_t bid, std::int64_t ask, std::int64_t prev_ltp,
-                         int tick) noexcept {
+Aggressor classify_trade(std::int64_t ltp, std::int64_t bid, std::int64_t ask,
+                         std::int64_t prev_ltp, int tick) noexcept {
     if (ask > 0 && ltp >= ask) {
         return Aggressor::Buy;
     }
@@ -85,33 +85,35 @@ void MarketState::on_bar(const bars::Bar& bar) {
     }
     const double close = bar.close.to_double();
     switch (it->second.role) {
-    case Role::Spot:
-        spot_.add(bar.start, close);
-        break;
-    case Role::Future:
-        future_.add(bar.start,
-                    FutureBar{.close = close,
-                              .typical = (bar.high.to_double() + bar.low.to_double() + close) / 3.0,
-                              .volume = bar.volume.value(),
-                              .oi = bar.oi_close.value()});
-        break;
-    case Role::Option:
-        // A bar without OI (none published yet today) says nothing about positioning.
-        if (bar.oi_close.value() > 0) {
-            options_[it->second.index].oi.add(bar.start, bar.oi_close.value());
-        }
-        break;
-    case Role::Sector:
-        sectors_[it->second.index].close.add(bar.start, close);
-        break;
-    case Role::Vix:
-        vix_.add(bar.start, close);
-        break;
+        case Role::Spot:
+            spot_.add(bar.start, close);
+            break;
+        case Role::Future:
+            future_.add(
+                bar.start,
+                FutureBar{.close = close,
+                          .typical = (bar.high.to_double() + bar.low.to_double() + close) / 3.0,
+                          .volume = bar.volume.value(),
+                          .oi = bar.oi_close.value()});
+            break;
+        case Role::Option:
+            // A bar without OI (none published yet today) says nothing about positioning.
+            if (bar.oi_close.value() > 0) {
+                options_[it->second.index].oi.add(bar.start, bar.oi_close.value());
+            }
+            break;
+        case Role::Sector:
+            sectors_[it->second.index].close.add(bar.start, close);
+            break;
+        case Role::Vix:
+            vix_.add(bar.start, close);
+            break;
     }
 }
 
 void MarketState::on_snapshot(const messages::MarketSnapshot& snapshot) {
-    const core::Timestamp seen_at = snapshot.receive_ts.is_set() ? snapshot.receive_ts : snapshot.exchange_ts;
+    const core::Timestamp seen_at =
+        snapshot.receive_ts.is_set() ? snapshot.receive_ts : snapshot.exchange_ts;
     const std::int64_t seen = seen_at.ns() / 1'000'000'000;
     if (last_seen_ > 0 && seen - last_seen_ >= kFeedGap) {
         tracker_.volume = -1;  // e.g. the Wi-Fi was down: what traded meanwhile isn't one second's
@@ -124,7 +126,8 @@ void MarketState::on_snapshot(const messages::MarketSnapshot& snapshot) {
     const std::int64_t volume = snapshot.volume.value();
     const std::int64_t ltp = snapshot.ltp.raw();
     FlowTracker& t = tracker_;
-    const core::Timestamp at = snapshot.exchange_ts.is_set() ? snapshot.exchange_ts : snapshot.receive_ts;
+    const core::Timestamp at =
+        snapshot.exchange_ts.is_set() ? snapshot.exchange_ts : snapshot.receive_ts;
     const std::int64_t seconds = at.ns() / 1'000'000'000;
     // The first snapshot (or one after a gap or a new day) only sets the baseline: its
     // volume is everything traded since the last one seen, not one second's trades. So does
@@ -134,15 +137,15 @@ void MarketState::on_snapshot(const messages::MarketSnapshot& snapshot) {
         FlowMinute& minute = flow_.upsert(seconds - seconds % 60);
         if (const std::int64_t traded = volume - t.volume; traded > 0) {
             switch (classify_trade(ltp, t.bid, t.ask, t.ltp, t.tick)) {
-            case Aggressor::Buy:
-                minute.buy += traded;
-                break;
-            case Aggressor::Sell:
-                minute.sell += traded;
-                break;
-            case Aggressor::Unknown:
-                minute.unclassified += traded;
-                break;
+                case Aggressor::Buy:
+                    minute.buy += traded;
+                    break;
+                case Aggressor::Sell:
+                    minute.sell += traded;
+                    break;
+                case Aggressor::Unknown:
+                    minute.unclassified += traded;
+                    break;
             }
         }
     }

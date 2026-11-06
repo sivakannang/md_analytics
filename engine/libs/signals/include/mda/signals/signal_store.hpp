@@ -60,9 +60,9 @@ struct TrackRecord {
     int neutral = 0;
     int hits = 0;
     int misses = 0;
-    int flats = 0;          ///< Bullish/Bearish calls whose move stayed within the flat band
-    int up_moves = 0;       ///< "always up" baseline: of hits + misses, moves that were up
-    int momentum_hits = 0;  ///< momentum baseline: the previous horizon's direction was right
+    int flats = 0;           ///< Bullish/Bearish calls whose move stayed within the flat band
+    int up_moves = 0;        ///< "always up" baseline: of hits + misses, moves that were up
+    int momentum_hits = 0;   ///< momentum baseline: the previous horizon's direction was right
     int momentum_calls = 0;  ///< … out of these (minutes with a signal one horizon earlier)
 };
 
@@ -77,7 +77,8 @@ public:
 
     /// Writes the signals in one transaction; a signal for the same strategy, index and
     /// minute replaces the earlier one (a restart may evaluate a minute again).
-    [[nodiscard]] std::expected<void, storage::DbError> write(std::span<const SignalRecord> records);
+    [[nodiscard]] std::expected<void, storage::DbError> write(
+        std::span<const SignalRecord> records);
 
     /// One index's signals with minute in [from, to), oldest first, all strategies.
     [[nodiscard]] std::expected<std::vector<StoredSignal>, storage::DbError> range(

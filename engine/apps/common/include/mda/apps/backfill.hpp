@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
-#include <mda/instruments/contract_key.hpp>
 #include <mda/bars/bar.hpp>
 #include <mda/bars/bar_store.hpp>
 #include <mda/core/instrument_id.hpp>
+#include <mda/instruments/contract_key.hpp>
 #include <mda/kite/rest_client.hpp>
 
 namespace mda::apps {

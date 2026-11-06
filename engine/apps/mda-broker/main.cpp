@@ -15,10 +15,10 @@
 // paper.daily_summary queues each trader's day for mda-notifier (app.db outbox).
 // One thread. Stops cleanly on Ctrl+C / SIGTERM.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
-#include <algorithm>
 #include <cstdio>
 #include <format>
 #include <map>
@@ -31,9 +31,9 @@
 #include <boost/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include <mda/broker/broker.hpp>
 #include <mda/appdb/outbox.hpp>
 #include <mda/bars/bar_store.hpp>
+#include <mda/broker/broker.hpp>
 #include <mda/broker/instrument_catalog.hpp>
 #include <mda/bus/bus.hpp>
 #include <mda/bus/wait_strategy.hpp>
@@ -70,8 +70,9 @@ void queue_summaries(storage::Database& app_db, broker::PaperStore& paper,
                      const std::vector<broker::DailySummary>& summaries, oms::Millis session_now) {
     const std::int64_t day = (session_now + 19'800'000) / 86'400'000;
     const std::chrono::year_month_day ymd{std::chrono::sys_days{std::chrono::days{day}}};
-    const std::string date = std::format("{:04}-{:02}-{:02}", static_cast<int>(ymd.year()),
-                                         static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()));
+    const std::string date =
+        std::format("{:04}-{:02}-{:02}", static_cast<int>(ymd.year()),
+                    static_cast<unsigned>(ymd.month()), static_cast<unsigned>(ymd.day()));
     for (const auto& s : summaries) {
         auto user = app_db.prepare("SELECT username, email FROM users WHERE id = ?1");
         if (!user) {
@@ -93,16 +94,16 @@ void queue_summaries(storage::Database& app_db, broker::PaperStore& paper,
                                          t.tag.substr(5), t.fills, money(t.realised - t.charges));
             }
         }
-        const std::string payload = boost::json::serialize(boost::json::object{
-            {"username", username},
-            {"date", date},
-            {"fills", s.fills},
-            {"realised", money(s.realised)},
-            {"charges", money(s.charges)},
-            {"net", money(s.realised - s.charges)},
-            {"open_positions", s.open_positions},
-            {"cash", money(s.cash)},
-            {"auto", automatic}});
+        const std::string payload =
+            boost::json::serialize(boost::json::object{{"username", username},
+                                                       {"date", date},
+                                                       {"fills", s.fills},
+                                                       {"realised", money(s.realised)},
+                                                       {"charges", money(s.charges)},
+                                                       {"net", money(s.realised - s.charges)},
+                                                       {"open_positions", s.open_positions},
+                                                       {"cash", money(s.cash)},
+                                                       {"auto", automatic}});
         const std::string dedup = std::format("paper.daily_summary:{}:{}", s.user, date);
         if (auto queued = appdb::enqueue(app_db,
                                          {.user_id = s.user,
@@ -127,7 +128,6 @@ std::optional<bus::Reader> try_attach(const std::string& name, const char* as) {
     return std::nullopt;
 }
 
-
 int run(const runtime::Config& config) {
     auto store = broker::PaperStore::open(config.paper.db);
     if (!store) {
@@ -136,29 +136,34 @@ int run(const runtime::Config& config) {
     }
     auto app_db = storage::Database::open(config.database.path);
     if (!app_db) {
-        spdlog::error("catalog: cannot open {}: {}", config.database.path.string(), app_db.error().message);
+        spdlog::error("catalog: cannot open {}: {}", config.database.path.string(),
+                      app_db.error().message);
         return 1;
     }
     broker::InstrumentCatalog catalog(
         *app_db, config.paper.freeze_quantity,
-        broker::McxMargins::from_percent(config.paper.mcx_margin_percent, config.paper.mcx_default_margin_percent));
+        broker::McxMargins::from_percent(config.paper.mcx_margin_percent,
+                                         config.paper.mcx_default_margin_percent));
 
     broker::BrokerConfig broker_config;
     broker_config.opening_cash = config.paper.opening_cash * 100;
     broker_config.venue = {.latency_ms = config.paper.latency_ms,
                            .overflow_ticks = config.paper.overflow_ticks,
                            .stale_after_ms = config.paper.stale_after_ms};
-    broker_config.risk.futures_margin = static_cast<oms::Ppb>(config.paper.futures_margin_percent * 10'000'000.0);
+    broker_config.risk.futures_margin =
+        static_cast<oms::Ppb>(config.paper.futures_margin_percent * 10'000'000.0);
     broker_config.risk.stock_futures_margin =
         static_cast<oms::Ppb>(config.paper.stock_futures_margin_percent * 10'000'000.0);
     broker_config.close_of_day.mis_square_off = config.paper.mis_square_off;
     // Settlement prices: the underlying's last 1-minute close of the expiry day (bars.db).
     auto bars = bars::BarStore::open(config.engine.bars_db);
     if (!bars) {
-        spdlog::error("bars: cannot open {}: {}", config.engine.bars_db.string(), bars.error().message);
+        spdlog::error("bars: cannot open {}: {}", config.engine.bars_db.string(),
+                      bars.error().message);
         return 1;
     }
-    const auto fsp = [&bars](core::InstrumentId underlying, std::int32_t day) -> std::optional<core::Price> {
+    const auto fsp = [&bars](core::InstrumentId underlying,
+                             std::int32_t day) -> std::optional<core::Price> {
         if (!underlying.valid()) {
             return std::nullopt;
         }
@@ -171,24 +176,31 @@ int run(const runtime::Config& config) {
         return (*last)->close;
     };
     // The last close before a time, for a close of day missed while the broker was down.
-    const auto previous_close = [&bars](core::InstrumentId id, oms::Millis before) -> std::optional<broker::PreviousClose> {
+    const auto previous_close =
+        [&bars](core::InstrumentId id, oms::Millis before) -> std::optional<broker::PreviousClose> {
         const auto last = bars->latest_before(id.value(), before / 1000);
         if (!last || !*last) {
             return std::nullopt;
         }
-        return broker::PreviousClose{.close = (*last)->close, .ended = ((*last)->start + 60) * 1000};
+        return broker::PreviousClose{.close = (*last)->close,
+                                     .ended = ((*last)->start + 60) * 1000};
     };
-    broker::Broker broker(broker_config, *store, [&catalog](core::InstrumentId id) { return catalog.get(id); }, fsp,
-                          previous_close);
+    broker::Broker broker(
+        broker_config, *store, [&catalog](core::InstrumentId id) { return catalog.get(id); }, fsp,
+        previous_close);
     if (auto loaded = broker.load(wall_ms()); !loaded) {
-        spdlog::error("paper: cannot load {}: {}", config.paper.db.string(), loaded.error().message);
+        spdlog::error("paper: cannot load {}: {}", config.paper.db.string(),
+                      loaded.error().message);
         return 1;
     }
     if (broker.restored_accounts() > 0) {
-        spdlog::error("paper: {} accounts rows were missing from {} and were rebuilt from their orders and ledger",
-                      broker.restored_accounts(), config.paper.db.string());
+        spdlog::error(
+            "paper: {} accounts rows were missing from {} and were rebuilt from their orders and "
+            "ledger",
+            broker.restored_accounts(), config.paper.db.string());
     }
-    spdlog::info("paper: {} live orders restored from {}", broker.live_orders(), config.paper.db.string());
+    spdlog::info("paper: {} live orders restored from {}", broker.live_orders(),
+                 config.paper.db.string());
 
     auto exec = bus::Writer::create_or_attach(
         {.name = config.exec_bus.name, .capacity = config.exec_bus.capacity_mb * 1024 * 1024});
@@ -196,18 +208,21 @@ int run(const runtime::Config& config) {
         spdlog::error("bus: {}: {}", config.exec_bus.name, bus::to_string(exec.error()));
         return 1;
     }
-    spdlog::info("bus: writer on '{}' ({} MB, epoch {})", config.exec_bus.name, config.exec_bus.capacity_mb,
-                 exec->epoch());
+    spdlog::info("bus: writer on '{}' ({} MB, epoch {})", config.exec_bus.name,
+                 config.exec_bus.capacity_mb, exec->epoch());
     const auto publish = [&](const broker::Reports& reports) {
         for (const auto& r : reports) {
-            (void)exec->publish(messages::to_wire(messages::MessageType::ExecutionReport), messages::as_bytes(r));
+            (void)exec->publish(messages::to_wire(messages::MessageType::ExecutionReport),
+                                messages::as_bytes(r));
             if (r.event != broker::ReportEvent::Status) {
-                spdlog::info("order {} user {}: event {} {} {}/{}{}{}", r.order_id, r.user, static_cast<int>(r.event),
-                             oms::name(r.status), r.filled, r.quantity,
-                             r.last_quantity > 0 ? std::format(" last {}@{:.2f}", r.last_quantity, r.last_price.to_double())
+                spdlog::info("order {} user {}: event {} {} {}/{}{}{}", r.order_id, r.user,
+                             static_cast<int>(r.event), oms::name(r.status), r.filled, r.quantity,
+                             r.last_quantity > 0 ? std::format(" last {}@{:.2f}", r.last_quantity,
+                                                               r.last_price.to_double())
                                                  : std::string(),
-                             broker::text_of(r.reason).empty() ? std::string()
-                                                               : " (" + std::string(broker::text_of(r.reason)) + ")");
+                             broker::text_of(r.reason).empty()
+                                 ? std::string()
+                                 : " (" + std::string(broker::text_of(r.reason)) + ")");
             }
         }
     };
@@ -239,7 +254,8 @@ int run(const runtime::Config& config) {
         bool busy = false;
         if (md) {
             for (int i = 0; i < 256; ++i) {  // drain market data in batches
-                const auto result = md->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+                const auto result = md->poll([&](bus::MsgType type,
+                                                 std::span<const std::byte> payload) {
                     if (auto s = messages::decode<messages::MarketSnapshot>(type, payload)) {
                         broker.on_snapshot(*s);
                         event_ms = std::max(event_ms, s->receive_ts.ns() / 1'000'000);
@@ -257,8 +273,8 @@ int run(const runtime::Config& config) {
                 }
                 busy = true;
                 if (result.status == bus::PollStatus::Lapped) {
-                    spdlog::warn("bus: broker fell behind '{}'; {} bytes skipped", config.md_bus.name,
-                                 result.lost_bytes);
+                    spdlog::warn("bus: broker fell behind '{}'; {} bytes skipped",
+                                 config.md_bus.name, result.lost_bytes);
                 }
             }
         }
@@ -267,7 +283,8 @@ int run(const runtime::Config& config) {
                 continue;
             }
             const oms::Source origin = source == &ord_gw ? oms::Source::Ui : oms::Source::Auto;
-            const auto result = (*source)->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+            const auto result = (*source)->poll([&](bus::MsgType type,
+                                                    std::span<const std::byte> payload) {
                 auto request = messages::decode<broker::OrderRequest>(type, payload);
                 if (!request) {
                     return;
@@ -286,7 +303,8 @@ int run(const runtime::Config& config) {
                 if (result.status == bus::PollStatus::Lapped) {
                     // Sources resend after their ack timeout; paper.db stays the truth.
                     spdlog::error("bus: order requests lost on {} ({} bytes)",
-                                  origin == oms::Source::Ui ? config.ord_gw_bus.name : config.ord_auto_bus.name,
+                                  origin == oms::Source::Ui ? config.ord_gw_bus.name
+                                                            : config.ord_auto_bus.name,
                                   result.lost_bytes);
                 }
             }
@@ -339,8 +357,8 @@ int run(const runtime::Config& config) {
         if (now >= next_catalog) {
             next_catalog = now + std::chrono::minutes(5);
             catalog.clear();
-            spdlog::info("summary: {} live orders, {} requests and {} reports since start", broker.live_orders(),
-                         requests, reports_sent);
+            spdlog::info("summary: {} live orders, {} requests and {} reports since start",
+                         broker.live_orders(), requests, reports_sent);
         }
         if (busy) {
             wait.reset();
@@ -360,7 +378,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     runtime::setup_logging("mda-broker", config->logging);
-    spdlog::info("mda-broker starting (config {}, log level {})", config->source.string(), config->logging.level);
+    spdlog::info("mda-broker starting (config {}, log level {})", config->source.string(),
+                 config->logging.level);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     const int code = run(*config);

@@ -40,12 +40,12 @@ struct Level {
 /// One instrument's market as the venue sees it.
 struct Book {
     core::Price ltp;
-    Millis ltp_at = 0;       ///< when the LTP last changed
+    Millis ltp_at = 0;            ///< when the LTP last changed
     std::array<Level, 5> bids{};  ///< best first
     std::array<Level, 5> asks{};  ///< best first
-    Millis updated_at = 0;   ///< the last quote or depth update
-    core::Price tick;        ///< the instrument's tick size
-    bool feed_ok = true;     ///< the feed is connected
+    Millis updated_at = 0;        ///< the last quote or depth update
+    core::Price tick;             ///< the instrument's tick size
+    bool feed_ok = true;          ///< the feed is connected
 };
 
 struct VenueConfig {
@@ -61,8 +61,8 @@ struct Execution {
 
 /// What should happen to one order now. The caller applies it to the Order and Account.
 struct VenueResult {
-    bool triggered = false;           ///< an SL / SL-M reached its trigger
-    std::vector<Execution> fills;     ///< in the order they happen
+    bool triggered = false;             ///< an SL / SL-M reached its trigger
+    std::vector<Execution> fills;       ///< in the order they happen
     std::optional<std::string> reject;  ///< a MARKET order that can't fill (cancel the rest)
 };
 

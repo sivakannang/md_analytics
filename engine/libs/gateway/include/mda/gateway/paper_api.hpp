@@ -26,6 +26,7 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/json/object.hpp>
+
 #include <mda/auth/auth_service.hpp>
 #include <mda/autotrade/decision_store.hpp>
 #include <mda/broker/instrument_catalog.hpp>
@@ -44,7 +45,8 @@ public:
     void add(const broker::ExecutionReport& report);
 
     /// `user`'s reports that arrived after `seen` (a version); updates `seen`.
-    [[nodiscard]] std::vector<broker::ExecutionReport> since(std::int64_t user, std::uint64_t& seen) const;
+    [[nodiscard]] std::vector<broker::ExecutionReport> since(std::int64_t user,
+                                                             std::uint64_t& seen) const;
     /// The newest report of `user` after version `after` that `match` accepts.
     [[nodiscard]] std::optional<broker::ExecutionReport> find(
         std::int64_t user, std::uint64_t after,
@@ -80,7 +82,8 @@ private:
 class OrderSender {
 public:
     /// Creates or takes over the bus; nullptr (logged) if it can't.
-    [[nodiscard]] static std::unique_ptr<OrderSender> open(const std::string& bus_name, std::size_t capacity);
+    [[nodiscard]] static std::unique_ptr<OrderSender> open(const std::string& bus_name,
+                                                           std::size_t capacity);
 
     explicit OrderSender(bus::Writer writer) : writer_(std::move(writer)) {}
 
@@ -97,11 +100,12 @@ private:
 };
 
 struct PaperSettings {
-    oms::Paise opening_cash = 10'00'000 * 100;  ///< what a new account starts with (shown before the first order)
+    oms::Paise opening_cash =
+        10'00'000 * 100;  ///< what a new account starts with (shown before the first order)
     oms::Ppb futures_margin = 120'000'000;        ///< index futures
     oms::Ppb stock_futures_margin = 200'000'000;  ///< stock futures
     std::map<std::string, std::int64_t> freeze_quantity;
-    broker::McxMargins mcx_margins;               ///< MCX futures margin per commodity (ADR-0031)
+    broker::McxMargins mcx_margins;  ///< MCX futures margin per commodity (ADR-0031)
     std::chrono::milliseconds resend_after{500};
     std::chrono::milliseconds give_up_after{2'000};  ///< then answer 202 with the client order id
 };
@@ -120,9 +124,10 @@ struct AutoRunInfo {
 /// GET /api/v1/paper/auto?days=30 — the signed-in user's auto-trader runs: settings,
 /// position, metrics over the last `days` and today's decisions (paper.db and autotrader.db,
 /// read on `paper_executor`).
-void register_auto_routes(Router& router, auth::AuthService& auth, asio::any_io_executor db_executor,
-                          broker::PaperStore& store, autotrade::DecisionStore& decisions,
-                          asio::any_io_executor paper_executor, std::vector<AutoRunInfo> runs);
+void register_auto_routes(Router& router, auth::AuthService& auth,
+                          asio::any_io_executor db_executor, broker::PaperStore& store,
+                          autotrade::DecisionStore& decisions, asio::any_io_executor paper_executor,
+                          std::vector<AutoRunInfo> runs);
 
 /// One execution report as JSON (REST and the stream).
 [[nodiscard]] boost::json::object report_json(const broker::ExecutionReport& report);
@@ -132,6 +137,7 @@ void register_auto_routes(Router& router, auth::AuthService& auth, asio::any_io_
 void register_paper_routes(Router& router, auth::AuthService& auth, storage::Database& db,
                            asio::any_io_executor db_executor, broker::PaperStore& store,
                            asio::any_io_executor paper_executor, OrderSender& sender,
-                           const OrderUpdates& updates, const QuoteCache& quotes, PaperSettings settings);
+                           const OrderUpdates& updates, const QuoteCache& quotes,
+                           PaperSettings settings);
 
 }  // namespace mda::gateway

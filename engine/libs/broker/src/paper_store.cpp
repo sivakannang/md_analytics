@@ -1,15 +1,16 @@
-#include <mda/broker/paper_store.hpp>
-
 #include <array>
 #include <system_error>
 #include <utility>
+
+#include <mda/broker/paper_store.hpp>
 
 namespace mda::broker {
 namespace {
 
 using storage::StepResult;
 
-constexpr std::array<std::string_view, 3> kMigrations = {R"sql(
+constexpr std::array<std::string_view, 3> kMigrations = {
+    R"sql(
 CREATE TABLE accounts (
     id           INTEGER PRIMARY KEY,
     user_id      INTEGER NOT NULL,
@@ -99,11 +100,11 @@ CREATE TABLE events (
     payload TEXT NOT NULL
 );
 )sql",
-                                                          // Entry prices. The daily mark moved each open position's cost by
-                                                          // its MTM (paise × 100 = raw), so undoing the marks gives the cost
-                                                          // at fill prices. Exact when an instrument's marks all belong to
-                                                          // one open position, true of every position at this migration.
-                                                          R"sql(
+    // Entry prices. The daily mark moved each open position's cost by
+    // its MTM (paise × 100 = raw), so undoing the marks gives the cost
+    // at fill prices. Exact when an instrument's marks all belong to
+    // one open position, true of every position at this migration.
+    R"sql(
 ALTER TABLE positions ADD COLUMN entry_cost_raw INTEGER NOT NULL DEFAULT 0;
 UPDATE positions SET entry_cost_raw = cost_raw - 100 * (
     SELECT COALESCE(SUM(amount), 0) FROM ledger
@@ -112,16 +113,18 @@ UPDATE positions SET entry_cost_raw = cost_raw - 100 * (
       AND ledger.kind = 5)
 WHERE quantity != 0;
 )sql",
-                                                          // Each closing fill's P&L from the entry price. No fill so far
-                                                          // closed a marked position, so it's the realised P&L.
-                                                          R"sql(
+    // Each closing fill's P&L from the entry price. No fill so far
+    // closed a marked position, so it's the realised P&L.
+    R"sql(
 ALTER TABLE trades ADD COLUMN entry_realised INTEGER NOT NULL DEFAULT 0;
 UPDATE trades SET entry_realised = realised;
 )sql"};
 
 constexpr std::string_view kOrderColumns =
-    "id, account_id, user_id, client_order_id, source, instrument_id, side, type, current_type, product, "
-    "quantity, price_raw, trigger_raw, status, filled, filled_value_raw, brokerage, charges, margin, reason, "
+    "id, account_id, user_id, client_order_id, source, instrument_id, side, type, current_type, "
+    "product, "
+    "quantity, price_raw, trigger_raw, status, filled, filled_value_raw, brokerage, charges, "
+    "margin, reason, "
     "tag, created_at, updated_at, eligible_at, resting";
 
 template <typename E>
@@ -242,7 +245,8 @@ std::expected<void, DbError> PaperStore::in_transaction(
 
 std::expected<void, DbError> PaperStore::upsert_account(const AccountRow& a) {
     auto statement = db_.prepare(
-        "INSERT OR REPLACE INTO accounts (id, user_id, created_at, opening_cash, active, kill_switch) "
+        "INSERT OR REPLACE INTO accounts (id, user_id, created_at, opening_cash, active, "
+        "kill_switch) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6)");
     if (!statement) {
         return std::unexpected(statement.error());
@@ -257,9 +261,10 @@ std::expected<void, DbError> PaperStore::upsert_account(const AccountRow& a) {
 }
 
 std::expected<void, DbError> PaperStore::upsert_order(const OrderRow& row) {
-    auto statement = db_.prepare("INSERT OR REPLACE INTO orders (" + std::string(kOrderColumns) +
-                                 ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, "
-                                 "?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)");
+    auto statement =
+        db_.prepare("INSERT OR REPLACE INTO orders (" + std::string(kOrderColumns) +
+                    ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, "
+                    "?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -294,7 +299,8 @@ std::expected<void, DbError> PaperStore::upsert_order(const OrderRow& row) {
 
 std::expected<void, DbError> PaperStore::insert_trade(const TradeRow& t) {
     auto statement = db_.prepare(
-        "INSERT INTO trades (order_id, account_id, instrument_id, side, product, quantity, price_raw, "
+        "INSERT INTO trades (order_id, account_id, instrument_id, side, product, quantity, "
+        "price_raw, "
         "brokerage, stt, exchange, sebi, stamp, gst, realised, at, entry_realised) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)");
     if (!statement) {
@@ -321,9 +327,11 @@ std::expected<void, DbError> PaperStore::insert_trade(const TradeRow& t) {
 
 std::expected<void, DbError> PaperStore::upsert_position(std::int64_t account_id,
                                                          const oms::PositionKey& key,
-                                                         const oms::Position& position, std::int64_t at) {
+                                                         const oms::Position& position,
+                                                         std::int64_t at) {
     auto statement = db_.prepare(
-        "INSERT OR REPLACE INTO positions (account_id, instrument_id, product, quantity, cost_raw, realised, "
+        "INSERT OR REPLACE INTO positions (account_id, instrument_id, product, quantity, cost_raw, "
+        "realised, "
         "updated_at, entry_cost_raw) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)");
     if (!statement) {
         return std::unexpected(statement.error());
@@ -339,7 +347,8 @@ std::expected<void, DbError> PaperStore::upsert_position(std::int64_t account_id
         .run();
 }
 
-std::expected<void, DbError> PaperStore::insert_ledger(std::int64_t account_id, const oms::LedgerEntry& e) {
+std::expected<void, DbError> PaperStore::insert_ledger(std::int64_t account_id,
+                                                       const oms::LedgerEntry& e) {
     auto statement = db_.prepare(
         "INSERT INTO ledger (account_id, at, kind, amount, order_id, instrument_id) "
         "VALUES (?1, ?2, ?3, ?4, ?5, ?6)");
@@ -366,7 +375,8 @@ std::expected<void, DbError> PaperStore::insert_event(std::int64_t at, std::stri
 
 std::expected<std::vector<AccountRow>, DbError> PaperStore::accounts() {
     auto statement = db_.prepare(
-        "SELECT id, user_id, created_at, opening_cash, active, kill_switch FROM accounts WHERE active = 1 "
+        "SELECT id, user_id, created_at, opening_cash, active, kill_switch FROM accounts WHERE "
+        "active = 1 "
         "ORDER BY id");
     if (!statement) {
         return std::unexpected(statement.error());
@@ -385,7 +395,8 @@ std::expected<std::vector<AccountRow>, DbError> PaperStore::lost_accounts() {
     auto statement = db_.prepare(
         "SELECT a.id, (SELECT user_id FROM orders WHERE account_id = a.id ORDER BY id LIMIT 1), "
         "COALESCE((SELECT MIN(at) FROM ledger WHERE account_id = a.id), 0), "
-        "COALESCE((SELECT amount FROM ledger WHERE account_id = a.id AND kind = 1 ORDER BY id DESC LIMIT 1), 0) "
+        "COALESCE((SELECT amount FROM ledger WHERE account_id = a.id AND kind = 1 ORDER BY id DESC "
+        "LIMIT 1), 0) "
         "FROM (SELECT account_id AS id FROM orders UNION SELECT account_id FROM ledger) a "
         "WHERE a.id NOT IN (SELECT id FROM accounts) ORDER BY a.id");
     if (!statement) {
@@ -400,30 +411,36 @@ std::expected<std::vector<AccountRow>, DbError> PaperStore::lost_accounts() {
                           .kill_switch = false};
     });
     if (rows) {
-        std::erase_if(*rows, [](const AccountRow& row) { return row.user_id <= 0; });  // no order: no owner known
+        std::erase_if(*rows, [](const AccountRow& row) {
+            return row.user_id <= 0;
+        });  // no order: no owner known
     }
     return rows;
 }
 
 std::expected<std::vector<oms::LedgerEntry>, DbError> PaperStore::ledger(std::int64_t account_id) {
     auto statement = db_.prepare(
-        "SELECT at, kind, amount, order_id, instrument_id FROM ledger WHERE account_id = ?1 ORDER BY id");
+        "SELECT at, kind, amount, order_id, instrument_id FROM ledger WHERE account_id = ?1 ORDER "
+        "BY id");
     if (!statement) {
         return std::unexpected(statement.error());
     }
     statement->bind(1, account_id);
     return collect<oms::LedgerEntry>(*statement, [](const storage::Statement& s) {
-        return oms::LedgerEntry{.at = s.column_int64(0),
-                                .kind = as<oms::LedgerKind>(s, 1),
-                                .amount = s.column_int64(2),
-                                .order_id = s.column_int64(3),
-                                .instrument = core::InstrumentId(static_cast<std::uint32_t>(s.column_int64(4)))};
+        return oms::LedgerEntry{
+            .at = s.column_int64(0),
+            .kind = as<oms::LedgerKind>(s, 1),
+            .amount = s.column_int64(2),
+            .order_id = s.column_int64(3),
+            .instrument = core::InstrumentId(static_cast<std::uint32_t>(s.column_int64(4)))};
     });
 }
 
-std::expected<std::map<oms::PositionKey, oms::Position>, DbError> PaperStore::positions(std::int64_t account_id) {
+std::expected<std::map<oms::PositionKey, oms::Position>, DbError> PaperStore::positions(
+    std::int64_t account_id) {
     auto statement = db_.prepare(
-        "SELECT instrument_id, product, quantity, cost_raw, realised, entry_cost_raw FROM positions "
+        "SELECT instrument_id, product, quantity, cost_raw, realised, entry_cost_raw FROM "
+        "positions "
         "WHERE account_id = ?1");
     if (!statement) {
         return std::unexpected(statement.error());
@@ -431,9 +448,11 @@ std::expected<std::map<oms::PositionKey, oms::Position>, DbError> PaperStore::po
     statement->bind(1, account_id);
     using Entry = std::pair<oms::PositionKey, oms::Position>;
     auto rows = collect<Entry>(*statement, [](const storage::Statement& s) {
-        return Entry{{.instrument = core::InstrumentId(static_cast<std::uint32_t>(s.column_int64(0))),
-                      .product = as<oms::Product>(s, 1)},
-                     oms::Position(s.column_int64(2), s.column_int64(3), s.column_int64(4), s.column_int64(5))};
+        return Entry{
+            {.instrument = core::InstrumentId(static_cast<std::uint32_t>(s.column_int64(0))),
+             .product = as<oms::Product>(s, 1)},
+            oms::Position(s.column_int64(2), s.column_int64(3), s.column_int64(4),
+                          s.column_int64(5))};
     });
     if (!rows) {
         return std::unexpected(rows.error());
@@ -450,8 +469,8 @@ std::expected<std::vector<OrderRow>, DbError> PaperStore::live_orders() {
     return collect<OrderRow>(*statement, read_order);
 }
 
-std::expected<std::optional<OrderRow>, DbError> PaperStore::order_by_client(std::int64_t account_id,
-                                                                            std::uint64_t client_order_id) {
+std::expected<std::optional<OrderRow>, DbError> PaperStore::order_by_client(
+    std::int64_t account_id, std::uint64_t client_order_id) {
     auto statement = db_.prepare("SELECT " + std::string(kOrderColumns) +
                                  " FROM orders WHERE account_id = ?1 AND client_order_id = ?2");
     if (!statement) {
@@ -477,7 +496,8 @@ std::expected<std::int64_t, DbError> PaperStore::max_order_id() {
     return statement->column_int64(0);
 }
 
-std::expected<std::optional<AccountRow>, DbError> PaperStore::account_for_user(std::int64_t user_id) {
+std::expected<std::optional<AccountRow>, DbError> PaperStore::account_for_user(
+    std::int64_t user_id) {
     auto statement = db_.prepare(
         "SELECT id, user_id, created_at, opening_cash, active, kill_switch FROM accounts "
         "WHERE user_id = ?1 AND active = 1");
@@ -499,11 +519,13 @@ std::expected<std::optional<AccountRow>, DbError> PaperStore::account_for_user(s
     return rows->empty() ? std::nullopt : std::optional(rows->front());
 }
 
-std::expected<std::vector<OrderRow>, DbError> PaperStore::orders(std::int64_t account_id, std::int64_t from,
+std::expected<std::vector<OrderRow>, DbError> PaperStore::orders(std::int64_t account_id,
+                                                                 std::int64_t from,
                                                                  std::int64_t to) {
-    auto statement = db_.prepare("SELECT " + std::string(kOrderColumns) +
-                                 " FROM orders WHERE account_id = ?1 AND created_at >= ?2 AND created_at < ?3 "
-                                 "ORDER BY id");
+    auto statement =
+        db_.prepare("SELECT " + std::string(kOrderColumns) +
+                    " FROM orders WHERE account_id = ?1 AND created_at >= ?2 AND created_at < ?3 "
+                    "ORDER BY id");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -511,11 +533,14 @@ std::expected<std::vector<OrderRow>, DbError> PaperStore::orders(std::int64_t ac
     return collect<OrderRow>(*statement, read_order);
 }
 
-std::expected<std::vector<TradeRow>, DbError> PaperStore::trades(std::int64_t account_id, std::int64_t from,
+std::expected<std::vector<TradeRow>, DbError> PaperStore::trades(std::int64_t account_id,
+                                                                 std::int64_t from,
                                                                  std::int64_t to) {
     auto statement = db_.prepare(
-        "SELECT order_id, account_id, instrument_id, side, product, quantity, price_raw, brokerage, stt, exchange, "
-        "sebi, stamp, gst, realised, at, entry_realised FROM trades WHERE account_id = ?1 AND at >= ?2 AND at < ?3 ORDER BY id");
+        "SELECT order_id, account_id, instrument_id, side, product, quantity, price_raw, "
+        "brokerage, stt, exchange, "
+        "sebi, stamp, gst, realised, at, entry_realised FROM trades WHERE account_id = ?1 AND at "
+        ">= ?2 AND at < ?3 ORDER BY id");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -523,11 +548,15 @@ std::expected<std::vector<TradeRow>, DbError> PaperStore::trades(std::int64_t ac
     return collect<TradeRow>(*statement, read_trade);
 }
 
-std::expected<std::vector<TradeRow>, DbError> PaperStore::tagged_trades(std::int64_t account_id, std::string_view tag,
-                                                                        std::int64_t from, std::int64_t to) {
+std::expected<std::vector<TradeRow>, DbError> PaperStore::tagged_trades(std::int64_t account_id,
+                                                                        std::string_view tag,
+                                                                        std::int64_t from,
+                                                                        std::int64_t to) {
     auto statement = db_.prepare(
-        "SELECT t.order_id, t.account_id, t.instrument_id, t.side, t.product, t.quantity, t.price_raw, t.brokerage, "
-        "t.stt, t.exchange, t.sebi, t.stamp, t.gst, t.realised, t.at, t.entry_realised FROM trades t JOIN orders o ON o.id = t.order_id "
+        "SELECT t.order_id, t.account_id, t.instrument_id, t.side, t.product, t.quantity, "
+        "t.price_raw, t.brokerage, "
+        "t.stt, t.exchange, t.sebi, t.stamp, t.gst, t.realised, t.at, t.entry_realised FROM trades "
+        "t JOIN orders o ON o.id = t.order_id "
         "WHERE t.account_id = ?1 AND o.tag = ?2 AND t.at >= ?3 AND t.at < ?4 ORDER BY t.id");
     if (!statement) {
         return std::unexpected(statement.error());
@@ -536,12 +565,14 @@ std::expected<std::vector<TradeRow>, DbError> PaperStore::tagged_trades(std::int
     return collect<TradeRow>(*statement, read_trade);
 }
 
-std::expected<std::vector<PaperStore::TagTotals>, DbError> PaperStore::auto_totals(std::int64_t account_id,
-                                                                                  std::int64_t from, std::int64_t to) {
+std::expected<std::vector<PaperStore::TagTotals>, DbError> PaperStore::auto_totals(
+    std::int64_t account_id, std::int64_t from, std::int64_t to) {
     auto statement = db_.prepare(
-        "SELECT o.tag, COUNT(*), SUM(t.realised), SUM(t.brokerage + t.stt + t.exchange + t.sebi + t.stamp + t.gst) "
+        "SELECT o.tag, COUNT(*), SUM(t.realised), SUM(t.brokerage + t.stt + t.exchange + t.sebi + "
+        "t.stamp + t.gst) "
         "FROM trades t JOIN orders o ON o.id = t.order_id "
-        "WHERE t.account_id = ?1 AND o.tag LIKE 'auto:%' AND t.at >= ?2 AND t.at < ?3 GROUP BY o.tag ORDER BY o.tag");
+        "WHERE t.account_id = ?1 AND o.tag LIKE 'auto:%' AND t.at >= ?2 AND t.at < ?3 GROUP BY "
+        "o.tag ORDER BY o.tag");
     if (!statement) {
         return std::unexpected(statement.error());
     }
@@ -561,27 +592,40 @@ std::expected<std::vector<std::int64_t>, DbError> PaperStore::active_instruments
     if (!statement) {
         return std::unexpected(statement.error());
     }
-    return collect<std::int64_t>(*statement, [](const storage::Statement& s) { return s.column_int64(0); });
+    return collect<std::int64_t>(*statement,
+                                 [](const storage::Statement& s) { return s.column_int64(0); });
 }
 
 std::expected<std::string, DbError> PaperStore::dump() {
     // Each table's rows as text, every column, in key order.
     const std::pair<std::string_view, std::string_view> tables[] = {
-        {"accounts", "SELECT quote(id)||','||quote(user_id)||','||quote(created_at)||','||quote(opening_cash)||','||"
-                     "quote(active)||','||quote(kill_switch) FROM accounts ORDER BY id"},
-        {"orders", "SELECT quote(id)||','||quote(account_id)||','||quote(client_order_id)||','||quote(status)||','||"
-                   "quote(current_type)||','||quote(quantity)||','||quote(filled)||','||quote(filled_value_raw)||','||"
-                   "quote(brokerage)||','||quote(charges)||','||quote(margin)||','||quote(reason)||','||"
-                   "quote(created_at)||','||quote(updated_at)||','||quote(eligible_at)||','||quote(resting) "
-                   "FROM orders ORDER BY id"},
-        {"trades", "SELECT quote(order_id)||','||quote(quantity)||','||quote(price_raw)||','||quote(brokerage)||','||"
-                   "quote(stt)||','||quote(exchange)||','||quote(sebi)||','||quote(stamp)||','||quote(gst)||','||"
-                   "quote(realised)||','||quote(at)||','||quote(entry_realised) FROM trades ORDER BY id"},
-        {"positions", "SELECT quote(account_id)||','||quote(instrument_id)||','||quote(product)||','||"
-                      "quote(quantity)||','||quote(cost_raw)||','||quote(realised)||','||quote(entry_cost_raw) FROM positions "
-                      "ORDER BY account_id, instrument_id, product"},
-        {"ledger", "SELECT quote(account_id)||','||quote(at)||','||quote(kind)||','||quote(amount)||','||"
-                   "quote(order_id)||','||quote(instrument_id) FROM ledger ORDER BY id"},
+        {"accounts",
+         "SELECT "
+         "quote(id)||','||quote(user_id)||','||quote(created_at)||','||quote(opening_cash)||','||"
+         "quote(active)||','||quote(kill_switch) FROM accounts ORDER BY id"},
+        {"orders",
+         "SELECT "
+         "quote(id)||','||quote(account_id)||','||quote(client_order_id)||','||quote(status)||','||"
+         "quote(current_type)||','||quote(quantity)||','||quote(filled)||','||quote(filled_value_"
+         "raw)||','||"
+         "quote(brokerage)||','||quote(charges)||','||quote(margin)||','||quote(reason)||','||"
+         "quote(created_at)||','||quote(updated_at)||','||quote(eligible_at)||','||quote(resting) "
+         "FROM orders ORDER BY id"},
+        {"trades",
+         "SELECT "
+         "quote(order_id)||','||quote(quantity)||','||quote(price_raw)||','||quote(brokerage)||','|"
+         "|"
+         "quote(stt)||','||quote(exchange)||','||quote(sebi)||','||quote(stamp)||','||quote(gst)||'"
+         ",'||"
+         "quote(realised)||','||quote(at)||','||quote(entry_realised) FROM trades ORDER BY id"},
+        {"positions",
+         "SELECT quote(account_id)||','||quote(instrument_id)||','||quote(product)||','||"
+         "quote(quantity)||','||quote(cost_raw)||','||quote(realised)||','||quote(entry_cost_raw) "
+         "FROM positions "
+         "ORDER BY account_id, instrument_id, product"},
+        {"ledger",
+         "SELECT quote(account_id)||','||quote(at)||','||quote(kind)||','||quote(amount)||','||"
+         "quote(order_id)||','||quote(instrument_id) FROM ledger ORDER BY id"},
     };
     std::string text;
     for (const auto& [name, sql] : tables) {
@@ -590,7 +634,8 @@ std::expected<std::string, DbError> PaperStore::dump() {
         if (!statement) {
             return std::unexpected(statement.error());
         }
-        auto rows = collect<std::string>(*statement, [](const storage::Statement& s) { return s.column_text(0); });
+        auto rows = collect<std::string>(
+            *statement, [](const storage::Statement& s) { return s.column_text(0); });
         if (!rows) {
             return std::unexpected(rows.error());
         }

@@ -188,10 +188,10 @@ int run(const runtime::Config& config) {
     const std::int64_t close_delay = builder_options.close_delay.count();
     builder_options.session = [&registry](core::InstrumentId id, std::int64_t minute) {
         const auto* instrument = registry.get(id);
-        const instruments::Session session =
-            instruments::trading_session(instrument ? instrument->key.exchange : instruments::Exchange::Nse,
-                                         instrument ? instrument->key.market : instruments::Market::Cash,
-                                         instruments::ist_day(minute));
+        const instruments::Session session = instruments::trading_session(
+            instrument ? instrument->key.exchange : instruments::Exchange::Nse,
+            instrument ? instrument->key.market : instruments::Market::Cash,
+            instruments::ist_day(minute));
         return std::pair{session.open, session.last};
     };
     bars::BarBuilder builder(std::move(builder_options), [&](const bars::Bar& bar) {
@@ -314,7 +314,7 @@ int run(const runtime::Config& config) {
         std::vector<options::ChainSummary> summaries;
     };
     std::deque<Closing> closing;
-    std::int64_t tick_minute = 0;  ///< the latest minute the ticks reached
+    std::int64_t tick_minute = 0;                        ///< the latest minute the ticks reached
     std::vector<options::OptionResult> closing_options;  // scratch
     const auto close_minute = [&] {
         Closing done{.minute = tick_minute, .summaries = {}};
@@ -376,7 +376,8 @@ int run(const runtime::Config& config) {
         if (const auto now = Clock::now(); now >= next_second) {
             next_second = now + std::chrono::seconds(1);
             const std::int64_t event_now = event_clock.now_seconds(core::Timestamp::now().ns());
-            if (tick_minute > 0 && event_now >= tick_minute + 60) {  // no tick crossed it (quiet feed)
+            if (tick_minute > 0 &&
+                event_now >= tick_minute + 60) {  // no tick crossed it (quiet feed)
                 close_minute();
                 tick_minute = event_now - event_now % 60;
             }

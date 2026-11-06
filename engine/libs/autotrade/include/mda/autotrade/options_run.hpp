@@ -21,12 +21,12 @@
 namespace mda::autotrade {
 
 struct OptionsRunConfig : RunConfig {
-    double index_stop_points = 25;    ///< NIFTY moves this far against: exit
-    double premium_stop_percent = 30; ///< the resting SL: this far below the entry premium
-    int entry_slip_ticks = 2;         ///< BUY LIMIT at the ask + this; exits at the bid − this
-    int entry_timeout_s = 10;         ///< an entry not filled by then is cancelled
-    int stop_limit_ticks = 10;        ///< the SL's limit, below its trigger
-    int reprice_s = 3;                ///< an unfilled exit is re-priced this often
+    double index_stop_points = 25;     ///< NIFTY moves this far against: exit
+    double premium_stop_percent = 30;  ///< the resting SL: this far below the entry premium
+    int entry_slip_ticks = 2;          ///< BUY LIMIT at the ask + this; exits at the bid − this
+    int entry_timeout_s = 10;          ///< an entry not filled by then is cancelled
+    int stop_limit_ticks = 10;         ///< the SL's limit, below its trigger
+    int reprice_s = 3;                 ///< an unfilled exit is re-priced this often
 };
 
 /// The ATM call and put the run would buy now (the process picks them from the chain).
@@ -44,7 +44,8 @@ struct ListedOption {
 
 /// The call and put to buy at `spot`: the nearest expiry after `today` (an option expiring
 /// today is never bought), at the strike nearest the spot (the lower one on a tie).
-[[nodiscard]] OptionPair choose_atm(std::span<const ListedOption> options, core::Price spot, std::int32_t today);
+[[nodiscard]] OptionPair choose_atm(std::span<const ListedOption> options, core::Price spot,
+                                    std::int32_t today);
 
 /// One option's market.
 struct OptionQuote {
@@ -76,8 +77,9 @@ public:
     /// After a restart: the option held (from paper.db), its entry premium, when it was
     /// entered, the index level then (0 if unknown: measured from the first evaluation), and
     /// its resting stop.
-    void restore(const Contract& held, bool call, std::int64_t position, core::Price entry, Millis entered_at,
-                 core::Price entry_spot, std::int64_t stop_order_id, std::uint64_t stop_client_id);
+    void restore(const Contract& held, bool call, std::int64_t position, core::Price entry,
+                 Millis entered_at, core::Price entry_spot, std::int64_t stop_order_id,
+                 std::uint64_t stop_client_id);
     void restore_day(std::int32_t day, int entries, Paise realised, Paise charges, Millis last_exit,
                      std::uint32_t counter);
 

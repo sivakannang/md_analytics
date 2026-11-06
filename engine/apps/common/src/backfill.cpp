@@ -86,15 +86,16 @@ std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store,
     return coverage;
 }
 
-std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage,
-                                                   int days, instruments::Exchange exchange) {
+std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage, int days,
+                                                   instruments::Exchange exchange) {
     const std::int64_t today = ist_midnight(now);
     if (in_market_hours(now, exchange)) {
         if (coverage.today) {
             return std::nullopt;
         }
         const int open = instruments::trading_session(exchange, instruments::Market::Fo,
-                                                      instruments::ist_day(now)).open;
+                                                      instruments::ist_day(now))
+                             .open;
         return BackfillWindow{.from = today + open * 60, .to = now};
     }
     if (coverage.past) {
@@ -102,7 +103,8 @@ std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage
     }
     // The last `days` days including today, as mda-backfill --days.
     const int open =
-        instruments::trading_session(exchange, instruments::Market::Fo, instruments::ist_day(now)).open;
+        instruments::trading_session(exchange, instruments::Market::Fo, instruments::ist_day(now))
+            .open;
     return BackfillWindow{.from = today - static_cast<std::int64_t>(days - 1) * kDay + open * 60,
                           .to = now};
 }

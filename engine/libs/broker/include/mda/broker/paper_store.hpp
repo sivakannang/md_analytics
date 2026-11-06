@@ -81,7 +81,8 @@ public:
     /// unknown), rebuilt from them: the user of their orders, the first ledger time and the
     /// latest opening entry.
     [[nodiscard]] std::expected<std::vector<AccountRow>, DbError> lost_accounts();
-    [[nodiscard]] std::expected<std::vector<oms::LedgerEntry>, DbError> ledger(std::int64_t account_id);
+    [[nodiscard]] std::expected<std::vector<oms::LedgerEntry>, DbError> ledger(
+        std::int64_t account_id);
     [[nodiscard]] std::expected<std::map<oms::PositionKey, oms::Position>, DbError> positions(
         std::int64_t account_id);
     /// Orders still open or waiting for their trigger, oldest first.
@@ -90,18 +91,21 @@ public:
         std::int64_t account_id, std::uint64_t client_order_id);
     [[nodiscard]] std::expected<std::int64_t, DbError> max_order_id();
     /// The user's active account, if they have one.
-    [[nodiscard]] std::expected<std::optional<AccountRow>, DbError> account_for_user(std::int64_t user_id);
+    [[nodiscard]] std::expected<std::optional<AccountRow>, DbError> account_for_user(
+        std::int64_t user_id);
     /// One account's orders created in [from, to) (Unix ms), oldest first.
-    [[nodiscard]] std::expected<std::vector<OrderRow>, DbError> orders(std::int64_t account_id, std::int64_t from,
-                                                                      std::int64_t to);
+    [[nodiscard]] std::expected<std::vector<OrderRow>, DbError> orders(std::int64_t account_id,
+                                                                       std::int64_t from,
+                                                                       std::int64_t to);
     /// One account's trades in [from, to) (Unix ms), oldest first.
-    [[nodiscard]] std::expected<std::vector<TradeRow>, DbError> trades(std::int64_t account_id, std::int64_t from,
-                                                                      std::int64_t to);
+    [[nodiscard]] std::expected<std::vector<TradeRow>, DbError> trades(std::int64_t account_id,
+                                                                       std::int64_t from,
+                                                                       std::int64_t to);
 
-    /// One account's trades in [from, to) of orders tagged `tag` (an auto-trader run), oldest first.
-    [[nodiscard]] std::expected<std::vector<TradeRow>, DbError> tagged_trades(std::int64_t account_id,
-                                                                             std::string_view tag, std::int64_t from,
-                                                                             std::int64_t to);
+    /// One account's trades in [from, to) of orders tagged `tag` (an auto-trader run), oldest
+    /// first.
+    [[nodiscard]] std::expected<std::vector<TradeRow>, DbError> tagged_trades(
+        std::int64_t account_id, std::string_view tag, std::int64_t from, std::int64_t to);
 
     /// One account's fills in [from, to) of orders tagged "auto:…", totalled per tag.
     struct TagTotals {
@@ -110,8 +114,8 @@ public:
         oms::Paise realised = 0;
         oms::Paise charges = 0;
     };
-    [[nodiscard]] std::expected<std::vector<TagTotals>, DbError> auto_totals(std::int64_t account_id,
-                                                                            std::int64_t from, std::int64_t to);
+    [[nodiscard]] std::expected<std::vector<TagTotals>, DbError> auto_totals(
+        std::int64_t account_id, std::int64_t from, std::int64_t to);
 
     /// Instruments with a live order or an open position (mda-feedd subscribes them).
     [[nodiscard]] std::expected<std::vector<std::int64_t>, DbError> active_instruments();

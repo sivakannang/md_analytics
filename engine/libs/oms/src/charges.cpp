@@ -1,6 +1,6 @@
-#include <mda/oms/charges.hpp>
-
 #include <algorithm>
+
+#include <mda/oms/charges.hpp>
 
 namespace mda::oms {
 
@@ -24,22 +24,22 @@ Paise to_rupee(Paise amount, Ppb rate) {
 
 ChargeRates zerodha_2026_10() noexcept {
     return ChargeRates{
-        .futures = {.brokerage = 300'000,     // 0.03%
-                    .brokerage_cap = 2'000,   // ₹20
+        .futures = {.brokerage = 300'000,    // 0.03%
+                    .brokerage_cap = 2'000,  // ₹20
                     .brokerage_flat = 0,
-                    .stt_sell = 500'000,      // 0.05%
-                    .exchange_nse = 17'300,   // 0.00173%
-                    .ipft_nse = 1'000,        // 0.0001%
+                    .stt_sell = 500'000,     // 0.05%
+                    .exchange_nse = 17'300,  // 0.00173%
+                    .ipft_nse = 1'000,       // 0.0001%
                     .exchange_bse = 0,
-                    .stamp_buy = 20'000},     // 0.002%
+                    .stamp_buy = 20'000},  // 0.002%
         .options = {.brokerage = 0,
                     .brokerage_cap = 0,
-                    .brokerage_flat = 2'000,  // ₹20
-                    .stt_sell = 1'500'000,    // 0.15% of premium
-                    .exchange_nse = 350'300,  // 0.03503%
-                    .ipft_nse = 5'000,        // 0.0005%
-                    .exchange_bse = 325'000,  // 0.0325%
-                    .stamp_buy = 30'000},     // 0.003%
+                    .brokerage_flat = 2'000,      // ₹20
+                    .stt_sell = 1'500'000,        // 0.15% of premium
+                    .exchange_nse = 350'300,      // 0.03503%
+                    .ipft_nse = 5'000,            // 0.0005%
+                    .exchange_bse = 325'000,      // 0.0325%
+                    .stamp_buy = 30'000},         // 0.003%
         .mcx_futures = {.brokerage = 300'000,     // 0.03%
                         .brokerage_cap = 2'000,   // ₹20
                         .stt_sell = 100'000,      // CTT 0.01% (non-agri)
@@ -49,16 +49,17 @@ ChargeRates zerodha_2026_10() noexcept {
                         .stt_sell = 500'000,      // CTT 0.05% of premium
                         .exchange_mcx = 418'000,  // 0.0418%
                         .stamp_buy = 30'000},     // 0.003%
-        .sebi = 1'000,                        // ₹10 / crore
-        .gst = 180'000'000,                   // 18%
-        .stt_exercise = 1'500'000,            // 0.15% of intrinsic value
+        .sebi = 1'000,                            // ₹10 / crore
+        .gst = 180'000'000,                       // 18%
+        .stt_exercise = 1'500'000,                // 0.15% of intrinsic value
     };
 }
 
 ChargeBreakdown fill_charges(const ChargeRates& rates, const FillCharge& fill) noexcept {
     const bool mcx = fill.exchange == Exchange::Mcx;
-    const SegmentRates& r = fill.segment == Segment::Future ? (mcx ? rates.mcx_futures : rates.futures)
-                                                            : (mcx ? rates.mcx_options : rates.options);
+    const SegmentRates& r = fill.segment == Segment::Future
+                                ? (mcx ? rates.mcx_futures : rates.futures)
+                                : (mcx ? rates.mcx_options : rates.options);
     const Paise turnover = value_paise(fill.price, fill.quantity);
     ChargeBreakdown c;
     if (r.brokerage_flat > 0) {
@@ -72,7 +73,8 @@ ChargeBreakdown fill_charges(const ChargeRates& rates, const FillCharge& fill) n
     } else {
         c.stamp = to_rupee(turnover, r.stamp_buy);
     }
-    c.exchange = fill.exchange == Exchange::Nse   ? to_paisa(turnover, r.exchange_nse) + to_paisa(turnover, r.ipft_nse)
+    c.exchange = fill.exchange == Exchange::Nse
+                     ? to_paisa(turnover, r.exchange_nse) + to_paisa(turnover, r.ipft_nse)
                  : fill.exchange == Exchange::Bse ? to_paisa(turnover, r.exchange_bse)
                                                   : to_paisa(turnover, r.exchange_mcx);
     c.sebi = to_paisa(turnover, rates.sebi);

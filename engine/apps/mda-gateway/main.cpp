@@ -92,7 +92,6 @@ asio::awaitable<void> every(std::chrono::steady_clock::duration period,
     }
 }
 
-
 int run(const runtime::Config& config) {
     const auto& settings = config.gateway;
     const std::size_t colon = settings.listen.rfind(':');
@@ -165,16 +164,16 @@ int run(const runtime::Config& config) {
     // data folder is where bars.db lives (tools/stack.sh keeps pid files in its run/).
     gateway::FeedMetrics feed_metrics;
     const auto data_dir = config.engine.bars_db.parent_path();
-    gateway::SystemMonitor system_monitor(feed_metrics,
-                                          {.run_dir = data_dir / "run",
-                                           .data_dir = data_dir,
-                                           .bars_db = config.engine.bars_db,
-                                           .app_db = config.database.path,
-                                           .last_quotes_db = config.engine.last_quotes_db,
-                                           .journal_dir = config.recorder.journal_dir,
-                                           .recorder_enabled = config.recorder.enabled,
-                                           .buses = {config.md_bus.name, config.an_bus.name,
-                                                     config.sig_bus.name, config.exec_bus.name}});
+    gateway::SystemMonitor system_monitor(
+        feed_metrics, {.run_dir = data_dir / "run",
+                       .data_dir = data_dir,
+                       .bars_db = config.engine.bars_db,
+                       .app_db = config.database.path,
+                       .last_quotes_db = config.engine.last_quotes_db,
+                       .journal_dir = config.recorder.journal_dir,
+                       .recorder_enabled = config.recorder.enabled,
+                       .buses = {config.md_bus.name, config.an_bus.name, config.sig_bus.name,
+                                 config.exec_bus.name}});
     gateway::register_system_routes(router, auth, *db, auth_worker.get_executor(), system_monitor);
     // The built website on the same origin (ADR-0027): any non-/api path no route matches.
     std::optional<gateway::StaticSite> site;
@@ -210,8 +209,8 @@ int run(const runtime::Config& config) {
     }
     std::vector<gateway::SignalIndex> signal_indices;
     for (const auto& underlying : config.signals.underlyings) {
-        const auto chain = std::ranges::find(config.feed.chains, underlying,
-                                             &runtime::ChainConfig::underlying);
+        const auto chain =
+            std::ranges::find(config.feed.chains, underlying, &runtime::ChainConfig::underlying);
         if (chain != config.feed.chains.end()) {
             signal_indices.push_back({.underlying = underlying, .spot = chain->spot});
         }
@@ -231,11 +230,12 @@ int run(const runtime::Config& config) {
     // the bars thread.
     auto paper_store = broker::PaperStore::open(config.paper.db);
     if (!paper_store) {
-        spdlog::error("paper: cannot open {}: {}", config.paper.db.string(), paper_store.error().message);
+        spdlog::error("paper: cannot open {}: {}", config.paper.db.string(),
+                      paper_store.error().message);
         return 1;
     }
-    const auto order_sender = gateway::OrderSender::open(config.ord_gw_bus.name,
-                                                         config.ord_gw_bus.capacity_mb * 1024 * 1024);
+    const auto order_sender = gateway::OrderSender::open(
+        config.ord_gw_bus.name, config.ord_gw_bus.capacity_mb * 1024 * 1024);
     if (!order_sender) {
         return 1;
     }
@@ -243,22 +243,24 @@ int run(const runtime::Config& config) {
     // The auto trader's record (ADR-0030), for GET /paper/auto.
     auto auto_decisions = autotrade::DecisionStore::open(config.autotrader.db);
     if (!auto_decisions) {
-        spdlog::error("autotrader: cannot open {}: {}", config.autotrader.db.string(), auto_decisions.error().message);
+        spdlog::error("autotrader: cannot open {}: {}", config.autotrader.db.string(),
+                      auto_decisions.error().message);
         return 1;
     }
     std::vector<gateway::AutoRunInfo> auto_runs;
     for (const auto& r : config.autotrader.runs) {
         boost::json::object run_settings{{"lots", r.lots},
-                              {"product", r.product},
-                              {"stop_points", r.stop_points},
-                              {"target_points", r.target_points},
-                              {"max_hold_min", r.max_hold_min},
-                              {"max_trades_per_day", r.max_trades_per_day},
-                              {"cooldown_min", r.cooldown_min},
-                              {"exit_score", r.exit_score},
-                              {"daily_loss_stop", r.daily_loss_stop}};
+                                         {"product", r.product},
+                                         {"stop_points", r.stop_points},
+                                         {"target_points", r.target_points},
+                                         {"max_hold_min", r.max_hold_min},
+                                         {"max_trades_per_day", r.max_trades_per_day},
+                                         {"cooldown_min", r.cooldown_min},
+                                         {"exit_score", r.exit_score},
+                                         {"daily_loss_stop", r.daily_loss_stop}};
         if (r.strategy == "follow-signal-options") {
-            run_settings.erase("stop_points");  // options exits use the index stop and the premium SL
+            run_settings.erase(
+                "stop_points");  // options exits use the index stop and the premium SL
             run_settings["index_stop_points"] = r.index_stop_points;
             run_settings["premium_stop_percent"] = r.premium_stop_percent;
             run_settings["entry_slip_ticks"] = r.entry_slip_ticks;
@@ -272,14 +274,17 @@ int run(const runtime::Config& config) {
                              .enabled = r.enabled,
                              .settings = std::move(run_settings)});
     }
-    gateway::register_auto_routes(router, auth, auth_worker.get_executor(), *paper_store, *auto_decisions,
-                                  bars_worker.get_executor(), std::move(auto_runs));
+    gateway::register_auto_routes(router, auth, auth_worker.get_executor(), *paper_store,
+                                  *auto_decisions, bars_worker.get_executor(),
+                                  std::move(auto_runs));
     gateway::register_paper_routes(
-        router, auth, *db, auth_worker.get_executor(), *paper_store, bars_worker.get_executor(), *order_sender,
-        order_updates, quotes,
+        router, auth, *db, auth_worker.get_executor(), *paper_store, bars_worker.get_executor(),
+        *order_sender, order_updates, quotes,
         {.opening_cash = config.paper.opening_cash * 100,
-         .futures_margin = static_cast<oms::Ppb>(config.paper.futures_margin_percent * 10'000'000.0),
-         .stock_futures_margin = static_cast<oms::Ppb>(config.paper.stock_futures_margin_percent * 10'000'000.0),
+         .futures_margin =
+             static_cast<oms::Ppb>(config.paper.futures_margin_percent * 10'000'000.0),
+         .stock_futures_margin =
+             static_cast<oms::Ppb>(config.paper.stock_futures_margin_percent * 10'000'000.0),
          .freeze_quantity = config.paper.freeze_quantity,
          .mcx_margins = broker::McxMargins::from_percent(config.paper.mcx_margin_percent,
                                                          config.paper.mcx_default_margin_percent)});

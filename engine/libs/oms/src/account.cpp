@@ -1,22 +1,22 @@
-#include <mda/oms/account.hpp>
-
 #include <algorithm>
 #include <cstdlib>
+
+#include <mda/oms/account.hpp>
 
 namespace mda::oms {
 
 std::string_view name(LedgerKind kind) noexcept {
     switch (kind) {
-    case LedgerKind::Opening:
-        return "opening";
-    case LedgerKind::Pnl:
-        return "pnl";
-    case LedgerKind::Charges:
-        return "charges";
-    case LedgerKind::Expiry:
-        return "expiry";
-    case LedgerKind::Mtm:
-        return "mtm";
+        case LedgerKind::Opening:
+            return "opening";
+        case LedgerKind::Pnl:
+            return "pnl";
+        case LedgerKind::Charges:
+            return "charges";
+        case LedgerKind::Expiry:
+            return "expiry";
+        case LedgerKind::Mtm:
+            return "mtm";
     }
     return "?";
 }
@@ -43,7 +43,8 @@ void Account::book(LedgerKind kind, Paise amount, std::int64_t order_id,
         return;
     }
     cash_ += amount;
-    ledger_.push_back({.at = at, .kind = kind, .amount = amount, .order_id = order_id, .instrument = instrument});
+    ledger_.push_back(
+        {.at = at, .kind = kind, .amount = amount, .order_id = order_id, .instrument = instrument});
 }
 
 FillResult Account::apply_fill(const ChargeRates& rates, const Contract& contract, Product product,
@@ -100,18 +101,21 @@ std::optional<Paise> Account::convert(core::InstrumentId instrument, Product fro
     }
     const std::int64_t direction = source->second.quantity() > 0 ? 1 : -1;
     const Position::Taken taken = source->second.take(quantity);
-    const Paise realised = positions_[{.instrument = instrument, .product = to}].put(direction * quantity, taken);
+    const Paise realised =
+        positions_[{.instrument = instrument, .product = to}].put(direction * quantity, taken);
     book(LedgerKind::Pnl, realised, 0, instrument, at);
     return realised;
 }
 
-Paise Account::close_at(core::InstrumentId instrument, Product product, core::Price price, std::int64_t at) {
+Paise Account::close_at(core::InstrumentId instrument, Product product, core::Price price,
+                        std::int64_t at) {
     const auto found = positions_.find({.instrument = instrument, .product = product});
     if (found == positions_.end() || found->second.quantity() == 0) {
         return 0;
     }
     const std::int64_t quantity = found->second.quantity();
-    const Paise pnl = found->second.apply(quantity > 0 ? Side::Sell : Side::Buy, std::abs(quantity), price);
+    const Paise pnl =
+        found->second.apply(quantity > 0 ? Side::Sell : Side::Buy, std::abs(quantity), price);
     book(LedgerKind::Pnl, pnl, 0, instrument, at);
     return pnl;
 }
@@ -129,7 +133,8 @@ std::int64_t Account::last_activity(core::InstrumentId instrument) const noexcep
 std::int64_t Account::last_fill(core::InstrumentId instrument) const noexcept {
     std::int64_t latest = 0;
     for (const auto& entry : ledger_) {
-        if (entry.instrument == instrument && (entry.kind == LedgerKind::Pnl || entry.kind == LedgerKind::Charges)) {
+        if (entry.instrument == instrument &&
+            (entry.kind == LedgerKind::Pnl || entry.kind == LedgerKind::Charges)) {
             latest = std::max(latest, entry.at);
         }
     }

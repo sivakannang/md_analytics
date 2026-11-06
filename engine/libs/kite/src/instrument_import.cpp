@@ -113,7 +113,9 @@ RowOutcome contract_key_for(const std::vector<std::string>& row, ContractKey& ke
         if (segment != "INDICES" && type != "EQ") {
             return RowOutcome::Unsupported;
         }
-        key.exchange = exchange == "NSE" ? Exchange::Nse : exchange == "BSE" ? Exchange::Bse : Exchange::Mcx;
+        key.exchange = exchange == "NSE"   ? Exchange::Nse
+                       : exchange == "BSE" ? Exchange::Bse
+                                           : Exchange::Mcx;
         key.market = Market::Cash;
         key.kind = segment == "INDICES" ? Kind::Index : Kind::Equity;
         key.underlying = row[kTradingSymbol];
@@ -296,10 +298,10 @@ std::expected<ImportResult, ImportError> import_instruments(
         instrument.trading_symbol = row[kTradingSymbol];
         instrument.name = row[kName];
         // MCX quantities are kept in units, Kite's in lots (ADR-0031).
-        instrument.lot_size = core::Quantity(
-            key.exchange == Exchange::Mcx
-                ? instruments::mcx_units_per_lot(instrument.name).value_or(*lot_size)
-                : *lot_size);
+        instrument.lot_size =
+            core::Quantity(key.exchange == Exchange::Mcx
+                               ? instruments::mcx_units_per_lot(instrument.name).value_or(*lot_size)
+                               : *lot_size);
         instrument.tick_size = *tick_size;
         instrument.listed_today = true;
         result.tokens.add(*token, id);

@@ -60,9 +60,9 @@ enum class ReportEvent : std::uint8_t {
     Status = 7,         ///< the current state, sent again for a repeated request
     KillSwitchOn = 8,   ///< order_id 0
     KillSwitchOff = 9,  ///< order_id 0
-    Settled = 10,       ///< a position settled at expiry: order_id 0, last_quantity, last_price = FSP
-    Converted = 11,     ///< a position converted: order_id 0, product = the new one, side = the
-                        ///< position's (Buy long), last_quantity, last_price = its average
+    Settled = 10,    ///< a position settled at expiry: order_id 0, last_quantity, last_price = FSP
+    Converted = 11,  ///< a position converted: order_id 0, product = the new one, side = the
+                     ///< position's (Buy long), last_quantity, last_price = its average
 };
 
 /// header.instrument_id = the order's instrument; header.sequence = the broker's. 216 bytes.
@@ -72,21 +72,21 @@ struct ExecutionReport {
     std::int64_t user = 0;
     std::uint64_t client_order_id = 0;
     std::int64_t order_id = 0;
-    std::int64_t quantity = 0;       ///< the order's quantity
+    std::int64_t quantity = 0;  ///< the order's quantity
     std::int64_t filled = 0;
     std::int64_t last_quantity = 0;  ///< Fill: this fill
     core::Price last_price;          ///< Fill: this fill
     core::Price average_price;
     core::Price price;
     core::Price trigger;
-    oms::Paise charges = 0;          ///< Fill: this fill's charges
+    oms::Paise charges = 0;  ///< Fill: this fill's charges
     ReportEvent event = ReportEvent::Accepted;
     oms::OrderStatus status = oms::OrderStatus::Open;
     oms::Side side = oms::Side::Buy;
     oms::OrderType type = oms::OrderType::Market;  ///< now (an SL becomes LIMIT once triggered)
     oms::Product product = oms::Product::Mis;
     oms::Source source = oms::Source::Ui;
-    std::uint8_t reject_code = 0;    ///< rms::RejectCode; 0 = none
+    std::uint8_t reject_code = 0;  ///< rms::RejectCode; 0 = none
     std::uint8_t reserved = 0;
     char reason[96] = {};  ///< UTF-8 (₹ takes 3 bytes); risk messages fit
 };

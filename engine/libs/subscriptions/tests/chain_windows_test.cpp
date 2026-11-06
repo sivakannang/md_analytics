@@ -199,7 +199,8 @@ TEST(ChainWindowsMcx, EachExpiryCentresOnItsOwnFuture) {
     };
     const auto nov = future(2026y / 11 / 19);
     const auto dec = future(2026y / 12 / 18);
-    for (const auto& [expiry, on] : {std::pair{2026y / 11 / 17, nov}, std::pair{2026y / 12 / 16, dec}}) {
+    for (const auto& [expiry, on] :
+         {std::pair{2026y / 11 / 17, nov}, std::pair{2026y / 12 / 16, dec}}) {
         for (std::int64_t strike = 9'000; strike <= 10'000; strike += 100) {
             add({.exchange = Exchange::Mcx,
                  .market = Market::Fo,

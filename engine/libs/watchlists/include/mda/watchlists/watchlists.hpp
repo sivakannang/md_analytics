@@ -73,7 +73,7 @@ inline constexpr std::string_view kDefaultName = "My watchlist";
 /// drops them after expiry; a contract stays on its expiry day. Returns how many items went.
 /// mda-feedd runs it each morning after the day's catalog sync.
 [[nodiscard]] std::expected<std::size_t, WatchlistError> remove_expired(storage::Database& db,
-                                                                       std::string_view today);
+                                                                        std::string_view today);
 
 class WatchlistService {
 public:

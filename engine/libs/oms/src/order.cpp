@@ -1,27 +1,32 @@
-#include <mda/oms/order.hpp>
-
 #include <utility>
+
+#include <mda/oms/order.hpp>
 
 namespace mda::oms {
 
 std::string_view name(OrderError error) noexcept {
     switch (error) {
-    case OrderError::NotLive:
-        return "the order is no longer open";
-    case OrderError::NotOpen:
-        return "the order is waiting for its trigger";
-    case OrderError::NotTriggerable:
-        return "the order has no trigger";
-    case OrderError::Overfill:
-        return "fill larger than the remaining quantity";
-    case OrderError::BadQuantity:
-        return "invalid quantity";
+        case OrderError::NotLive:
+            return "the order is no longer open";
+        case OrderError::NotOpen:
+            return "the order is waiting for its trigger";
+        case OrderError::NotTriggerable:
+            return "the order has no trigger";
+        case OrderError::Overfill:
+            return "fill larger than the remaining quantity";
+        case OrderError::BadQuantity:
+            return "invalid quantity";
     }
     return "?";
 }
 
 Order::Order(std::int64_t id, OrderSpec spec, OrderStatus status, std::int64_t at)
-    : id_(id), spec_(std::move(spec)), status_(status), type_(spec_.type), created_at_(at), updated_at_(at) {}
+    : id_(id)
+    , spec_(std::move(spec))
+    , status_(status)
+    , type_(spec_.type)
+    , created_at_(at)
+    , updated_at_(at) {}
 
 Order Order::accepted(std::int64_t id, OrderSpec spec, std::int64_t at) {
     const bool stop = spec.type == OrderType::StopLimit || spec.type == OrderType::StopMarket;
@@ -62,7 +67,8 @@ Order::Saved Order::save() const {
 
 std::expected<void, OrderError> Order::trigger(std::int64_t at) {
     if (status_ != OrderStatus::TriggerPending) {
-        return std::unexpected(is_final(status_) ? OrderError::NotLive : OrderError::NotTriggerable);
+        return std::unexpected(is_final(status_) ? OrderError::NotLive
+                                                 : OrderError::NotTriggerable);
     }
     type_ = type_ == OrderType::StopLimit ? OrderType::Limit : OrderType::Market;
     status_ = OrderStatus::Open;
@@ -70,7 +76,8 @@ std::expected<void, OrderError> Order::trigger(std::int64_t at) {
     return {};
 }
 
-std::expected<void, OrderError> Order::fill(std::int64_t quantity, core::Price price, std::int64_t at) {
+std::expected<void, OrderError> Order::fill(std::int64_t quantity, core::Price price,
+                                            std::int64_t at) {
     if (is_final(status_)) {
         return std::unexpected(OrderError::NotLive);
     }

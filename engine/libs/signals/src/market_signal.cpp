@@ -1,8 +1,8 @@
-#include <mda/signals/market_signal.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <vector>
+
+#include <mda/signals/market_signal.hpp>
 
 namespace mda::signals {
 

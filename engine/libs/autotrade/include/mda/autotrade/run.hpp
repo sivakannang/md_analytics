@@ -31,10 +31,10 @@ using oms::Millis;
 using oms::Paise;
 
 struct RunConfig {
-    std::string id;             ///< stable; tags its orders "auto:<id>"
-    std::int64_t user = 0;      ///< whose paper account
-    std::string signal;         ///< the signald strategy it follows, e.g. oi-bias-v1
-    std::string underlying;     ///< e.g. NIFTY: trades its near-month future
+    std::string id;          ///< stable; tags its orders "auto:<id>"
+    std::int64_t user = 0;   ///< whose paper account
+    std::string signal;      ///< the signald strategy it follows, e.g. oi-bias-v1
+    std::string underlying;  ///< e.g. NIFTY: trades its near-month future
     std::int64_t lots = 1;
     oms::Product product = oms::Product::Mis;
     double stop_points = 40;    ///< resting SL-M this far from the entry
@@ -62,11 +62,13 @@ struct Contract {
 
 /// The near-month future: the nearest expiry on or after `today`, or the next one when the
 /// nearest expires today (no new positions in an expiring contract).
-[[nodiscard]] std::optional<Contract> choose_future(std::span<const Contract> futures, std::int32_t today);
+[[nodiscard]] std::optional<Contract> choose_future(std::span<const Contract> futures,
+                                                    std::int32_t today);
 
 /// A client order id from the run, the day and the run's order counter: the same inputs give
 /// the same id (resends, restarts); the top bit stays clear (the broker uses it).
-[[nodiscard]] std::uint64_t client_order_id(std::string_view run_id, std::int32_t day, std::uint32_t counter);
+[[nodiscard]] std::uint64_t client_order_id(std::string_view run_id, std::int32_t day,
+                                            std::uint32_t counter);
 
 /// One factor's share of a signal's score.
 struct FactorPoints {
@@ -110,9 +112,9 @@ struct Action {
     oms::Side side = oms::Side::Buy;
     oms::OrderType type = oms::OrderType::Market;
     std::int64_t quantity = 0;
-    core::Price price;            ///< LIMIT and SL; Modify: the new price
-    core::Price trigger;          ///< SL and SL-M
-    std::int64_t order_id = 0;    ///< Cancel / Modify: the broker's order id
+    core::Price price;          ///< LIMIT and SL; Modify: the new price
+    core::Price trigger;        ///< SL and SL-M
+    std::int64_t order_id = 0;  ///< Cancel / Modify: the broker's order id
     std::uint64_t client_order_id = 0;
     core::InstrumentId instrument;
 };
@@ -153,8 +155,8 @@ public:
 
     /// After a restart: the position the run holds (from paper.db), its entry and its
     /// resting stop's broker order id (0 if none); today's counters (from autotrader.db).
-    void restore(std::int64_t position, core::Price entry, Millis entered_at, std::int64_t stop_order_id,
-                 std::uint64_t stop_client_id);
+    void restore(std::int64_t position, core::Price entry, Millis entered_at,
+                 std::int64_t stop_order_id, std::uint64_t stop_client_id);
     void restore_day(std::int32_t day, int entries, Paise realised, Paise charges, Millis last_exit,
                      std::uint32_t counter);
 
@@ -194,9 +196,9 @@ private:
     std::uint64_t stop_client_ = 0;
     std::int64_t stop_order_id_ = 0;
     bool cancel_stop_when_known_ = false;
-    Millis retry_at_ = 0;        ///< after a failed exit, no new closing order before this
-    int failed_exits_ = 0;       ///< in a row: the retry waits 5 s, 10 s, 20 s … up to 5 min
-    std::string last_blocked_;   ///< the last blocked entry recorded (signal minute and reason)
+    Millis retry_at_ = 0;       ///< after a failed exit, no new closing order before this
+    int failed_exits_ = 0;      ///< in a row: the retry waits 5 s, 10 s, 20 s … up to 5 min
+    std::string last_blocked_;  ///< the last blocked entry recorded (signal minute and reason)
 
     std::int32_t day_ = 0;
     int entries_ = 0;

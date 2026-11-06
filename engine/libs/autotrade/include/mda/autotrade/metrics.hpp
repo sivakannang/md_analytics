@@ -27,9 +27,9 @@ struct RoundTrip {
 
 struct Metrics {
     int round_trips = 0;
-    int wins = 0;    ///< net > 0
-    int losses = 0;  ///< net ≤ 0 (charges make a flat trade a loss)
-    Paise gross = 0;    ///< all fills, open trip included
+    int wins = 0;     ///< net > 0
+    int losses = 0;   ///< net ≤ 0 (charges make a flat trade a loss)
+    Paise gross = 0;  ///< all fills, open trip included
     Paise charges = 0;
     Paise net = 0;
     Paise average_win = 0;
@@ -46,6 +46,7 @@ struct Metrics {
 /// The exit category of a decision ("target", "stop", …), or empty if it isn't an exit.
 [[nodiscard]] std::string exit_category(const Decision& decision);
 
-[[nodiscard]] Metrics metrics(std::span<const broker::TradeRow> trades, std::span<const Decision> decisions);
+[[nodiscard]] Metrics metrics(std::span<const broker::TradeRow> trades,
+                              std::span<const Decision> decisions);
 
 }  // namespace mda::autotrade

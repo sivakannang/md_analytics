@@ -5,23 +5,31 @@
 namespace mda::autotrade {
 namespace {
 
-broker::TradeRow fill(oms::Side side, std::int64_t qty, oms::Paise realised, oms::Paise brokerage, Millis at) {
-    return {.order_id = at, .account_id = 1, .instrument = core::InstrumentId(18486), .side = side,
-            .product = oms::Product::Mis, .quantity = qty, .price = {}, .charges = {.brokerage = brokerage},
-            .realised = realised, .at = at};
+broker::TradeRow fill(oms::Side side, std::int64_t qty, oms::Paise realised, oms::Paise brokerage,
+                      Millis at) {
+    return {.order_id = at,
+            .account_id = 1,
+            .instrument = core::InstrumentId(18486),
+            .side = side,
+            .product = oms::Product::Mis,
+            .quantity = qty,
+            .price = {},
+            .charges = {.brokerage = brokerage},
+            .realised = realised,
+            .at = at};
 }
 
 // Four trips, worked by hand (paise): net +3,000, −5,000, +1,000, −4,000; one open short.
 const broker::TradeRow kTrades[] = {
-    fill(oms::Side::Sell, 65, 0, 1'000, 1),         // trip 1: short
-    fill(oms::Side::Buy, 65, 5'000, 1'000, 2),      //   +5,000 − 2,000 = +3,000
-    fill(oms::Side::Sell, 65, 0, 1'000, 3),         // trip 2
-    fill(oms::Side::Buy, 65, -3'000, 1'000, 4),     //   −3,000 − 2,000 = −5,000
-    fill(oms::Side::Buy, 65, 0, 1'000, 5),          // trip 3: long
-    fill(oms::Side::Sell, 65, 3'000, 1'000, 6),     //   +1,000
-    fill(oms::Side::Sell, 65, 0, 1'000, 7),         // trip 4
-    fill(oms::Side::Buy, 65, -2'000, 1'000, 8),     //   −4,000
-    fill(oms::Side::Sell, 65, 0, 1'000, 9),         // still open
+    fill(oms::Side::Sell, 65, 0, 1'000, 1),      // trip 1: short
+    fill(oms::Side::Buy, 65, 5'000, 1'000, 2),   //   +5,000 − 2,000 = +3,000
+    fill(oms::Side::Sell, 65, 0, 1'000, 3),      // trip 2
+    fill(oms::Side::Buy, 65, -3'000, 1'000, 4),  //   −3,000 − 2,000 = −5,000
+    fill(oms::Side::Buy, 65, 0, 1'000, 5),       // trip 3: long
+    fill(oms::Side::Sell, 65, 3'000, 1'000, 6),  //   +1,000
+    fill(oms::Side::Sell, 65, 0, 1'000, 7),      // trip 4
+    fill(oms::Side::Buy, 65, -2'000, 1'000, 8),  //   −4,000
+    fill(oms::Side::Sell, 65, 0, 1'000, 9),      // still open
 };
 
 TEST(Metrics, RoundTrips) {

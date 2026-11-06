@@ -1,7 +1,7 @@
-#include <mda/autotrade/metrics.hpp>
-
 #include <algorithm>
 #include <cstdlib>
+
+#include <mda/autotrade/metrics.hpp>
 
 namespace mda::autotrade {
 
@@ -35,7 +35,8 @@ std::string exit_category(const Decision& d) {
     if (d.action != "exit") {
         return {};
     }
-    for (const char* category : {"signal", "target", "index stop", "max hold", "end of day", "stop lost", "flatten"}) {
+    for (const char* category :
+         {"signal", "target", "index stop", "max hold", "end of day", "stop lost", "flatten"}) {
         if (d.reason.starts_with(category == std::string("signal") ? "signal changed" : category)) {
             return category;
         }
