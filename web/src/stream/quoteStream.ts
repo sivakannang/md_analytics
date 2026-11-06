@@ -1,4 +1,4 @@
-import type { ChainSummary } from '../api/client';
+import type { ChainSummary, LiveSignal, OrderReport } from '../api/client';
 
 // One WebSocket to /api/v1/stream for the whole app (docs/api/websocket.md).
 //
@@ -76,10 +76,12 @@ type ServerMessage =
   | { type: 'depth'; data: Depth[] }
   | { type: 'bars'; data: LiveBar[] }
   | { type: 'chain'; data: ChainSummary[] }
+  | { type: 'signals'; data: LiveSignal[] }
+  | { type: 'orders'; data: OrderReport[] }
   | { type: 'status'; data: { feed: Exclude<FeedState, 'connecting'> } }
   | { type: 'error'; message: string };
 
-type StreamMode = 'quote' | 'depth' | 'bars' | 'chain';
+type StreamMode = 'quote' | 'depth' | 'bars' | 'chain' | 'signals' | 'orders';
 
 const MAX_BACKOFF_MS = 15_000;
 const SESSION_ENDED = 4001;
@@ -93,6 +95,9 @@ class QuoteStream {
   private barWatchers = new Map<number, number>();
   private chainWatchers = new Map<number, number>(); // by spot id
   private summaries = new Map<string, ChainSummary>(); // `${spot_id}|${expiry}`
+  private signalWatchers = new Map<number, number>(); // by spot id
+  private signals = new Map<string, LiveSignal>(); // `${spot_id}|${strategy}`
+  private orderListeners = new Set<(report: OrderReport) => void>();
   private barListeners = new Map<number, Set<(bar: LiveBar) => void>>();
   private listeners = new Set<() => void>();
   private feed: FeedState = 'connecting';
@@ -110,6 +115,8 @@ class QuoteStream {
   depth = (id: number): Depth | undefined => this.depths.get(id);
   chainSummary = (spotId: number, expiry: string): ChainSummary | undefined =>
     this.summaries.get(`${spotId}|${expiry}`);
+  signal = (spotId: number, strategy: string): LiveSignal | undefined =>
+    this.signals.get(`${spotId}|${strategy}`);
 
   /** Starts streaming `ids`; the returned function stops. Counts overlapping watchers. */
   watch(ids: readonly number[]): () => void {
@@ -140,6 +147,22 @@ class QuoteStream {
   /** Streams the engine's chain summaries (every expiry) of the chain whose spot is `spotId`. */
   watchChain(spotId: number): () => void {
     return this.track(this.chainWatchers, [spotId], 'chain');
+  }
+
+  /** Streams mda-signald's latest signal (every strategy) for the index whose spot is `spotId`. */
+  watchSignals(spotId: number): () => void {
+    return this.track(this.signalWatchers, [spotId], 'signals');
+  }
+
+  /** Calls `listener` with each of the user's paper order updates while subscribed. */
+  watchOrders(listener: (report: OrderReport) => void): () => void {
+    this.orderListeners.add(listener);
+    this.ensureOpen();
+    if (this.orderListeners.size === 1) this.send({ a: 'subscribe', v: [], mode: 'orders' });
+    return () => {
+      this.orderListeners.delete(listener);
+      if (this.orderListeners.size === 0) this.send({ a: 'unsubscribe', v: [], mode: 'orders' });
+    };
   }
 
   private track(counts: Map<number, number>, ids: readonly number[], mode: StreamMode) {
@@ -179,6 +202,7 @@ class QuoteStream {
     this.quotes.clear();
     this.depths.clear();
     this.summaries.clear();
+    this.signals.clear();
     this.setFeed('connecting');
   }
 
@@ -200,6 +224,9 @@ class QuoteStream {
       if (charts.length > 0) this.send({ a: 'subscribe', v: charts, mode: 'bars' });
       const chains = [...this.chainWatchers.keys()];
       if (chains.length > 0) this.send({ a: 'subscribe', v: chains, mode: 'chain' });
+      const indices = [...this.signalWatchers.keys()];
+      if (indices.length > 0) this.send({ a: 'subscribe', v: indices, mode: 'signals' });
+      if (this.orderListeners.size > 0) this.send({ a: 'subscribe', v: [], mode: 'orders' });
     };
     socket.onmessage = (event) => this.onMessage(event.data as string);
     socket.onclose = (event) => {
@@ -213,7 +240,9 @@ class QuoteStream {
       this.setFeed('connecting');
       this.retryTimer = setTimeout(() => {
         this.retryTimer = undefined;
-        if (this.watchers.size + this.depthWatchers.size + this.barWatchers.size + this.chainWatchers.size > 0) this.ensureOpen();
+        const watched =
+          this.watchers.size + this.depthWatchers.size + this.barWatchers.size + this.chainWatchers.size + this.signalWatchers.size + this.orderListeners.size;
+        if (watched > 0) this.ensureOpen();
       }, this.backoff * (0.8 + Math.random() * 0.4));
       this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
     };
@@ -253,6 +282,15 @@ class QuoteStream {
         this.summaries.set(`${summary.spot_id}|${summary.expiry}`, summary);
       }
       this.emit();
+    } else if (message.type === 'signals') {
+      for (const signal of message.data) {
+        this.signals.set(`${signal.spot_id}|${signal.strategy}`, signal);
+      }
+      this.emit();
+    } else if (message.type === 'orders') {
+      for (const report of message.data) {
+        for (const listener of this.orderListeners) listener(report);
+      }
     } else if (message.type === 'depth') {
       for (const book of message.data) this.depths.set(book.id, book);
       this.emit();

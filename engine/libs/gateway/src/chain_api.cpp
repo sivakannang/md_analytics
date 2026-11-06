@@ -56,9 +56,7 @@ std::int64_t chain_spot_id(storage::Database& db, std::string_view key_text) {
         return 0;
     }
     const std::string_view kind = key->kind == instruments::Kind::Index ? "IDX" : "EQ";
-    statement
-        ->bind(1, key->exchange == instruments::Exchange::Nse ? std::string_view("NSE")
-                                                              : std::string_view("BSE"))
+    statement->bind(1, instruments::to_string(key->exchange))
         .bind(2, kind)
         .bind(3, std::string_view(key->underlying));
     return statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row
@@ -66,7 +64,30 @@ std::int64_t chain_spot_id(storage::Database& db, std::string_view key_text) {
                : 0;
 }
 
+std::int64_t chain_spot_id(storage::Database& db, const ChainInfo& chain, std::string_view expiry) {
+    if (!chain.spot.empty()) {
+        return chain_spot_id(db, chain.spot);
+    }
+    auto statement = db.prepare(
+        "SELECT id FROM instruments WHERE kind = 'FUT' AND underlying = ?1 AND expiry >= ?2 AND "
+        "listed = 1 ORDER BY expiry LIMIT 1");
+    if (!statement) {
+        return 0;
+    }
+    statement->bind(1, std::string_view(chain.underlying)).bind(2, expiry);
+    return statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row
+               ? statement->column_int64(0)
+               : 0;
+}
+
+std::int64_t chain_session_open(const ChainInfo& chain) {
+    return chain.spot.empty() ? 9 * 3600 : 9 * 3600 + 15 * 60;
+}
+
 void ChainSummaries::update(const options::ChainSummaryMessage& message) {
+    if (message.minute != 0) {
+        return;  // a closing summary (for mda-signald) is older than the per-second ones
+    }
     const std::scoped_lock lock(mutex_);
     const auto spot = message.header.instrument_id;
     auto found = std::ranges::find_if(entries_, [&](const Entry& e) {
@@ -128,33 +149,39 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                            asio::any_io_executor db_executor, const QuoteCache& quotes,
                            const ChainSummaries& summaries, std::vector<ChainInfo> chains) {
     // GET /chains — underlyings with chains, their spot and listed expiries.
-    router.add(http::verb::get, "/api/v1/chains",
-               [&auth, &db, db_executor, chains](const Request& request,
-                                                 const PathParams&) -> asio::awaitable<Response> {
-                   co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
-                       json::array out;
-                       for (const auto& chain : chains) {
-                           auto expiries = db.prepare(
-                               "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND "
-                               "underlying = ?1 "
-                               "AND listed = 1 ORDER BY expiry LIMIT ?2");
-                           if (!expiries) {
-                               continue;
-                           }
-                           expiries->bind(1, std::string_view(chain.underlying))
-                               .bind(2, static_cast<std::int64_t>(chain.expiries));
-                           json::array list;
-                           while (expiries->step().value_or(storage::StepResult::Done) ==
-                                  storage::StepResult::Row) {
-                               list.emplace_back(expiries->column_text(0));
-                           }
-                           out.push_back(json::object{{"underlying", chain.underlying},
-                                                      {"spot_id", chain_spot_id(db, chain.spot)},
-                                                      {"expiries", std::move(list)}});
-                       }
-                       return success(std::move(out));
-                   });
-               });
+    router.add(
+        http::verb::get, "/api/v1/chains",
+        [&auth, &db, db_executor, chains](const Request& request,
+                                          const PathParams&) -> asio::awaitable<Response> {
+            co_return co_await as_user(auth, db_executor, request, [&](const auth::User&) {
+                json::array out;
+                for (const auto& chain : chains) {
+                    auto expiries = db.prepare(
+                        "SELECT DISTINCT expiry FROM instruments WHERE kind = 'OPT' AND "
+                        "underlying = ?1 "
+                        "AND listed = 1 ORDER BY expiry LIMIT ?2");
+                    if (!expiries) {
+                        continue;
+                    }
+                    expiries->bind(1, std::string_view(chain.underlying))
+                        .bind(2, static_cast<std::int64_t>(chain.expiries));
+                    json::array list;
+                    std::string nearest;
+                    while (expiries->step().value_or(storage::StepResult::Done) ==
+                           storage::StepResult::Row) {
+                        if (nearest.empty()) {
+                            nearest = expiries->column_text(0);
+                        }
+                        list.emplace_back(expiries->column_text(0));
+                    }
+                    // MCX: the nearest expiry's future (each expiry has its own).
+                    out.push_back(json::object{{"underlying", chain.underlying},
+                                               {"spot_id", chain_spot_id(db, chain, nearest)},
+                                               {"expiries", std::move(list)}});
+                }
+                return success(std::move(out));
+            });
+        });
 
     // GET /chains/{underlying}/{expiry}?strikes=20 — strike rows around ATM.
     router.add(
@@ -204,7 +231,7 @@ void register_chain_routes(Router& router, auth::AuthService& auth, storage::Dat
                     return failure(http::status::not_found, "NotFoundException",
                                    "no listed options for this expiry");
                 }
-                const std::int64_t spot = chain_spot_id(db, chain->spot);
+                const std::int64_t spot = chain_spot_id(db, *chain, expiry);
                 const auto summary = summaries.get(static_cast<std::uint32_t>(spot), expiry_days);
                 // ATM: the engine's (nearest the forward), else nearest the spot's last price.
                 double centre = summary && summary->atm_strike > 0 ? summary->atm_strike : 0;

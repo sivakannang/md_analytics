@@ -76,10 +76,20 @@
     },
     { "name": "dev-debug", "inherits": "base", "configurePreset": "dev-debug" },
     { "name": "dev-asan", "inherits": "base", "configurePreset": "dev-asan" },
-    { "name": "dev-tsan", "inherits": "base", "configurePreset": "dev-tsan" },
+    {
+      "name": "dev-tsan",
+      "inherits": "base",
+      "configurePreset": "dev-tsan",
+      "environment": { "TSAN_OPTIONS": "suppressions=${sourceDir}/tools/tsan.supp" }
+    },
     { "name": "release", "inherits": "base", "configurePreset": "release" },
     { "name": "ci-asan", "inherits": "base", "configurePreset": "ci-asan" },
-    { "name": "ci-tsan", "inherits": "base", "configurePreset": "ci-tsan" },
+    {
+      "name": "ci-tsan",
+      "inherits": "base",
+      "configurePreset": "ci-tsan",
+      "environment": { "TSAN_OPTIONS": "suppressions=${sourceDir}/tools/tsan.supp" }
+    },
     { "name": "ci-release", "inherits": "base", "configurePreset": "ci-release" }
   ]
 }

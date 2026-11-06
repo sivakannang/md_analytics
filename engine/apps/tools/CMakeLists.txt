@@ -13,3 +13,11 @@ mda_target_defaults(mda-tail)
 add_executable(mda-useradm mda-useradm/main.cpp)
 target_link_libraries(mda-useradm PRIVATE mda::admin mda::appdb mda::auth mda::runtime mda::storage)
 mda_target_defaults(mda-useradm)
+
+add_executable(mda-backtest mda-backtest/main.cpp)
+target_link_libraries(mda-backtest PRIVATE mda::signals mda::bars mda::instruments mda::options mda::messages mda::runtime)
+mda_target_defaults(mda-backtest)
+
+add_executable(mda-paperctl mda-paperctl/main.cpp)
+target_link_libraries(mda-paperctl PRIVATE mda::broker mda::bus mda::instruments mda::runtime)
+mda_target_defaults(mda-paperctl)

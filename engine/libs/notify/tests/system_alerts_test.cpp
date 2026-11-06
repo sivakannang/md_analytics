@@ -43,9 +43,12 @@ TEST(SystemAlertsTest, ShortDropsAndClosedMarketsStayQuiet) {
     EXPECT_TRUE(
         alerts.update(FeedCondition::Up, "", t0 + 30).empty());  // a 30 s blip: no down, no back
 
-    FeedAlerts night;
-    EXPECT_TRUE(night.update(FeedCondition::Down, "", at(kThursday, 22, 0)).empty());
-    EXPECT_TRUE(night.update(FeedCondition::Down, "", at(kThursday, 23, 0)).empty());
+    FeedAlerts night;  // MCX trades until 23:55 at the latest (ADR-0031)
+    EXPECT_TRUE(night.update(FeedCondition::Down, "", at(kThursday, 23, 55)).empty());
+    EXPECT_TRUE(night.update(FeedCondition::Down, "", at(kThursday, 23, 59)).empty());
+    FeedAlerts evening;  // ... so an evening outage alerts
+    EXPECT_TRUE(evening.update(FeedCondition::Down, "", at(kThursday, 21, 0)).empty());
+    EXPECT_EQ(evening.update(FeedCondition::Down, "", at(kThursday, 21, 10)).size(), 1u);
     FeedAlerts weekend;
     EXPECT_TRUE(weekend.update(FeedCondition::Down, "", at(kSaturday, 10, 0)).empty());
     EXPECT_TRUE(weekend.update(FeedCondition::Down, "", at(kSaturday, 10, 5)).empty());
@@ -67,8 +70,8 @@ TEST(SystemAlertsTest, ARejectedSessionAlertsOncePerDayAfterSeven) {
 
 TEST(SystemAlertsTest, LoginReminderOnWeekdayMorningsWithoutTodaysSession) {
     const std::int64_t yesterday = at(kThursday - 86'400, 8, 30);
-    EXPECT_FALSE(login_reminder(at(kThursday, 8, 44), yesterday).has_value());
-    const auto reminder = login_reminder(at(kThursday, 8, 45), yesterday);
+    EXPECT_FALSE(login_reminder(at(kThursday, 7, 29), yesterday).has_value());
+    const auto reminder = login_reminder(at(kThursday, 7, 30), yesterday);
     ASSERT_TRUE(reminder.has_value());
     EXPECT_EQ(reminder->dedup_key, "system.login_reminder:2026-10-22");
     EXPECT_TRUE(login_reminder(at(kThursday, 9, 0), std::nullopt).has_value());

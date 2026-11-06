@@ -1,0 +1,7 @@
+# ThreadSanitizer suppressions, used by the sanitizer test presets (TSAN_OPTIONS).
+#
+# SQLite's WAL index is shared memory between connections to one file. Readers copy its
+# header without a lock, twice, and retry if the copies differ; writers hold file locks
+# TSan can't see. So two connections in one process report races inside SQLite on Linux.
+# Only SQLite's own wal* functions are named here: our code's races still report.
+race:^wal

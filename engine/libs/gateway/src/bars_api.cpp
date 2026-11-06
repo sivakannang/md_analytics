@@ -107,22 +107,33 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                 co_return from_error(user.error());
             }
             // 0 (unknown instrument, or none in the catalog) leaves the OI fraction alone.
-            const core::Quantity lot_size = co_await run_on(db_executor, [&] {
-                auto lookup = db.prepare("SELECT lot_size FROM instruments WHERE id = ?1");
+            // MCX OI is already in lots, and its buckets start at 09:00 (ADR-0031).
+            struct Contract {
+                core::Quantity lot_size;
+                std::int64_t session_open = bars::kNseSessionOpen;
+            };
+            const Contract contract = co_await run_on(db_executor, [&] {
+                auto lookup =
+                    db.prepare("SELECT lot_size, exchange FROM instruments WHERE id = ?1");
                 if (!lookup) {
-                    return core::Quantity{};
+                    return Contract{};
                 }
                 lookup->bind(1, *id);
                 if (lookup->step().value_or(storage::StepResult::Done) !=
                     storage::StepResult::Row) {
-                    return core::Quantity{};
+                    return Contract{};
                 }
-                return core::Quantity(lookup->column_int64(0));
+                if (lookup->column_text(1) == "MCX") {
+                    return Contract{.lot_size = core::Quantity(1),
+                                    .session_open = bars::kMcxSessionOpen};
+                }
+                return Contract{.lot_size = core::Quantity(lookup->column_int64(0))};
             });
             const std::int64_t now = auth::system_clock_seconds();
             const std::int64_t to = int_param(request, "to").value_or(now + 60);
             const std::int64_t from = bars::bucket_start(
-                int_param(request, "from").value_or(to - default_span(*interval)), *interval);
+                int_param(request, "from").value_or(to - default_span(*interval)), *interval,
+                contract.session_open);
 
             co_return co_await run_on(bars_executor, [&]() -> Response {
                 auto minutes =
@@ -133,12 +144,12 @@ void register_bars_routes(Router& router, auth::AuthService& auth, storage::Data
                                    "internal error");
                 }
                 bars::mark_backfill_oi_updates(*minutes);
-                auto series = bars::aggregate(*minutes, *interval);
+                auto series = bars::aggregate(*minutes, *interval, contract.session_open);
                 // A bucket still in progress is peeked, so its state may change until it closes.
                 if (!series.empty() && bucket_end(series.back(), *interval) > now) {
                     series.back().header.flags = bars::kBarForming;
                 }
-                const auto points = bars::classify_buildup_points(series, lot_size);
+                const auto points = bars::classify_buildup_points(series, contract.lot_size);
                 const auto first = std::ranges::find_if(
                     series, [&](const bars::Bar& b) { return b.start >= from; });
                 std::size_t begin = static_cast<std::size_t>(first - series.begin());

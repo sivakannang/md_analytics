@@ -325,7 +325,7 @@ export function PriceChart({ instrument }: { instrument: Instrument }) {
         // hours behind the clock) is followed too; live, the two are the same minute.
         // With no history yet, the first live bar starts it.
         const newest = list[list.length - 1]?.[0];
-        let bucket = newest === undefined ? 0 : bucketStart(newest, interval);
+        let bucket = newest === undefined ? 0 : bucketStart(newest, interval, instrument.exchange);
         const minutes = new Map<number, BarRow>();
         if (interval !== '1m' && bucket > 0) {
           const recent = await api.bars(instrument.instrument_id, '1m', bucket);
@@ -336,7 +336,7 @@ export function PriceChart({ instrument }: { instrument: Instrument }) {
         stopLive = quoteStream.watchBars(instrument.instrument_id, (live) => {
           const current = series.current;
           if (!current) return;
-          const start = bucketStart(live.t, interval);
+          const start = bucketStart(live.t, interval, instrument.exchange);
           if (start < bucket) return;  // an older minute: already in history
           if (start > bucket) {
             bucket = start;
@@ -369,7 +369,7 @@ export function PriceChart({ instrument }: { instrument: Instrument }) {
       clearTimeout(refreshTimer);
       stopLive?.();
     };
-  }, [instrument.instrument_id, interval, preset, hasOi]);
+  }, [instrument.instrument_id, instrument.exchange, interval, preset, hasOi]);
 
   const chooseInterval = (value: BarInterval) => {
     setPreset(null);

@@ -1,4 +1,4 @@
-/* Design tokens: light by default, dark when the OS prefers it. */
+/* Design tokens: light here, dark under [data-theme="dark"] (the default, see theme.ts). */
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -7,6 +7,8 @@
   --muted: #5f6b7a;
   --accent: #1f6feb;
   --accent-text: #ffffff;
+  --buy: #2f6fde;   /* Kite's blue for buy */
+  --sell: #e2502b;  /* and orange-red for sell */
   --danger: #c62828;
   --danger-bg: #fdecec;
   --ok: #1b7f3b;
@@ -19,20 +21,21 @@
   background: var(--bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f141a;
-    --surface: #171e26;
-    --border: #2a3440;
-    --text: #e6ebf1;
-    --muted: #9aa7b6;
-    --accent: #4c8dff;
-    --danger: #ff6b6b;
-    --danger-bg: #3a1d1f;
-    --ok: #5fd38a;
-    --ok-bg: #16301f;
-    --shadow: none;
-  }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --buy: #4c8dff;
+  --sell: #ff6b4a;
+  --bg: #0f141a;
+  --surface: #171e26;
+  --border: #2a3440;
+  --text: #e6ebf1;
+  --muted: #9aa7b6;
+  --accent: #4c8dff;
+  --danger: #ff6b6b;
+  --danger-bg: #3a1d1f;
+  --ok: #5fd38a;
+  --ok-bg: #16301f;
+  --shadow: none;
 }
 
 * {
@@ -261,12 +264,6 @@ a.button-link.large {
 
 .details dd {
   margin: 0;
-}
-
-.roadmap {
-  margin: 0;
-  padding-left: 20px;
-  color: var(--muted);
 }
 
 .loading {
@@ -669,19 +666,17 @@ button.destructive {
   --warn: #b7791f;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --up: #5fd38a;
-    --down: #ff6b6b;
-    --oi-long-buildup: #2fb463;
-    --oi-short-covering: #a3e6bb;
-    --oi-short-buildup: #ff5c5c;
-    --oi-long-unwinding: #f2b84b;
-    --oi-neutral: #6b7785;
-    --oi-put: #4cc27a;
-    --oi-call: #f06464;
-    --warn: #f2b84b;
-  }
+:root[data-theme='dark'] {
+  --up: #5fd38a;
+  --down: #ff6b6b;
+  --oi-long-buildup: #2fb463;
+  --oi-short-covering: #a3e6bb;
+  --oi-short-buildup: #ff5c5c;
+  --oi-long-unwinding: #f2b84b;
+  --oi-neutral: #6b7785;
+  --oi-put: #4cc27a;
+  --oi-call: #f06464;
+  --warn: #f2b84b;
 }
 
 table.items td.up {
@@ -971,6 +966,12 @@ table.items tbody tr.open {
   .appbar {
     flex-wrap: wrap;
     gap: 8px 16px;
+  }
+
+  /* Five links (with Admin) are wider than a phone: let them wrap. */
+  .appbar > nav {
+    flex-wrap: wrap;
+    max-width: 100%;
   }
 
   .index-strip {
@@ -1285,6 +1286,29 @@ button.wl-group-toggle {
     display: flex;
     background: none;
     padding: 0;
+  }
+}
+
+/* Phones: four always-on buttons left no room for the name. As in Kite's app, a row's
+   actions appear when it is tapped (focused) or open, over its numbers. */
+@media (hover: none) and (max-width: 767px) {
+  .wl-actions {
+    position: absolute;
+    display: none;
+    padding-left: 12px;
+    background: linear-gradient(to right, transparent, var(--bg) 12px);
+  }
+
+  .wl-row:focus .wl-actions,
+  .wl-row:focus-within .wl-actions,
+  .wl-item.open > .wl-row .wl-actions {
+    display: flex;
+  }
+
+  .wl-actions button.icon-btn,
+  .wl-actions .trade-btn {
+    min-width: 32px;
+    height: 30px;
   }
 }
 
@@ -2660,6 +2684,158 @@ button.link-button:disabled {
   color: var(--text);
 }
 
+/* ---------- market signals (docs/design/signals.md §8) ---------- */
+.signal-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.signal-badge-meta {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.signal-badge.stale {
+  opacity: 0.7;
+}
+
+.signals-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 960px;
+}
+
+.signals-view h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.signals-view .chart-toolbar h3 {
+  margin: 0;
+}
+
+.signal-now {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.signal-now .signal-badge {
+  font-size: 1.05rem;
+  padding: 4px 12px;
+}
+
+.signal-now p {
+  margin: 8px 0 0;
+  max-width: 60ch;
+}
+
+.signal-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.signal-chart {
+  height: 280px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.chart-note {
+  margin: -12px 0 0;
+  font-size: 0.75rem;
+}
+
+.factor-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 640px;
+}
+
+.factor-bars li {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 2fr 64px;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.factor-track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+}
+
+.factor-track::after {
+  /* the middle: no effect */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--muted);
+}
+
+.factor-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+}
+
+.up-bg {
+  background: var(--up);
+}
+
+.down-bg {
+  background: var(--down);
+}
+
+.factor-points {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.items.signal-record th {
+  text-align: left;
+  font-weight: 500;
+  width: 120px;
+}
+
+table.items.signal-calls td,
+table.items.signal-record td {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .factor-bars li {
+    grid-template-columns: 1fr 1.2fr 56px;
+    gap: 8px;
+  }
+}
+
 .chart-footer {
   display: flex;
   flex-wrap: wrap;
@@ -2676,3 +2852,436 @@ button.link-button:disabled {
   min-width: 30px;
 }
 
+/* ---------- paper trading (docs/design/paper-trading.md §12) ---------- */
+.paper-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid #c98a00;
+  border-radius: 999px;
+  color: #c98a00;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
+.trade-btn {
+  min-width: 28px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trade-btn.buy {
+  background: var(--buy);
+}
+
+.trade-btn.sell {
+  background: var(--sell);
+}
+
+.instrument-trade {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.buy-text {
+  color: var(--buy);
+}
+
+.sell-text {
+  color: var(--sell);
+}
+
+.ticket-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgb(0 0 0 / 25%);
+}
+
+.ticket {
+  width: min(520px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 30%);
+  overflow: hidden;
+}
+
+.ticket-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  color: #ffffff;
+}
+
+.ticket.buy .ticket-head {
+  background: var(--buy);
+}
+
+.ticket.sell .ticket-head {
+  background: var(--sell);
+}
+
+.ticket-head > div {
+  flex: 1;
+}
+
+.ticket-head .paper-pill {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.ticket-exchange,
+.ticket-ltp {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.ticket-side {
+  background: rgb(255 255 255 / 20%);
+  color: #ffffff;
+  border: 0;
+  padding: 4px 10px;
+}
+
+.ticket-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.ticket-products {
+  display: flex;
+  gap: 18px;
+  font-size: 0.85rem;
+}
+
+.ticket-products label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.ticket-products label.active {
+  color: var(--text);
+}
+
+.ticket-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.ticket-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.ticket-fields input {
+  width: 100%;
+}
+
+.ticket-types {
+  align-self: flex-start;
+}
+
+.ticket-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.ticket-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.ticket.buy .ticket-submit {
+  background: var(--buy);
+}
+
+.ticket.sell .ticket-submit {
+  background: var(--sell);
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 32px));
+}
+
+.toast {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ok);
+  box-shadow: var(--shadow);
+  font-size: 0.85rem;
+}
+
+.toast.warn {
+  border-left-color: var(--sell);
+}
+
+.paper-page {
+  max-width: 1100px;
+}
+
+.paper-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.paper-header h2 {
+  margin: 0;
+}
+
+.instrument-tabs button.tab-link {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.instrument-tabs button.tab-link.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.paper-date {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+
+/* Phones: five tabs fill the width; the date goes on its own line under them. */
+@media (max-width: 560px) {
+  .instrument-tabs:has(.paper-date) {
+    flex-wrap: wrap;
+  }
+
+  .instrument-tabs > .paper-date {
+    margin: 0 0 6px;
+    order: 1;
+  }
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* Wider than the other item tables: size columns to their content and scroll when narrow. */
+table.items.paper-table {
+  table-layout: auto;
+}
+
+table.items.paper-table th:nth-child(n) {
+  width: auto;
+  white-space: nowrap;
+}
+
+table.items.paper-table td {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A position row's Exit and Convert buttons. */
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.row-actions button {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+
+/* Position conversion (MIS <-> NRML), inline in the row. */
+.convert-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.convert-form input {
+  width: 4.5em;
+}
+
+.order-status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--border);
+}
+
+.order-status.complete {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.order-status.rejected,
+.order-status.cancelled {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.order-status.open,
+.order-status.trigger_pending {
+  background: color-mix(in srgb, var(--buy) 15%, transparent);
+  color: var(--buy);
+}
+
+.funds-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.funds-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+}
+
+.kill-switch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.kill-switch.on {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.kill-switch p {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 560px) {
+  .ticket-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+}
+
+/* Solid red buttons (kill switch); icon and link buttons keep their own danger look. */
+button.danger:not(.icon-btn):not(.link) {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* ---------- auto trader (docs/design/auto-trader.md §8) ---------- */
+.auto-run {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.auto-run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.auto-run-head h3,
+.auto-run h4 {
+  margin: 0;
+}
+
+.auto-run p {
+  margin: 0;
+}
+
+.source-pill {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* Option chain on phones: OI · LTP · Strike · LTP · OI (pages/OptionChain.tsx). */
+@media (max-width: 560px) {
+  .chain-table .chain-extra {
+    display: none;
+  }
+
+  .chain-table {
+    font-size: 0.75rem;
+  }
+
+  .chain-table td,
+  .chain-table th {
+    padding: 4px 5px;
+  }
+
+  .chain-oi {
+    min-width: 60px;
+  }
+
+  .chain-table th.chain-strike,
+  .chain-table td.chain-strike {
+    min-width: 52px;
+  }
+
+  .chain-buildup {
+    margin-left: 3px;
+    padding: 0 2px;
+    font-size: 0.6rem;
+  }
+}
+
+/* Paper → Positions: the total under the table. */
+table.items.paper-table tfoot tr.paper-total td {
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}

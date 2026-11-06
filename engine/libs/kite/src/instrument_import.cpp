@@ -1,11 +1,14 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <chrono>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <mda/instruments/mcx.hpp>
 #include <mda/kite/instrument_import.hpp>
 
 namespace mda::kite {
@@ -104,13 +107,15 @@ RowOutcome contract_key_for(const std::vector<std::string>& row, ContractKey& ke
     const std::string& type = row[kInstrumentType];
 
     if (segment == "INDICES" || segment == "NSE" || segment == "BSE") {
-        if (exchange != "NSE" && exchange != "BSE") {
+        if (exchange != "NSE" && exchange != "BSE" && exchange != "MCX") {
             return RowOutcome::Unsupported;
         }
         if (segment != "INDICES" && type != "EQ") {
             return RowOutcome::Unsupported;
         }
-        key.exchange = exchange == "NSE" ? Exchange::Nse : Exchange::Bse;
+        key.exchange = exchange == "NSE"   ? Exchange::Nse
+                       : exchange == "BSE" ? Exchange::Bse
+                                           : Exchange::Mcx;
         key.market = Market::Cash;
         key.kind = segment == "INDICES" ? Kind::Index : Kind::Equity;
         key.underlying = row[kTradingSymbol];
@@ -119,10 +124,11 @@ RowOutcome contract_key_for(const std::vector<std::string>& row, ContractKey& ke
 
     const bool nfo = segment.starts_with("NFO-");
     const bool bfo = segment.starts_with("BFO-");
-    if (!nfo && !bfo) {
-        return RowOutcome::Unsupported;  // CDS, BCD, MCX, NCO, …
+    const bool mcx = segment.starts_with("MCX-");
+    if (!nfo && !bfo && !mcx) {
+        return RowOutcome::Unsupported;  // CDS, BCD, NCO, …
     }
-    key.exchange = nfo ? Exchange::Nse : Exchange::Bse;
+    key.exchange = nfo ? Exchange::Nse : bfo ? Exchange::Bse : Exchange::Mcx;
     key.market = Market::Fo;
     key.underlying = row[kName];
     const auto expiry = instruments::parse_date(row[kExpiry]);
@@ -148,11 +154,49 @@ RowOutcome contract_key_for(const std::vector<std::string>& row, ContractKey& ke
     return RowOutcome::Malformed;
 }
 
-/// Links each derivative listed today to its underlying index (preferred) or equity.
+/// MCX (ADR-0031): an option's underlying is the nearest future of its commodity expiring on
+/// or after it; an index future's is the MCX index of that name; other futures have none.
+void link_mcx(instruments::InstrumentRegistry& registry) {
+    std::map<std::string, std::map<std::chrono::year_month_day, core::InstrumentId>> futures;
+    for (const instruments::Instrument& instrument : registry.all()) {
+        if (instrument.listed_today && instrument.key.exchange == Exchange::Mcx &&
+            instrument.key.kind == Kind::Future) {
+            futures[instrument.key.underlying][instrument.key.expiry] = instrument.id;
+        }
+    }
+    for (const instruments::Instrument& instrument : registry.all()) {
+        if (!instrument.listed_today || instrument.key.exchange != Exchange::Mcx ||
+            instrument.key.market != Market::Fo) {
+            continue;
+        }
+        core::InstrumentId underlying;
+        if (instrument.key.kind == Kind::Option) {
+            if (const auto by_expiry = futures.find(instrument.key.underlying);
+                by_expiry != futures.end()) {
+                if (const auto future = by_expiry->second.lower_bound(instrument.key.expiry);
+                    future != by_expiry->second.end()) {
+                    underlying = future->second;
+                }
+            }
+        } else {
+            underlying = registry.find(ContractKey{.exchange = Exchange::Mcx,
+                                                   .market = Market::Cash,
+                                                   .kind = Kind::Index,
+                                                   .underlying = instrument.key.underlying});
+        }
+        if (underlying.valid()) {
+            registry.get(instrument.id)->underlying = underlying;
+        }
+    }
+}
+
+/// Links each NSE/BSE derivative listed today to its underlying index (preferred) or equity.
 std::size_t link_underlyings(instruments::InstrumentRegistry& registry) {
+    link_mcx(registry);
     std::size_t unlinked = 0;
     for (const instruments::Instrument& instrument : registry.all()) {
-        if (!instrument.listed_today || instrument.key.market != Market::Fo) {
+        if (!instrument.listed_today || instrument.key.market != Market::Fo ||
+            instrument.key.exchange == Exchange::Mcx) {
             continue;
         }
         ContractKey index{.exchange = instrument.key.exchange,
@@ -253,7 +297,11 @@ std::expected<ImportResult, ImportError> import_instruments(
         instruments::Instrument& instrument = *registry.get(id);
         instrument.trading_symbol = row[kTradingSymbol];
         instrument.name = row[kName];
-        instrument.lot_size = core::Quantity(*lot_size);
+        // MCX quantities are kept in units, Kite's in lots (ADR-0031).
+        instrument.lot_size =
+            core::Quantity(key.exchange == Exchange::Mcx
+                               ? instruments::mcx_units_per_lot(instrument.name).value_or(*lot_size)
+                               : *lot_size);
         instrument.tick_size = *tick_size;
         instrument.listed_today = true;
         result.tokens.add(*token, id);

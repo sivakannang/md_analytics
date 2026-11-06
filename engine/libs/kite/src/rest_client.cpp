@@ -98,6 +98,9 @@ KiteError classify_error(int http_status, std::string_view body) {
 
 std::string quote_key(instruments::Exchange exchange, instruments::Market market,
                       std::string_view trading_symbol) {
+    if (exchange == instruments::Exchange::Mcx) {
+        return "MCX:" + std::string(trading_symbol);  // one segment for futures and options
+    }
     const bool nse = exchange == instruments::Exchange::Nse;
     const bool derivative = market == instruments::Market::Fo;
     const std::string_view prefix = derivative ? (nse ? "NFO:" : "BFO:") : (nse ? "NSE:" : "BSE:");

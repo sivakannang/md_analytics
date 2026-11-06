@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <tuple>
 
 #include <mda/bars/bar_builder.hpp>
 
@@ -29,6 +30,14 @@ void BarBuilder::on_snapshot(const messages::MarketSnapshot& s) {
     if (id == 0) {
         return;
     }
+    const std::int64_t received = s.receive_ts.ns() / kNanos;
+    if (options_.feed_gap.count() > 0 && last_received_ > 0 &&
+        received - last_received_ >= options_.feed_gap.count()) {
+        for (auto& [other, state] : states_) {
+            state.last_volume = -1;  // the next tick of each is a baseline
+        }
+    }
+    last_received_ = std::max(last_received_, received);
     const bool has_exchange_time =
         (s.fields & messages::kFieldExchangeTime) != 0 && s.exchange_ts.is_set();
     const std::int64_t at = (has_exchange_time ? s.exchange_ts : s.receive_ts).ns() / kNanos;
@@ -37,12 +46,19 @@ void BarBuilder::on_snapshot(const messages::MarketSnapshot& s) {
 
     State& state = states_[id];
     if (state.session_end < 0) {
-        const bool derivative =
-            options_.is_derivative && options_.is_derivative(s.header.instrument_id);
-        state.session_end = derivative ? options_.derivatives_session_end : options_.session_end;
+        if (options_.session) {
+            std::tie(state.session_start, state.session_end) =
+                options_.session(s.header.instrument_id, minute);
+        } else {
+            const bool derivative =
+                options_.is_derivative && options_.is_derivative(s.header.instrument_id);
+            state.session_start = options_.session_start;
+            state.session_end =
+                derivative ? options_.derivatives_session_end : options_.session_end;
+        }
     }
     const bool in_session =
-        minute_of_day >= options_.session_start && minute_of_day < state.session_end;
+        minute_of_day >= state.session_start && minute_of_day < state.session_end;
     if (state.open && minute != state.bar.start) {
         if (minute < state.bar.start) {
             return;  // a late tick from a minute already closed: ignored

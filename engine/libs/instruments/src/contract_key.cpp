@@ -43,6 +43,8 @@ std::string_view to_string(Exchange exchange) noexcept {
             return "NSE";
         case Exchange::Bse:
             return "BSE";
+        case Exchange::Mcx:
+            return "MCX";
     }
     return "?";
 }
@@ -111,6 +113,8 @@ std::optional<ContractKey> parse_contract_key(std::string_view text) {
         key.exchange = Exchange::Nse;
     } else if (parts[0] == "BSE") {
         key.exchange = Exchange::Bse;
+    } else if (parts[0] == "MCX") {
+        key.exchange = Exchange::Mcx;
     } else {
         return std::nullopt;
     }

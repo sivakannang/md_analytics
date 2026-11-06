@@ -1,14 +1,31 @@
-// Admin: every user with status, sign-in history and today's traffic (ADR-0019).
-// Refreshes every 5 s while the tab is visible.
+// Admin: every user with status, sign-in history, today's traffic (ADR-0019) and their
+// paper trading (ADR-0029). Refreshes every 5 s while the tab is visible.
 
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 import { api } from '../api/client';
 import type { AdminUser } from '../api/client';
+import { positionPnl } from '../pages/Paper';
 import { AdminTabs } from './AdminTabs';
 import { ago, formatBytes, istTime } from './format';
 import { usePolling } from './usePolling';
+
+/** Open paper positions and their P&L, as the user's Positions page (at the gateway's last price). */
+function PaperCell({ userId }: { userId: number }) {
+  const load = useCallback(() => api.paperPositions(userId), [userId]);
+  const { data: positions } = usePolling(load, 5000);
+  if (!positions) return <span className="muted">…</span>;
+  if (positions.length === 0) return <span className="muted">—</span>;
+  const open = positions.filter((p) => p.quantity !== 0).length;
+  const pnl = positions.reduce((sum, p) => sum + positionPnl(p, p.last_price ?? undefined), 0);
+  const tone = pnl > 0 ? 'up' : pnl < 0 ? 'down' : '';
+  return (
+    <Link to={`/admin/users/${userId}/paper`} title="Paper trading: positions, orders, trades, funds">
+      {open} open · <span className={tone}>{pnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+    </Link>
+  );
+}
 
 function Status({ user }: { user: AdminUser }) {
   if (user.online > 0) {
@@ -51,6 +68,7 @@ export function AdminUsers() {
               <tr>
                 <th>User</th>
                 <th>Status</th>
+                <th className="num">Paper P&amp;L</th>
                 <th>Last sign-in</th>
                 <th>Last sign-out</th>
                 <th>Last seen</th>
@@ -71,6 +89,9 @@ export function AdminUsers() {
                   </td>
                   <td>
                     <Status user={user} />
+                  </td>
+                  <td className="num">
+                    <PaperCell userId={user.user_id} />
                   </td>
                   <td title={istTime(user.last_sign_in_at)}>{ago(user.last_sign_in_at)}</td>
                   <td title={istTime(user.last_sign_out_at)}>{ago(user.last_sign_out_at)}</td>

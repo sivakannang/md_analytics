@@ -1,5 +1,5 @@
 // Step series from GET /chains/{u}/oi-timeline (docs/api/rest.md "OI timeline"): [m, value]
-// = from 09:15 + m minutes the value is this, until the next point.
+// = from the session open (09:15, MCX 09:00) + m minutes the value is this, until the next point.
 
 import type { StepSeries } from '../api/client';
 

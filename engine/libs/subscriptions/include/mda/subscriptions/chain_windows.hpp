@@ -6,7 +6,8 @@
 // strikes within ATM ± (strikes + buffer). ATM follows the spot price with hysteresis: a
 // window re-centres only when ATM has moved more than `buffer` strikes from its centre, and
 // strikes leaving a window stay subscribed for a grace period. The spot index and every
-// listed future of the underlying are always included.
+// listed future of the underlying are always included. A chain without a spot (MCX,
+// ADR-0031) centres each expiry on its own underlying future instead.
 //
 // Pure logic over the instrument registry; no broker or I/O. Times are Unix seconds.
 
@@ -25,7 +26,8 @@ namespace mda::subscriptions {
 
 struct ChainSpec {
     std::string underlying;   ///< F&O underlying name, e.g. NIFTY
-    core::InstrumentId spot;  ///< the index (or stock) whose price sets ATM
+    core::InstrumentId spot;  ///< the index (or stock) whose price sets ATM; invalid = each
+                              ///< expiry's underlying future (the options' registry underlying)
     int expiries = 1;         ///< nearest N listed expiries
     int strikes = 20;         ///< ATM ± strikes
 };
@@ -66,6 +68,7 @@ public:
 private:
     struct Expiry {
         std::chrono::year_month_day date;
+        core::InstrumentId spot;                // sets this expiry's ATM
         std::vector<core::Price> strikes;       // ascending
         std::vector<core::InstrumentId> calls;  // aligned with strikes; invalid if not listed
         std::vector<core::InstrumentId> puts;

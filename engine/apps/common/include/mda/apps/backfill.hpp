@@ -12,6 +12,7 @@
 #include <mda/bars/bar.hpp>
 #include <mda/bars/bar_store.hpp>
 #include <mda/core/instrument_id.hpp>
+#include <mda/instruments/contract_key.hpp>
 #include <mda/kite/rest_client.hpp>
 
 namespace mda::apps {
@@ -29,8 +30,10 @@ inline constexpr int kMaxBackfillDaysPerRequest = 60;
                                              const std::vector<kite::Candle>& candles,
                                              std::int64_t before);
 
-/// Mon–Fri 09:15–15:40 IST: past-day backfills wait until after it (CLAUDE.md).
-[[nodiscard]] bool in_market_hours(std::int64_t now);
+/// Mon–Fri during the exchange's session (NSE/BSE 09:15–15:40 IST, MCX 09:00 to its close;
+/// ADR-0031): past-day backfills wait until after it (CLAUDE.md).
+[[nodiscard]] bool in_market_hours(std::int64_t now,
+                                   instruments::Exchange exchange = instruments::Exchange::Nse);
 
 /// What an instrument already has in bars.db.
 struct BarCoverage {
@@ -49,7 +52,8 @@ struct BackfillWindow {
 
 /// ADR-0025: during market hours, today's minutes if there are none; otherwise the past
 /// `days` up to now if there are no past bars; nothing when the instrument has them.
-[[nodiscard]] std::optional<BackfillWindow> auto_backfill_window(std::int64_t now,
-                                                                 BarCoverage coverage, int days);
+[[nodiscard]] std::optional<BackfillWindow> auto_backfill_window(
+    std::int64_t now, BarCoverage coverage, int days,
+    instruments::Exchange exchange = instruments::Exchange::Nse);
 
 }  // namespace mda::apps

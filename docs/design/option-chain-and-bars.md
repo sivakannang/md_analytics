@@ -158,6 +158,15 @@ feed:
   carries on after a restart.
 - Minutes lost while the engine was down are filled by `mda-backfill` (Kite has them).
   This is the gap-filling path from [recovery-and-gap-filling.md](recovery-and-gap-filling.md).
+- **Feed outage** (added 2026-10-27): the Wi-Fi or the internet drops while everything keeps
+  running. Kite's volume is the day's running total, so the first bar after reconnecting
+  used to carry everything traded during the outage, a false spike that a backfill couldn't
+  correct because live bars win. Now, when no snapshot from *any* instrument has arrived
+  for 120 s (`BuilderOptions::feed_gap`; receive time), the next tick of each instrument
+  only sets a new volume baseline. A single quiet instrument doesn't count as an outage.
+  The first minute after reconnecting is a little short (trades before its first tick);
+  run `mda-backfill` for the day after 15:40 to fill the missing minutes. F9 does the same
+  (`signals.md` §14).
 
 ## 4. Option analytics (O3, mda-engine) — ADR-0022
 

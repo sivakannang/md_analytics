@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Keeps the Mac out of idle sleep at all times, even when mda-feedd isn't running (the
+     display still sleeps). Closing the lid still sleeps the Mac: leave it open. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.mda.awake</string>
+    <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-i</string><string>-s</string></array>
+    <key>KeepAlive</key><true/>
+    <key>RunAtLoad</key><true/>
+</dict>
+</plist>

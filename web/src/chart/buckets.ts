@@ -1,11 +1,12 @@
 // Candle buckets, the same rule as the gateway (engine/libs/bars aggregate.hpp): intraday
-// buckets aligned to the 09:15 IST session start, daily buckets = IST days.
+// buckets aligned to the session start (09:15 IST, MCX 09:00; ADR-0031), daily buckets = IST days.
 
 import type { BarInterval, BarRow } from '../api/client';
 import type { LiveBar } from '../stream/quoteStream';
 
 const IST = 5 * 3600 + 30 * 60;
 const SESSION = 9 * 3600 + 15 * 60;
+const MCX_SESSION = 9 * 3600;
 
 export const INTERVALS: { value: BarInterval; label: string; seconds: number }[] = [
   { value: '1m', label: '1m', seconds: 60 },
@@ -22,11 +23,11 @@ export function istMidnight(t: number): number {
   return local - (((local % 86_400) + 86_400) % 86_400) - IST;
 }
 
-export function bucketStart(t: number, interval: BarInterval): number {
+export function bucketStart(t: number, interval: BarInterval, exchange = 'NSE'): number {
   const midnight = istMidnight(t);
   if (interval === '1d') return midnight;
   const length = INTERVALS.find((i) => i.value === interval)?.seconds ?? 60;
-  const session = midnight + SESSION;
+  const session = midnight + (exchange === 'MCX' ? MCX_SESSION : SESSION);
   return session + Math.floor((t - session) / length) * length;
 }
 

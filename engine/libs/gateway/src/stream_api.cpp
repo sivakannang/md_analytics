@@ -57,6 +57,10 @@ struct Session {
     SeenVersions seen_bars;
     std::vector<std::uint32_t> chain_spots;  ///< chain-summary subscriptions (spot ids)
     SeenVersions seen_chains;
+    std::vector<std::uint32_t> signal_spots;  ///< market-signal subscriptions (spot ids)
+    SeenVersions seen_signals;
+    bool orders = false;              ///< the user's paper order updates
+    std::uint64_t seen_orders = 0;    ///< OrderUpdates version already sent
     std::vector<std::string> outbox;  ///< error messages for the writer to send
     asio::steady_timer* wake = nullptr;
     std::int64_t user_id = 0;
@@ -125,7 +129,8 @@ void unsubscribe_from(std::vector<std::uint32_t>& subscribed, SeenVersions& seen
 }
 
 /// Applies one client message; false if it is malformed (the stream is then closed).
-/// {"a": "subscribe" | "unsubscribe", "v": [ids], "mode": "quote" (default) | "depth"}
+/// {"a": "subscribe" | "unsubscribe", "v": [ids],
+///  "mode": "quote" (default) | "depth" | "bars" | "chain" | "signals" | "orders"}
 bool apply(Session& session, std::string_view text, const StreamOptions& options) {
     boost::system::error_code ec;
     const json::value value = json::parse(text, ec);
@@ -140,7 +145,8 @@ bool apply(Session& session, std::string_view text, const StreamOptions& options
     }
     if (mode != nullptr &&
         (!mode->is_string() || (mode->as_string() != "quote" && mode->as_string() != "depth" &&
-                                mode->as_string() != "bars" && mode->as_string() != "chain"))) {
+                                mode->as_string() != "bars" && mode->as_string() != "chain" &&
+                                mode->as_string() != "signals" && mode->as_string() != "orders"))) {
         return false;
     }
     std::vector<std::uint32_t> ids;
@@ -155,8 +161,20 @@ bool apply(Session& session, std::string_view text, const StreamOptions& options
     const bool depth = mode != nullptr && mode->as_string() == "depth";
     const bool bars = mode != nullptr && mode->as_string() == "bars";
     const bool chain = mode != nullptr && mode->as_string() == "chain";
+    const bool signal = mode != nullptr && mode->as_string() == "signals";
+    if (mode != nullptr && mode->as_string() == "orders") {
+        // No ids: the stream's own user. Updates from now on (the page reads REST first).
+        session.orders = action->as_string() == "subscribe";
+        if (session.orders && options.orders != nullptr) {
+            session.seen_orders = options.orders->version();
+        }
+        return action->as_string() == "subscribe" || action->as_string() == "unsubscribe";
+    }
     if (action->as_string() == "subscribe") {
-        if (chain) {
+        if (signal) {
+            subscribe_into(session.signal_spots, ids, options.max_signals, "signal subscriptions",
+                           session);
+        } else if (chain) {
             subscribe_into(session.chain_spots, ids, 3, "chain subscriptions", session);
         } else if (bars) {
             subscribe_into(session.bar_ids, ids, options.max_bars, "bar subscriptions", session);
@@ -169,7 +187,9 @@ bool apply(Session& session, std::string_view text, const StreamOptions& options
         return true;
     }
     if (action->as_string() == "unsubscribe") {
-        if (chain) {
+        if (signal) {
+            unsubscribe_from(session.signal_spots, session.seen_signals, ids);
+        } else if (chain) {
             unsubscribe_from(session.chain_spots, session.seen_chains, ids);
         } else if (bars) {
             unsubscribe_from(session.bar_ids, session.seen_bars, ids);
@@ -245,6 +265,29 @@ asio::awaitable<void> push_loop(Socket& ws, Session& session, const Deps& deps, 
                 }
                 outgoing.push_back(
                     json::serialize(json::object{{"type", "chain"}, {"data", std::move(data)}}));
+            }
+        }
+        if (deps.options.orders != nullptr && session.orders) {
+            const auto reports = deps.options.orders->since(session.user_id, session.seen_orders);
+            if (!reports.empty()) {
+                json::array data;
+                for (const auto& report : reports) {
+                    data.emplace_back(report_json(report));
+                }
+                outgoing.push_back(
+                    json::serialize(json::object{{"type", "orders"}, {"data", std::move(data)}}));
+            }
+        }
+        if (deps.options.signals != nullptr && !session.signal_spots.empty()) {
+            const auto changed =
+                deps.options.signals->changed(session.signal_spots, session.seen_signals);
+            if (!changed.empty()) {
+                json::array data;
+                for (const auto& signal : changed) {
+                    data.emplace_back(signal_json(signal));
+                }
+                outgoing.push_back(
+                    json::serialize(json::object{{"type", "signals"}, {"data", std::move(data)}}));
             }
         }
         if (deps.options.bars != nullptr && !session.bar_ids.empty()) {

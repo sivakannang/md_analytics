@@ -181,7 +181,9 @@ protected:
                          .max_depth = 2,
                          .reauth_interval = std::chrono::seconds(1),
                          .bars = &live_bars_,
-                         .chains = &chains_});
+                         .chains = &chains_,
+                         .signals = &signals_,
+                         .orders = &orders_});
         EXPECT_FALSE(server_.listen({asio::ip::make_address("127.0.0.1"), 0}));
         port_ = server_.local_endpoint().port();
         io_thread_ = std::thread([this] { io_.run(); });
@@ -264,6 +266,8 @@ protected:
     QuoteCache cache_;
     LiveBars live_bars_;
     ChainSummaries chains_;
+    LiveSignals signals_;
+    OrderUpdates orders_;
     asio::io_context io_;
     asio::thread_pool worker_{1};
     Router router_;
@@ -505,6 +509,119 @@ TEST_F(StreamTest, StreamsChainSummaries) {
     EXPECT_EQ(data.at("expiry").as_string(), "2026-10-27");
     EXPECT_DOUBLE_EQ(data.at("max_pain").as_double(), 22'800);
     EXPECT_TRUE(data.at("atm_iv").is_null());  // unknown
+}
+
+// The engine's per-minute closing summary is for mda-signald; it is older than the
+// per-second one already shown, so the live chain keeps the newer values.
+TEST_F(StreamTest, ClosingChainSummariesDontReplaceTheLiveOne) {
+    options::ChainSummary summary{
+        .underlying = "NIFTY",
+        .spot = core::InstrumentId(3),
+        .expiry = std::chrono::year_month_day{std::chrono::year{2026} / 10 / 27},
+        .max_pain = 22'800};
+    chains_.update(options::to_message(summary));
+    summary.max_pain = 22'700;
+    auto closing = options::to_message(summary);
+    closing.minute = 1'761'550'200;
+    chains_.update(closing);
+    const auto latest = chains_.get(3, closing.expiry_days);
+    ASSERT_TRUE(latest.has_value());
+    EXPECT_DOUBLE_EQ(latest->max_pain, 22'800);
+}
+
+signals::MarketSignal market_signal(std::int64_t minute, int score, signals::Label label) {
+    signals::Signal signal{.spot = core::InstrumentId(3),
+                           .minute = minute,
+                           .strategy = signals::StrategyId::OiBiasV1,
+                           .horizon_min = 30,
+                           .score = score,
+                           .label = label,
+                           .factors = {}};
+    signal.factors.push_back({.id = signals::FactorId::FuturesBuildup,
+                              .status = signals::FactorStatus::Present,
+                              .value = 1,
+                              .points = 20});
+    signal.factors.push_back({.id = signals::FactorId::PcrChange,
+                              .status = signals::FactorStatus::Present,
+                              .value = 0.76,
+                              .points = 11.4});
+    return signals::to_message(signal, 1);
+}
+
+TEST(LiveSignalsTest, KeepsTheNewestPerSpotAndStrategy) {
+    LiveSignals live;
+    live.update(market_signal(1'792'640'100, 31, signals::Label::Bullish));
+    live.update(market_signal(1'792'640'040, -40, signals::Label::Bearish));  // older: ignored
+    SeenVersions seen;
+    const std::uint32_t spots[] = {3};
+    const auto first = live.changed(spots, seen);
+    ASSERT_EQ(first.size(), 1u);
+    EXPECT_EQ(first[0].score, 31);
+    EXPECT_TRUE(live.changed(spots, seen).empty());  // nothing new
+    live.update(market_signal(1'792'640'160, 5, signals::Label::Neutral));
+    EXPECT_EQ(live.changed(spots, seen).at(0).score, 5);
+}
+
+TEST_F(StreamTest, StreamsMarketSignals) {
+    signals_.update(market_signal(1'792'640'100, 31, signals::Label::Bullish));
+    auto client = connect_ok();
+    client->write(asio::buffer(std::string(R"({"a":"subscribe","v":[3],"mode":"signals"})")));
+    const auto message = next(*client, "signals");
+    ASSERT_FALSE(message.empty());
+    const auto& data = message.at("data").as_array()[0].as_object();
+    EXPECT_EQ(data.at("spot_id").as_int64(), 3);
+    EXPECT_EQ(data.at("minute").as_int64(), 1'792'640'100);
+    EXPECT_EQ(data.at("strategy").as_string(), "oi-bias-v1");
+    EXPECT_EQ(data.at("horizon_min").as_int64(), 30);
+    EXPECT_EQ(data.at("score").as_int64(), 31);
+    EXPECT_EQ(data.at("label").as_string(), "bullish");
+    EXPECT_TRUE(data.at("prob").is_null());
+    const auto& top = data.at("top").as_array();
+    ASSERT_EQ(top.size(), 2u);
+    EXPECT_EQ(top[0].as_object().at("factor").as_string(), "futures_buildup");
+    EXPECT_EQ(top[0].as_object().at("points").as_int64(), 20);
+    EXPECT_EQ(top[1].as_object().at("points").as_int64(), 11);
+
+    // The next minute's signal arrives on its own.
+    signals_.update(market_signal(1'792'640'160, -27, signals::Label::Bearish));
+    const auto later = next(*client, "signals");
+    ASSERT_FALSE(later.empty());
+    EXPECT_EQ(later.at("data").as_array()[0].as_object().at("label").as_string(), "bearish");
+}
+
+TEST_F(StreamTest, StreamsTheUsersOwnPaperOrders) {
+    broker::ExecutionReport before{};
+    before.user = 1;
+    before.order_id = 1;
+    orders_.add(before);  // before subscribing: not sent (the page reads REST first)
+    auto client = connect_ok();
+    client->write(asio::buffer(std::string(R"({"a":"subscribe","v":[],"mode":"orders"})")));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    broker::ExecutionReport other{};
+    other.user = 2;  // someone else's
+    other.order_id = 9;
+    orders_.add(other);
+    broker::ExecutionReport fill{};
+    fill.header.instrument_id = core::InstrumentId(4);
+    fill.user = 1;
+    fill.order_id = 2;
+    fill.event = broker::ReportEvent::Fill;
+    fill.status = oms::OrderStatus::Complete;
+    fill.quantity = fill.filled = fill.last_quantity = 65;
+    fill.last_price = core::Price::from_raw(1'200'500);
+    orders_.add(fill);
+
+    const auto message = next(*client, "orders");
+    ASSERT_FALSE(message.empty());
+    const auto& data = message.at("data").as_array();
+    ASSERT_EQ(data.size(), 1u);
+    const auto& report = data[0].as_object();
+    EXPECT_EQ(report.at("order_id").as_int64(), 2);
+    EXPECT_EQ(report.at("event").as_string(), "fill");
+    EXPECT_EQ(report.at("status").as_string(), "COMPLETE");
+    EXPECT_DOUBLE_EQ(report.at("last_price").as_double(), 120.05);
+    EXPECT_TRUE(report.at("reject_code").is_null());
 }
 
 }  // namespace

@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import { quoteStream } from './quoteStream';
-import type { ChainSummary } from '../api/client';
+import type { ChainSummary, LiveSignal } from '../api/client';
 import type { Depth, FeedState, Quote } from './quoteStream';
 
 /** Streams live quotes for `ids` while the calling component is mounted. */
@@ -32,6 +32,12 @@ export function useFeedState(): FeedState {
 export function useChainSummary(spotId: number, expiry: string): ChainSummary | undefined {
   useEffect(() => (spotId > 0 ? quoteStream.watchChain(spotId) : undefined), [spotId]);
   return useSyncExternalStore(quoteStream.subscribe, () => quoteStream.chainSummary(spotId, expiry));
+}
+
+/** Streams the live signals of the index on `spotId` (0 for none); returns one strategy's. */
+export function useLiveSignal(spotId: number, strategy: string): LiveSignal | undefined {
+  useEffect(() => (spotId > 0 ? quoteStream.watchSignals(spotId) : undefined), [spotId]);
+  return useSyncExternalStore(quoteStream.subscribe, () => quoteStream.signal(spotId, strategy));
 }
 
 /** The largest open interest among `ids` (0 until known); re-renders only when it changes. */

@@ -22,6 +22,16 @@ TEST(BackfillTest, MarketHoursAreWeekdays0915To1540Ist) {
     EXPECT_FALSE(in_market_hours(at(kSaturday, 11, 0)));
 }
 
+TEST(BackfillTest, McxHoursRunTo2330WhileTheUsIsOnDaylightSaving) {
+    using instruments::Exchange;
+    EXPECT_TRUE(in_market_hours(at(kThursday, 9, 0), Exchange::Mcx));
+    EXPECT_TRUE(in_market_hours(at(kThursday, 23, 29), Exchange::Mcx));
+    EXPECT_FALSE(in_market_hours(at(kThursday, 23, 30), Exchange::Mcx));
+    const auto window = auto_backfill_window(at(kThursday, 20, 0), {}, 30, Exchange::Mcx);
+    ASSERT_TRUE(window.has_value());
+    EXPECT_EQ(window->from, at(kThursday, 9, 0));
+}
+
 TEST(BackfillTest, DuringMarketHoursOnlyTodayIsFetched) {
     const std::int64_t now = at(kThursday, 11, 0);
     const auto window = auto_backfill_window(now, {.past = false, .today = false}, 30);

@@ -69,6 +69,12 @@ struct Limits {
 
 inline constexpr std::string_view kDefaultName = "My watchlist";
 
+/// Removes every list's contracts that expired before `today` (IST, "YYYY-MM-DD"), as Kite
+/// drops them after expiry; a contract stays on its expiry day. Returns how many items went.
+/// mda-feedd runs it each morning after the day's catalog sync.
+[[nodiscard]] std::expected<std::size_t, WatchlistError> remove_expired(storage::Database& db,
+                                                                        std::string_view today);
+
 class WatchlistService {
 public:
     explicit WatchlistService(storage::Database& db, Limits limits = {})

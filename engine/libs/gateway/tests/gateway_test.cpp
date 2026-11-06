@@ -1,7 +1,9 @@
 // End-to-end HTTP tests: a real mda-gateway server on 127.0.0.1:<free port> inside the
 // test process, driven by a plain HTTP client.
 
+#include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -13,27 +15,34 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/json.hpp>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <mda/admin/admin.hpp>
 #include <mda/appdb/schema.hpp>
 #include <mda/auth/auth_service.hpp>
 #include <mda/auth/user_store.hpp>
 #include <mda/bars/bar_store.hpp>
+#include <mda/broker/broker.hpp>
+#include <mda/bus/bus.hpp>
 #include <mda/catalog/catalog.hpp>
 #include <mda/gateway/admin_api.hpp>
 #include <mda/gateway/bars_api.hpp>
 #include <mda/gateway/chain_api.hpp>
 #include <mda/gateway/notifications_api.hpp>
 #include <mda/gateway/oi_change_api.hpp>
+#include <mda/gateway/paper_api.hpp>
 #include <mda/gateway/server.hpp>
+#include <mda/gateway/signals_api.hpp>
 #include <mda/gateway/system_api.hpp>
 #include <mda/gateway/usage_tracker.hpp>
 #include <mda/gateway/user_api.hpp>
 #include <mda/gateway/watchlist_api.hpp>
+#include <mda/signals/market_state.hpp>
 #include <mda/storage/database.hpp>
 
 namespace mda::gateway {
@@ -79,12 +88,36 @@ protected:
             {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50", .expiries = 2}});
         register_notification_routes(router_, auth_, db_, worker_.get_executor(), "md_test_bot");
         register_system_routes(router_, auth_, db_, worker_.get_executor(), monitor_);
+        register_signal_routes(router_, auth_, db_, worker_.get_executor(), signal_store_,
+                               bars_worker_.get_executor(),
+                               {{.underlying = "NIFTY", .spot = "NSE|CASH|IDX|NIFTY 50"}},
+                               {{.id = "oi-bias-v1", .horizon_min = 30}});
+        register_paper_routes(router_, auth_, db_, worker_.get_executor(), paper_store_,
+                              bars_worker_.get_executor(), *order_sender_, order_updates_, quotes_,
+                              {.opening_cash = 10'00'000 * 100,
+                               .futures_margin = 120'000'000,
+                               .freeze_quantity = {},
+                               .resend_after = std::chrono::milliseconds(100),
+                               .give_up_after = std::chrono::milliseconds(600)});
+        register_auto_routes(router_, auth_, worker_.get_executor(), paper_store_, auto_decisions_,
+                             bars_worker_.get_executor(),
+                             {{.id = "test-run",
+                               .user = 1,
+                               .strategy = "follow-signal",
+                               .signal = "oi-bias-v1",
+                               .underlying = "NIFTY",
+                               .enabled = false,
+                               .settings = {{"lots", 1}}}});
         EXPECT_FALSE(server_.listen({asio::ip::make_address("127.0.0.1"), 0}));
         port_ = server_.local_endpoint().port();
         io_thread_ = std::thread([this] { io_.run(); });
     }
 
     ~GatewayTest() override {
+        paper_broker_.request_stop();
+        if (paper_broker_.joinable()) {
+            paper_broker_.join();
+        }
         asio::post(io_, [this] {
             server_.stop();
             io_.stop();
@@ -92,6 +125,75 @@ protected:
         io_thread_.join();
         bars_worker_.join();
         worker_.join();
+        (void)bus::remove_bus(ord_bus_);
+        std::error_code ignored;
+        for (const char* suffix : {"", "-wal", "-shm"}) {
+            std::filesystem::remove(paper_path_.string() + suffix, ignored);
+        }
+    }
+
+    /// A paper broker for the test: reads the gateway's order bus, fills against a call
+    /// (instrument 4, NIFTY 22400 CE) quoted 119.95 / 120.05, and hands its reports to the
+    /// gateway directly. Session time is 2026-10-22 10:00 IST plus the time since start.
+    void start_paper_broker() {
+        paper_broker_ = std::jthread([this](const std::stop_token& stop) {
+            auto store = broker::PaperStore::open(paper_path_).value();
+            const auto lookup = [](core::InstrumentId id) -> std::optional<rms::InstrumentInfo> {
+                if (id.value() != 4) {
+                    return std::nullopt;
+                }
+                return rms::InstrumentInfo{
+                    .contract = {.id = id,
+                                 .segment = oms::Segment::Option,
+                                 .exchange = oms::Exchange::Nse,
+                                 .lot_size = 65,
+                                 .strike = core::Price::from_raw(22'400 * core::Price::kScale),
+                                 .call = true},
+                    .tick = core::Price::from_raw(500),
+                    .freeze_quantity = 1800,
+                    .listed = true,
+                    .expiry_days = 20'753};  // 2026-10-27
+            };
+            broker::Broker paper({}, store, lookup);
+            EXPECT_TRUE(paper.load().has_value());
+            constexpr oms::Millis kSession = 1'792'643'400'000;  // 2026-10-22 10:00 IST
+            const auto started = std::chrono::steady_clock::now();
+            const auto now = [&] {
+                return kSession + std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - started)
+                                      .count();
+            };
+            messages::MarketSnapshot quote{};
+            quote.header.instrument_id = core::InstrumentId(4);
+            quote.fields = messages::kFieldLtp;
+            quote.ltp = core::Price::from_raw(1'200'000);
+            messages::DepthSnapshot depth{};
+            depth.header.instrument_id = core::InstrumentId(4);
+            depth.bids[0] = {
+                .price = core::Price::from_raw(1'199'500), .quantity = 1000, .orders = 1};
+            depth.asks[0] = {
+                .price = core::Price::from_raw(1'200'500), .quantity = 1000, .orders = 1};
+            auto reader = bus::Reader::attach(ord_bus_, {.name = "test-broker"});
+            ASSERT_TRUE(reader.has_value());
+            const auto publish = [&](const auto& reports) {
+                for (const auto& r : reports.value_or(broker::Reports{})) {
+                    order_updates_.add(r);
+                }
+            };
+            while (!stop.stop_requested()) {
+                // A fresh quote every loop keeps the book from going stale.
+                quote.receive_ts = depth.receive_ts = core::Timestamp::from_ns(now() * 1'000'000);
+                paper.on_snapshot(quote);
+                paper.on_depth(depth);
+                (void)reader->poll([&](bus::MsgType type, std::span<const std::byte> payload) {
+                    if (auto request = messages::decode<broker::OrderRequest>(type, payload)) {
+                        publish(paper.on_request(*request, now()));
+                    }
+                });
+                publish(paper.on_tick(now()));
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        });
     }
 
     Reply send(http::verb verb, const std::string& target, const std::string& body = {},
@@ -211,6 +313,18 @@ protected:
     watchlists::WatchlistService lists_;
     UsageTracker usage_;
     bars::BarStore bar_store_ = bars::BarStore::open_in_memory().value();
+    signals::SignalStore signal_store_ = signals::SignalStore::open_in_memory().value();
+    inline static std::atomic<int> fixtures_{0};
+    const int fixture_ = ++fixtures_;
+    std::filesystem::path paper_path_ =
+        std::filesystem::temp_directory_path() /
+        ("gw_paper_" + std::to_string(::getpid()) + "_" + std::to_string(fixture_) + ".db");
+    broker::PaperStore paper_store_ = broker::PaperStore::open(paper_path_).value();
+    std::string ord_bus_ =
+        "gwt" + std::to_string(::getpid() % 100'000) + "-" + std::to_string(fixture_);
+    std::unique_ptr<OrderSender> order_sender_ = OrderSender::open(ord_bus_, 1 << 20);
+    OrderUpdates order_updates_;
+    autotrade::DecisionStore auto_decisions_ = autotrade::DecisionStore::open_in_memory().value();
     QuoteCache quotes_;
     ChainSummaries summaries_;
     FeedMetrics feed_metrics_;
@@ -228,6 +342,7 @@ protected:
     HttpServer server_;
     std::uint16_t port_ = 0;
     std::thread io_thread_;
+    std::jthread paper_broker_;  // last: uses the members above
 };
 
 TEST_F(GatewayTest, SignupSigninProfilePasswordSignout) {
@@ -321,9 +436,19 @@ TEST_F(GatewayTest, RejectsMalformedRequests) {
     EXPECT_EQ(error_type(missing), "NotFoundException");
     EXPECT_EQ(send(http::verb::get, "/api/v1/user/signup").status, 405u);
 
-    const Reply huge = send(http::verb::post, "/api/v1/user/signup",
-                            R"({"username":")" + std::string(70'000, 'a') + R"("})");
-    EXPECT_EQ(huge.status, 413u);
+    // Too large: refused on the announced length. Only the headers go out, because the server
+    // closes unread data, and writing the body into that races with a connection reset.
+    asio::io_context client_io;
+    tcp::socket socket(client_io);
+    socket.connect({asio::ip::make_address("127.0.0.1"), port_});
+    asio::write(socket, asio::buffer(std::string_view("POST /api/v1/user/signup HTTP/1.1\r\n"
+                                                      "Host: 127.0.0.1\r\n"
+                                                      "Content-Type: application/json\r\n"
+                                                      "Content-Length: 70000\r\n\r\n")));
+    beast::flat_buffer buffer;
+    http::response<http::string_body> huge;
+    http::read(socket, buffer, huge);
+    EXPECT_EQ(huge.result_int(), 413u);
 }
 
 TEST_F(GatewayTest, SearchesInstruments) {
@@ -1026,7 +1151,7 @@ TEST_F(GatewayTest, ServesTheSystemMonitorToAdminsOnly) {
                             "engine", "recorder", "notifier", "history", "checks", "status"}) {
         EXPECT_TRUE(d.contains(key)) << key;
     }
-    EXPECT_EQ(d.at("processes").as_array().size(), 6u);
+    EXPECT_EQ(d.at("processes").as_array().size(), 9u);
     EXPECT_FALSE(d.at("buses").as_array()[0].as_object().at("available").as_bool());
     EXPECT_EQ(d.at("notifier").as_object().at("queued").as_int64(), 0);
     // No pid files: the gateway (expected at any time) is "not running", so the page is bad.
@@ -1054,6 +1179,460 @@ TEST_F(GatewayTest, MarksTheSessionCookieSecureOverHttpsOnly) {
     const Reply forged = send(http::verb::post, "/api/v1/session", body, {}, "application/json",
                               {{std::string(kViaHttpsHeader), "1"}});
     EXPECT_EQ(forged.set_cookie.find("Secure"), std::string::npos) << forged.set_cookie;
+}
+
+// `count` signals a minute apart from 09:15 IST of the day starting at `day_start`,
+// alternating bullish and bearish, all at spot 22,500.
+std::vector<signals::SignalRecord> signal_day(std::int64_t day_start, int count) {
+    std::vector<signals::SignalRecord> records;
+    for (int i = 0; i < count; ++i) {
+        signals::Signal signal{
+            .spot = core::InstrumentId(3),
+            .minute = day_start + 33'300 + i * 60,
+            .strategy = signals::StrategyId::OiBiasV1,
+            .horizon_min = 30,
+            .score = i % 2 == 0 ? 40 : -40,
+            .label = i % 2 == 0 ? signals::Label::Bullish : signals::Label::Bearish,
+            .factors = {}};
+        signal.factors.push_back({.id = signals::FactorId::PcrChange,
+                                  .status = signals::FactorStatus::Present,
+                                  .value = 0.5,
+                                  .points = 7.5});
+        records.push_back({.underlying = "NIFTY",
+                           .signal = std::move(signal),
+                           .spot_raw = 22'500 * core::Price::kScale});
+    }
+    return records;
+}
+
+TEST_F(GatewayTest, ListsSignalIndicesAndStrategies) {
+    EXPECT_EQ(send(http::verb::get, "/api/v1/signals").status, 401u);
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    const Reply reply = send(http::verb::get, "/api/v1/signals", {}, session);
+    ASSERT_EQ(reply.status, 200u);
+    const auto& index = data(reply).at("indices").as_array().at(0).as_object();
+    EXPECT_EQ(index.at("underlying").as_string(), "NIFTY");
+    EXPECT_EQ(index.at("spot_id").as_int64(), 3);
+    EXPECT_TRUE(index.at("latest").as_array().empty());
+    const auto& strategy = data(reply).at("strategies").as_array().at(0).as_object();
+    EXPECT_EQ(strategy.at("horizon_min").as_int64(), 30);
+    EXPECT_EQ(strategy.at("bullish").as_int64(), 25);
+    EXPECT_EQ(strategy.at("bearish").as_int64(), -25);
+    EXPECT_EQ(data(reply).at("factors").as_array().size(), signals::kFactorCount);
+
+    // With signals: the newest minute's, one per strategy.
+    ASSERT_TRUE(signal_store_.write(signal_day(1'792'607'400, 3)).has_value());
+    const Reply with = send(http::verb::get, "/api/v1/signals", {}, session);
+    const auto& latest =
+        data(with).at("indices").as_array().at(0).as_object().at("latest").as_array();
+    ASSERT_EQ(latest.size(), 1u);
+    EXPECT_EQ(latest[0].as_object().at("minute").as_int64(), 1'792'607'400 + 33'300 + 120);
+    EXPECT_EQ(latest[0].as_object().at("label").as_string(), "bullish");
+}
+
+TEST_F(GatewayTest, ServesADaysSignals) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    EXPECT_EQ(send(http::verb::get, "/api/v1/signals/NIFTY").status, 401u);
+    EXPECT_EQ(send(http::verb::get, "/api/v1/signals/BANKEX", {}, session).status, 404u);
+    EXPECT_EQ(send(http::verb::get, "/api/v1/signals/NIFTY?date=22-10-2026", {}, session).status,
+              400u);
+
+    Reply empty = send(http::verb::get, "/api/v1/signals/NIFTY", {}, session);
+    ASSERT_EQ(empty.status, 200u);
+    EXPECT_TRUE(data(empty).at("date").is_null());
+    EXPECT_TRUE(data(empty).at("signals").as_array().empty());
+
+    constexpr std::int64_t kOct22 = 1'792'607'400;  // 2026-10-22 00:00 IST
+    ASSERT_TRUE(signal_store_.write(signal_day(kOct22, 3)).has_value());
+    ASSERT_TRUE(signal_store_.write(signal_day(kOct22 + 86'400, 2)).has_value());
+    const signals::OutcomeUpdate update{
+        .strategy = "oi-bias-v1",
+        .underlying = "NIFTY",
+        .minute = kOct22 + 86'400 + 33'300,
+        .outcome = signals::outcome(signals::Label::Bullish, 22'500 * core::Price::kScale,
+                                    22'545 * core::Price::kScale, 5)};
+    ASSERT_TRUE(signal_store_.set_outcomes(std::span(&update, 1)).has_value());
+
+    // No date: the latest day with signals.
+    const Reply latest = send(http::verb::get, "/api/v1/signals/NIFTY", {}, session);
+    ASSERT_EQ(latest.status, 200u);
+    EXPECT_EQ(data(latest).at("date").as_string(), "2026-10-23");
+    const auto& rows = data(latest).at("signals").as_array();
+    ASSERT_EQ(rows.size(), 2u);
+    const auto& first = rows[0].as_object();
+    EXPECT_EQ(first.at("minute").as_int64(), kOct22 + 86'400 + 33'300);
+    EXPECT_EQ(first.at("label").as_string(), "bullish");
+    EXPECT_DOUBLE_EQ(first.at("spot").as_double(), 22'500);
+    EXPECT_EQ(first.at("factors").as_array()[0].as_object().at("factor").as_string(), "pcr_change");
+    const auto& outcome = first.at("outcome").as_object();
+    EXPECT_EQ(outcome.at("return_bp").as_int64(), 20);
+    EXPECT_EQ(outcome.at("hit").as_bool(), true);
+    EXPECT_TRUE(rows[1].as_object().at("outcome").is_null());
+
+    const Reply earlier =
+        send(http::verb::get, "/api/v1/signals/NIFTY?date=2026-10-22", {}, session);
+    ASSERT_EQ(earlier.status, 200u);
+    EXPECT_EQ(data(earlier).at("signals").as_array().size(), 3u);
+}
+
+TEST_F(GatewayTest, ServesTheTrackRecord) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    EXPECT_EQ(send(http::verb::get, "/api/v1/signals/NIFTY/record?days=0", {}, session).status,
+              400u);
+
+    const std::int64_t today = signals::ist_day_start(auth::system_clock_seconds());
+    const auto records = signal_day(today, 4);  // bullish, bearish, bullish, bearish
+    ASSERT_TRUE(signal_store_.write(records).has_value());
+    // The spot rose 20 bp after each: two hits (bullish), two misses (bearish).
+    std::vector<signals::OutcomeUpdate> updates;
+    for (const auto& r : records) {
+        updates.push_back({.strategy = "oi-bias-v1",
+                           .underlying = "NIFTY",
+                           .minute = r.signal.minute,
+                           .outcome = signals::outcome(r.signal.label, r.spot_raw,
+                                                       22'545 * core::Price::kScale, 5)});
+    }
+    ASSERT_TRUE(signal_store_.set_outcomes(updates).has_value());
+
+    const Reply reply = send(http::verb::get, "/api/v1/signals/NIFTY/record?days=5", {}, session);
+    ASSERT_EQ(reply.status, 200u);
+    EXPECT_EQ(data(reply).at("days").as_int64(), 5);
+    const auto& record = data(reply).at("strategies").as_array().at(0).as_object();
+    EXPECT_EQ(record.at("strategy").as_string(), "oi-bias-v1");
+    EXPECT_EQ(record.at("settled").as_int64(), 4);
+    EXPECT_EQ(record.at("hits").as_int64(), 2);
+    EXPECT_EQ(record.at("misses").as_int64(), 2);
+    EXPECT_DOUBLE_EQ(record.at("hit_rate").as_double(), 0.5);
+    EXPECT_DOUBLE_EQ(record.at("always_up_rate").as_double(), 1.0);
+    EXPECT_TRUE(record.at("momentum_rate").is_null());  // no signal a horizon earlier
+}
+
+// --------------------------------------------------------------- paper trading
+
+TEST_F(GatewayTest, PaperOrderIsPlacedFilledAndListed) {
+    EXPECT_EQ(send(http::verb::get, "/api/v1/paper/orders").status, 401u);
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    start_paper_broker();
+
+    const Reply placed =
+        send(http::verb::post, "/api/v1/paper/orders",
+             R"({"instrument_id":4,"side":"BUY","quantity":65,"type":"MARKET","product":"NRML"})",
+             session);
+    ASSERT_EQ(placed.status, 200u) << boost::json::serialize(placed.body);
+    const auto& order = data(placed).at("order").as_object();
+    EXPECT_EQ(order.at("event").as_string(), "accepted");
+    EXPECT_EQ(order.at("status").as_string(), "OPEN");
+    const std::int64_t id = order.at("order_id").as_int64();
+
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(300));  // the 100 ms latency, then the fill
+    const Reply orders = send(http::verb::get, "/api/v1/paper/orders?date=2026-10-22", {}, session);
+    ASSERT_EQ(orders.status, 200u);
+    const auto& list = orders.body.at("data").as_array();
+    ASSERT_EQ(list.size(), 1u);
+    EXPECT_EQ(list[0].as_object().at("order_id").as_int64(), id);
+    EXPECT_EQ(list[0].as_object().at("status").as_string(), "COMPLETE");
+    EXPECT_DOUBLE_EQ(list[0].as_object().at("average_price").as_double(), 120.05);
+    EXPECT_TRUE(send(http::verb::get, "/api/v1/paper/orders", {}, session)
+                    .body.at("data")
+                    .as_array()
+                    .empty());
+
+    const Reply trades = send(http::verb::get, "/api/v1/paper/trades?date=2026-10-22", {}, session);
+    const auto& trade = trades.body.at("data").as_array().at(0).as_object();
+    EXPECT_EQ(trade.at("quantity").as_int64(), 65);
+    EXPECT_DOUBLE_EQ(trade.at("charges").as_object().at("brokerage").as_double(), 20.0);
+
+    const Reply positions = send(http::verb::get, "/api/v1/paper/positions", {}, session);
+    const auto& position = positions.body.at("data").as_array().at(0).as_object();
+    EXPECT_EQ(position.at("quantity").as_int64(), 65);
+    EXPECT_EQ(position.at("product").as_string(), "NRML");
+    EXPECT_TRUE(position.at("last_price").is_null());  // no live quote in this test
+
+    const Reply funds = send(http::verb::get, "/api/v1/paper/funds", {}, session);
+    const auto& f = data(funds);
+    const double charges = trade.at("charges").as_object().at("total").as_double();
+    EXPECT_NEAR(f.at("cash").as_double(), 10'00'000 - charges, 0.001);
+    EXPECT_NEAR(f.at("blocked").as_double(), 65 * 120.05,
+                0.001);  // a bought option blocks its premium
+    EXPECT_FALSE(f.at("kill_switch").as_bool());
+}
+
+TEST_F(GatewayTest, PaperPositionsShowOpenOnesAndTodaysWithTodaysRealised) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    start_paper_broker();
+    // A round trip on the broker's day (2026-10-22): closed on an earlier day, so hidden.
+    for (const char* side : {"BUY", "SELL"}) {
+        ASSERT_EQ(send(http::verb::post, "/api/v1/paper/orders",
+                       std::string(R"({"instrument_id":4,"quantity":65,"side":")") + side + R"("})",
+                       session)
+                      .status,
+                  200u);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));  // filled before the next
+    }
+    const auto account = paper_store_.account_for_user(1).value();
+    ASSERT_TRUE(account.has_value());
+    const std::int64_t id = account->id;
+    const std::int64_t now = auth::system_clock_seconds() * 1000;
+    const auto at = [](std::int64_t instrument, oms::Product product) {
+        return oms::PositionKey{
+            .instrument = core::InstrumentId(static_cast<std::uint32_t>(instrument)),
+            .product = product};
+    };
+    // 5: closed today; its row's realised (50.00) includes earlier days, today's trade made 12.00.
+    ASSERT_TRUE(paper_store_.upsert_position(id, at(5, oms::Product::Mis),
+                                             oms::Position(0, 0, 5'000), now));
+    ASSERT_TRUE(paper_store_.insert_trade({.order_id = 1,
+                                           .account_id = id,
+                                           .instrument = core::InstrumentId(5),
+                                           .side = oms::Side::Sell,
+                                           .product = oms::Product::Mis,
+                                           .quantity = 65,
+                                           .price = core::Price::from_raw(1'000'000),
+                                           .realised = 1'200,
+                                           .at = now}));
+    // 6: closed on an earlier day. 7: open since an earlier day. 8: settled at expiry today.
+    ASSERT_TRUE(
+        paper_store_.upsert_position(id, at(6, oms::Product::Nrml), oms::Position(0, 0, 300), now));
+    ASSERT_TRUE(paper_store_.upsert_position(id, at(7, oms::Product::Nrml),
+                                             oms::Position(65, 65 * 1'000'000, 0), now));
+    ASSERT_TRUE(
+        paper_store_.upsert_position(id, at(8, oms::Product::Nrml), oms::Position(0, 0, 999), now));
+    ASSERT_TRUE(paper_store_.insert_ledger(id, {.at = now,
+                                                .kind = oms::LedgerKind::Expiry,
+                                                .amount = -500,
+                                                .instrument = core::InstrumentId(8)}));
+
+    const Reply reply = send(http::verb::get, "/api/v1/paper/positions", {}, session);
+    ASSERT_EQ(reply.status, 200u);
+    std::map<std::int64_t, double> realised;
+    for (const auto& p : reply.body.at("data").as_array()) {
+        realised[p.as_object().at("instrument_id").as_int64()] =
+            p.as_object().at("realised").as_double();
+    }
+    EXPECT_EQ(realised.size(), 3u);
+    EXPECT_DOUBLE_EQ(realised.at(5), 12.0);
+    EXPECT_DOUBLE_EQ(realised.at(7), 0.0);
+    EXPECT_DOUBLE_EQ(realised.at(8), -5.0);
+    for (const auto& p : reply.body.at("data").as_array()) {
+        if (p.as_object().at("instrument_id").as_int64() == 8) {
+            EXPECT_DOUBLE_EQ(p.as_object().at("closed_pnl").as_double(), -5.0);  // an expiry counts
+        }
+    }
+}
+
+TEST_F(GatewayTest, AdminReadsAnotherUsersPaperButTradesOnlyOnTheirOwn) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string trader = signin("siva", "correct horse battery");
+    ASSERT_EQ(signup("friend", "correct horse battery").status, 201u);
+    start_paper_broker();
+    const std::string order =
+        R"({"instrument_id":4,"side":"BUY","quantity":65,"type":"MARKET","product":"NRML"})";
+    ASSERT_EQ(send(http::verb::post, "/api/v1/paper/orders", order, trader).status, 200u);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    // Not an admin: another user's paper is refused, not silently replaced by one's own.
+    const std::string not_admin = signin("friend", "correct horse battery");
+    const Reply denied = send(http::verb::get, "/api/v1/paper/positions?user=1", {}, not_admin);
+    EXPECT_EQ(denied.status, 403u);
+    EXPECT_EQ(error_type(denied), "PermissionException");
+
+    ASSERT_TRUE(admin::set_role(db_, "friend", "admin").value());
+    const std::string admin_session = signin("friend", "correct horse battery");
+    std::int64_t siva = 0;
+    const Reply users = send(http::verb::get, "/api/v1/admin/users", {}, admin_session);
+    for (const auto& u : users.body.at("data").as_array()) {
+        if (u.as_object().at("username").as_string() == "siva") {
+            siva = u.as_object().at("user_id").as_int64();
+        }
+    }
+    ASSERT_GT(siva, 0);
+    const std::string of_siva = "user=" + std::to_string(siva);
+    const auto list = [&](const std::string& path) {
+        return send(http::verb::get, path, {}, admin_session).body.at("data").as_array();
+    };
+    EXPECT_EQ(list("/api/v1/paper/orders?date=2026-10-22&" + of_siva).size(), 1u);
+    EXPECT_EQ(list("/api/v1/paper/trades?date=2026-10-22&" + of_siva).size(), 1u);
+    EXPECT_EQ(
+        list("/api/v1/paper/positions?" + of_siva).at(0).as_object().at("quantity").as_int64(), 65);
+    EXPECT_LT(data(send(http::verb::get, "/api/v1/paper/funds?" + of_siva, {}, admin_session))
+                  .at("cash")
+                  .as_double(),
+              10'00'000);
+    EXPECT_TRUE(data(send(http::verb::get, "/api/v1/paper/auto?" + of_siva, {}, admin_session))
+                    .at("runs")
+                    .is_array());
+    EXPECT_TRUE(list("/api/v1/paper/orders?date=2026-10-22").empty());  // the admin's own: none yet
+    EXPECT_EQ(send(http::verb::get, "/api/v1/paper/orders?user=abc", {}, admin_session).status,
+              400u);
+
+    // Orders ignore `user`: this one goes on the admin's own account.
+    ASSERT_EQ(
+        send(http::verb::post, "/api/v1/paper/orders?" + of_siva, order, admin_session).status,
+        200u);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(list("/api/v1/paper/orders?date=2026-10-22").size(), 1u);
+    EXPECT_EQ(list("/api/v1/paper/orders?date=2026-10-22&" + of_siva).size(), 1u);
+}
+
+TEST_F(GatewayTest, PaperRejectionsAndValidation) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    EXPECT_EQ(send(http::verb::post, "/api/v1/paper/orders",
+                   R"({"instrument_id":4,"side":"HOLD","quantity":65})", session)
+                  .status,
+              400u);
+    start_paper_broker();
+    const Reply rejected = send(http::verb::post, "/api/v1/paper/orders",
+                                R"({"instrument_id":4,"side":"BUY","quantity":50})", session);
+    EXPECT_EQ(rejected.status, 400u);
+    EXPECT_EQ(error_type(rejected), "OrderException");
+    EXPECT_EQ(rejected.body.at("message").as_string(),
+              "quantity must be a multiple of the lot size (65)");
+}
+
+TEST_F(GatewayTest, PaperRetryWithTheSameClientOrderIdIsOneOrder) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    start_paper_broker();
+    const std::string body =
+        R"({"instrument_id":4,"side":"BUY","quantity":65,"type":"LIMIT","price":115,"client_order_id":777})";
+    const Reply first = send(http::verb::post, "/api/v1/paper/orders", body, session);
+    const Reply again = send(http::verb::post, "/api/v1/paper/orders", body, session);
+    ASSERT_EQ(first.status, 200u) << boost::json::serialize(first.body);
+    ASSERT_EQ(again.status, 200u) << boost::json::serialize(again.body);
+    EXPECT_EQ(data(again).at("order").as_object().at("order_id").as_int64(),
+              data(first).at("order").as_object().at("order_id").as_int64());
+    EXPECT_EQ(send(http::verb::get, "/api/v1/paper/orders?date=2026-10-22", {}, session)
+                  .body.at("data")
+                  .as_array()
+                  .size(),
+              1u);
+}
+
+TEST_F(GatewayTest, PaperModifyCancelAndKillSwitch) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    start_paper_broker();
+    const Reply placed = send(
+        http::verb::post, "/api/v1/paper/orders",
+        R"({"instrument_id":4,"side":"BUY","quantity":65,"type":"LIMIT","price":115})", session);
+    ASSERT_EQ(placed.status, 200u) << boost::json::serialize(placed.body);
+    const std::int64_t id = data(placed).at("order").as_object().at("order_id").as_int64();
+    const std::string path = "/api/v1/paper/orders/" + std::to_string(id);
+
+    const Reply modified = send(http::verb::put, path, R"({"quantity":130,"price":116})", session);
+    ASSERT_EQ(modified.status, 200u) << boost::json::serialize(modified.body);
+    EXPECT_EQ(data(modified).at("order").as_object().at("event").as_string(), "modified");
+    EXPECT_EQ(data(modified).at("order").as_object().at("quantity").as_int64(), 130);
+
+    const Reply cancelled = send(http::verb::delete_, path, {}, session);
+    EXPECT_EQ(data(cancelled).at("order").as_object().at("status").as_string(), "CANCELLED");
+    EXPECT_EQ(send(http::verb::delete_, path, {}, session).status, 400u);  // no longer open
+
+    // A position converted from MIS (the default) to NRML; more than it holds is refused.
+    const Reply bought = send(http::verb::post, "/api/v1/paper/orders",
+                              R"({"instrument_id":4,"side":"BUY","quantity":65})", session);
+    ASSERT_EQ(bought.status, 200u) << boost::json::serialize(bought.body);
+    Reply converted;
+    for (int i = 0; i < 50; ++i) {  // until the fill has landed
+        converted = send(http::verb::post, "/api/v1/paper/positions/convert",
+                         R"({"instrument_id":4,"quantity":65,"to":"NRML"})", session);
+        if (converted.status == 200u) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    ASSERT_EQ(converted.status, 200u) << boost::json::serialize(converted.body);
+    EXPECT_EQ(data(converted).at("order").as_object().at("event").as_string(), "converted");
+    EXPECT_EQ(data(converted).at("order").as_object().at("product").as_string(), "NRML");
+    EXPECT_EQ(send(http::verb::post, "/api/v1/paper/positions/convert",
+                   R"({"instrument_id":4,"quantity":65,"to":"NRML"})", session)
+                  .status,
+              400u);  // no MIS left
+    EXPECT_EQ(
+        send(http::verb::post, "/api/v1/paper/positions/convert", R"({"instrument_id":4})", session)
+            .status,
+        400u);
+
+    const Reply on = send(http::verb::post, "/api/v1/paper/kill-switch", R"({"on":true})", session);
+    EXPECT_TRUE(data(on).at("kill_switch").as_bool());
+    const Reply blocked = send(http::verb::post, "/api/v1/paper/orders",
+                               R"({"instrument_id":4,"side":"BUY","quantity":65})", session);
+    EXPECT_EQ(blocked.status, 400u);
+    EXPECT_TRUE(data(send(http::verb::get, "/api/v1/paper/funds", {}, session))
+                    .at("kill_switch")
+                    .as_bool());
+}
+
+TEST_F(GatewayTest, PaperOrderWithoutABrokerIsPending) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);
+    const std::string session = signin("siva", "correct horse battery");
+    const Reply pending =
+        send(http::verb::post, "/api/v1/paper/orders",
+             R"({"instrument_id":4,"side":"BUY","quantity":65,"client_order_id":42})", session);
+    EXPECT_EQ(pending.status, 202u);
+    EXPECT_EQ(data(pending).at("status").as_string(), "PENDING");
+    EXPECT_EQ(data(pending).at("client_order_id").as_int64(), 42);
+    // Before any order, funds show a fresh account.
+    EXPECT_DOUBLE_EQ(
+        data(send(http::verb::get, "/api/v1/paper/funds", {}, session)).at("cash").as_double(),
+        10'00'000);
+}
+
+TEST_F(GatewayTest, AutoRunsShowTheirMetricsAndDecisions) {
+    ASSERT_EQ(signup("siva", "correct horse battery").status, 201u);  // user 1: owns test-run
+    const std::string session = signin("siva", "correct horse battery");
+    start_paper_broker();
+    // A round trip tagged as the run's (the auto trader's orders carry this tag).
+    for (const char* side : {"BUY", "SELL"}) {
+        const Reply r =
+            send(http::verb::post, "/api/v1/paper/orders",
+                 std::string(R"({"instrument_id":4,"quantity":65,"tag":"auto:test-run","side":")") +
+                     side + R"("})",
+                 session);
+        ASSERT_EQ(r.status, 200u) << boost::json::serialize(r.body);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));  // filled before the next
+    }
+    const std::int64_t now = auth::system_clock_seconds() * 1000;
+    const autotrade::Decision exit{.at = now,
+                                   .before = autotrade::State::Long,
+                                   .action = "exit",
+                                   .reason = "target: +80.00 points"};
+    ASSERT_TRUE(
+        auto_decisions_
+            .save("test-run", std::span(&exit, 1),
+                  {.day = static_cast<std::int32_t>((now + 19'800'000) / 86'400'000), .entries = 1})
+            .has_value());
+
+    const Reply reply = send(http::verb::get, "/api/v1/paper/auto?days=30", {}, session);
+    ASSERT_EQ(reply.status, 200u);
+    const auto& run = data(reply).at("runs").as_array().at(0).as_object();
+    EXPECT_EQ(run.at("id").as_string(), "test-run");
+    EXPECT_FALSE(run.at("enabled").as_bool());
+    EXPECT_EQ(run.at("position").as_int64(), 0);
+    EXPECT_TRUE(run.at("held").as_array().empty());  // the round trip closed
+    EXPECT_EQ(run.at("entries_today").as_int64(), 1);
+    const auto& m = run.at("metrics").as_object();
+    EXPECT_EQ(m.at("round_trips").as_int64(), 1);
+    EXPECT_EQ(m.at("losses").as_int64(), 1);  // bought at the ask, sold at the bid, paid charges
+    EXPECT_NEAR(m.at("gross").as_double(), -6.50, 0.001);  // −0.10 × 65
+    EXPECT_GT(m.at("charges").as_double(), 0);
+    EXPECT_EQ(m.at("exits").as_object().at("target").as_int64(), 1);
+    EXPECT_EQ(run.at("decisions_today").as_array().at(0).as_object().at("reason").as_string(),
+              "target: +80.00 points");
+
+    // Another user sees no runs.
+    ASSERT_EQ(signup("friend", "correct horse battery").status, 201u);
+    const std::string other = signin("friend", "correct horse battery");
+    EXPECT_TRUE(
+        data(send(http::verb::get, "/api/v1/paper/auto", {}, other)).at("runs").as_array().empty());
+    EXPECT_EQ(send(http::verb::get, "/api/v1/paper/auto?days=0", {}, session).status, 400u);
 }
 
 }  // namespace

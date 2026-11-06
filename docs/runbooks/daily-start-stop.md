@@ -7,6 +7,9 @@ everything from the repository root.
 |---|---|
 | `mda-feedd` | Kite connection: subscriptions (static + watchlists + option windows), publishes the `md` bus |
 | `mda-engine` | Builds 1-minute bars from the `md` bus into `data/bars.db`, publishes the `an` bus |
+| `mda-signald` | Index direction signals from the `an` bus: publishes the `sig` bus, writes `data/signals.db` (ADR-0028) |
+| `mda-broker` | Paper trading: orders from `ord-gw` / `ord-auto`, fills against the live book, `data/paper.db`, reports on `exec` (ADR-0029) |
+| `mda-autotrader` | Paper trading on signals: the runs in `autotrader.runs` (off until enabled), orders on `ord-auto`, decisions in `data/autotrader.db` (ADR-0030) |
 | `mda-gateway` | REST API, live stream, admin; also serves the **built** website at http://localhost:8090 (ADR-0027; `tools/stack.sh start gateway` rebuilds it when `web/` changed) |
 | `mda-notifier` | Sends notifications (email, Telegram) and answers the Telegram bot |
 | `mda-recorder` | Writes every Kite frame to the tick journal `data/journal/` (ADR-0026) |
@@ -67,6 +70,13 @@ copy predates 08:30). So start after 08:30 to pick up new contracts and expiries
    build/release/engine/apps/mda-engine/mda-engine
    ```
 
+   **Signals** (any time after the engine; safe to restart while the market is open): it
+   logs `bus: reading 'an'`, then one `signals HH:MM: NIFTY +12 neutral …` line a minute.
+
+   ```bash
+   build/release/engine/apps/mda-signald/mda-signald
+   ```
+
 4. **Gateway**: it logs `market data: mda-feedd is publishing`.
 
    ```bash
@@ -81,7 +91,7 @@ copy predates 08:30). So start after 08:30 to pick up new contracts and expiries
    ```
 
    **Notifier** (any time; it needs no market data): it logs `email: via …` and
-   `telegram: bot @… ready`. Leave it running overnight: on weekdays it reminds you at 08:45
+   `telegram: bot @… ready`. Leave it running overnight: on weekdays it reminds you at 07:30
    if `mda-login` hasn't run, and it delivers mda-feedd's alerts (feed down for 60 s or
    back, Kite session rejected) to admins by Telegram and verified email.
 
@@ -149,6 +159,38 @@ memory and are recreated at the next start. Everything that matters is on disk:
 - `data/last_quotes.db`: the last quote, depth and circuit limits per instrument, shown after a restart or before the open (ADR-0024);
 - `data/instruments/`: instrument lists and the permanent instrument ids.
 
+## Leaving the Mac at home
+
+Two launch agents run while you're logged in, even with the screen locked
+(`tools/launchd/`):
+
+- `com.mda.awake`: `caffeinate -i -s`, so the Mac never idle-sleeps, even while mda-feedd
+  is stopped. The lid must stay open (closing it sleeps the Mac) and the charger plugged in.
+- `com.mda.watchdog`: runs `tools/watchdog.sh` every 2 minutes. It restarts the gateway,
+  notifier or web if they died. On weekdays from 08:30 to 23:50 IST, once today's Kite
+  session exists, it restarts a mda-feedd that predates the login (only before 08:59, as
+  MCX opens at 09:00) and starts anything not running. At 00:05, after the MCX close
+  (23:30, or 23:55 while the US is off daylight saving; ADR-0031), it stops the market
+  processes (feedd, engine, signald, broker, autotrader, recorder). Log:
+  `data/logs/watchdog.log`.
+
+Install once:
+
+```bash
+cp tools/launchd/com.mda.*.plist ~/Library/LaunchAgents/ && for p in awake watchdog; do launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mda.$p.plist; done
+```
+
+Remove: `launchctl bootout gui/$(id -u)/com.mda.watchdog` (and `com.mda.awake`).
+
+**Logging in from the iPhone** (Tailscale on both devices; macOS Remote Login on):
+
+1. SSH to the Mac over Tailscale (Termius or Blink), `cd ~/Developer/md_analytics`, run
+   `build/release/engine/apps/mda-login/mda-login --no-browser`.
+2. Open the printed URL in Safari and log in. The final redirect to `127.0.0.1:8080` fails
+   on the phone; copy that URL from the address bar.
+3. In a second SSH tab: `curl -s '<that URL>'`. mda-login prints `logged in`; the watchdog
+   starts the rest within 2 minutes.
+
 ## Quick health checks
 
 ```bash
@@ -158,7 +200,7 @@ sqlite3 data/bars.db "SELECT COUNT(*), datetime(MAX(start)+19800,'unixepoch') FR
 That shows the bar count and the last bar time (IST).
 
 ```bash
-build/release/engine/apps/tools/mda-busctl stat md an
+build/release/engine/apps/tools/mda-busctl stat md an sig exec
 ```
 
 That shows both buses, their writers and readers.

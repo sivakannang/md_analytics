@@ -96,7 +96,7 @@ std::optional<Alert> FeedAlerts::session_rejected(std::string_view process,
 
 std::optional<Alert> login_reminder(std::int64_t now, std::optional<std::int64_t> written) {
     const IstTime t = ist(now);
-    if (!t.weekday || t.minute < 8 * 60 + 45 || t.minute >= 15 * 60 + 30) {
+    if (!t.weekday || t.minute < 7 * 60 + 30 || t.minute >= 15 * 60 + 30) {
         return std::nullopt;
     }
     if (written && ist_date(*written) == ist_date(now)) {

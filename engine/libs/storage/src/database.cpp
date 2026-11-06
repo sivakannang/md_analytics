@@ -1,3 +1,5 @@
+#include <chrono>
+#include <thread>
 #include <utility>
 
 #include <sqlite3.h>
@@ -11,6 +13,8 @@ DbError error_from(sqlite3* db, int code) {
     return DbError{.code = code,
                    .message = db != nullptr ? sqlite3_errmsg(db) : sqlite3_errstr(code)};
 }
+
+constexpr int kBusyTimeoutMs = 5000;
 
 }  // namespace
 
@@ -122,11 +126,26 @@ std::expected<Database, DbError> Database::open_with(const std::string& name) {
         return std::unexpected(error_from(raw, result));
     }
     sqlite3_extended_result_codes(raw, 1);
-    for (const char* pragma :
-         {"PRAGMA journal_mode = WAL", "PRAGMA foreign_keys = ON", "PRAGMA busy_timeout = 5000"}) {
-        if (auto applied = db.exec(pragma); !applied) {
-            return std::unexpected(applied.error());
+    // Before the pragmas: switching a fresh file to WAL takes a lock, and a process creating
+    // the same file at the same moment must wait for it rather than fail at once.
+    sqlite3_busy_timeout(raw, kBusyTimeoutMs);
+    // Two connections switching the same fresh file at once is a lock upgrade deadlock:
+    // SQLite returns BUSY to one without waiting, so retry until the timeout.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(kBusyTimeoutMs);
+    for (;;) {
+        auto wal = db.exec("PRAGMA journal_mode = WAL");
+        if (wal) {
+            break;
         }
+        if ((wal.error().code & 0xFF) != SQLITE_BUSY ||
+            std::chrono::steady_clock::now() >= deadline) {
+            return std::unexpected(wal.error());
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    if (auto applied = db.exec("PRAGMA foreign_keys = ON"); !applied) {
+        return std::unexpected(applied.error());
     }
     return db;
 }
@@ -200,6 +219,18 @@ std::expected<void, DbError> Database::migrate(std::span<const std::string_view>
         auto transaction = Transaction::begin(*this);
         if (!transaction) {
             return std::unexpected(transaction.error());
+        }
+        // Another process may have migrated while we waited for the write lock.
+        const auto now_at = schema_version();
+        if (!now_at) {
+            return std::unexpected(now_at.error());
+        }
+        if (static_cast<std::size_t>(*now_at) > i) {
+            i = static_cast<std::size_t>(*now_at) - 1;
+            if (auto committed = transaction->commit(); !committed) {
+                return std::unexpected(committed.error());
+            }
+            continue;
         }
         if (auto applied = exec(migrations[i]); !applied) {
             return std::unexpected(applied.error());

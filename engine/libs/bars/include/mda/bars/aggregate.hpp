@@ -2,7 +2,7 @@
 
 // Higher timeframes from 1-minute bars (ADR-0021: aggregated at query time).
 //
-// Intraday buckets are aligned to the session start, 09:15 IST, like Kite's candles:
+// Intraday buckets are aligned to the session start, 09:15 IST (MCX 09:00), like Kite's candles:
 // 5m -> 09:15, 09:20, ...; 1h -> 09:15, 10:15, ..., 15:15. Daily buckets are IST days,
 // stamped 00:00 IST.
 
@@ -26,13 +26,19 @@ struct Interval {
 /// "1m", "3m", "5m", "15m", "30m", "1h", "1d"; nothing for anything else.
 [[nodiscard]] std::optional<Interval> parse_interval(std::string_view text);
 
+/// Seconds after IST midnight that intraday buckets align to: NSE/BSE 09:15, MCX 09:00.
+inline constexpr std::int64_t kNseSessionOpen = 9 * 3600 + 15 * 60;
+inline constexpr std::int64_t kMcxSessionOpen = 9 * 3600;
+
 /// Start of the bucket containing `unix_seconds`.
-[[nodiscard]] std::int64_t bucket_start(std::int64_t unix_seconds, Interval interval);
+[[nodiscard]] std::int64_t bucket_start(std::int64_t unix_seconds, Interval interval,
+                                        std::int64_t session_open = kNseSessionOpen);
 
 /// Merges 1-minute bars (one instrument, oldest first) into `interval` bars:
 /// open = first, close = last, high/low = extremes, volume / OI updates / trades summed,
 /// OI open/close = first/last known OI, OI high/low over bars that have OI, OI update
 /// time = the last known one.
-[[nodiscard]] std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval);
+[[nodiscard]] std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval,
+                                         std::int64_t session_open = kNseSessionOpen);
 
 }  // namespace mda::bars
