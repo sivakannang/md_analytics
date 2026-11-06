@@ -15,6 +15,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/json.hpp>
@@ -435,9 +436,19 @@ TEST_F(GatewayTest, RejectsMalformedRequests) {
     EXPECT_EQ(error_type(missing), "NotFoundException");
     EXPECT_EQ(send(http::verb::get, "/api/v1/user/signup").status, 405u);
 
-    const Reply huge = send(http::verb::post, "/api/v1/user/signup",
-                            R"({"username":")" + std::string(70'000, 'a') + R"("})");
-    EXPECT_EQ(huge.status, 413u);
+    // Too large: refused on the announced length. Only the headers go out, because the server
+    // closes unread data, and writing the body into that races with a connection reset.
+    asio::io_context client_io;
+    tcp::socket socket(client_io);
+    socket.connect({asio::ip::make_address("127.0.0.1"), port_});
+    asio::write(socket, asio::buffer(std::string_view("POST /api/v1/user/signup HTTP/1.1\r\n"
+                                                      "Host: 127.0.0.1\r\n"
+                                                      "Content-Type: application/json\r\n"
+                                                      "Content-Length: 70000\r\n\r\n")));
+    beast::flat_buffer buffer;
+    http::response<http::string_body> huge;
+    http::read(socket, buffer, huge);
+    EXPECT_EQ(huge.result_int(), 413u);
 }
 
 TEST_F(GatewayTest, SearchesInstruments) {
