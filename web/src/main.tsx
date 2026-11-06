@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { AdminUserDetail } from './admin/AdminUserDetail';
+import { AdminUserPaper } from './admin/AdminUserPaper';
 import { AdminSystem } from './admin/AdminSystem';
 import { AdminUsers } from './admin/AdminUsers';
 import { RequireAdmin } from './admin/RequireAdmin';
@@ -14,6 +15,7 @@ import { Account } from './pages/Account';
 import { Dashboard } from './pages/Dashboard';
 import { InstrumentPage } from './pages/InstrumentPage';
 import { OptionChain } from './pages/OptionChain';
+import { Paper } from './pages/Paper';
 import { Landing } from './pages/Landing';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
@@ -87,6 +89,22 @@ createRoot(root).render(
                 <RequireAdmin>
                   <AdminUserDetail />
                 </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/users/:userId/paper"
+              element={
+                <RequireAdmin>
+                  <AdminUserPaper />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="paper"
+              element={
+                <RequireAuth>
+                  <Paper />
+                </RequireAuth>
               }
             />
             <Route

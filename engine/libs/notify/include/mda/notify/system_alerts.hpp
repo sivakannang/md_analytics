@@ -3,11 +3,11 @@
 // System alerts to the admins (docs/design/notifications.md §5, unit N6): when to raise
 // them. The producers enqueue what these return (appdb::enqueue, user 0); dedup keys make a
 // repeat a no-op, so restarts and retries never send twice.
-// - Feed down: not connected for `grace` while the market is open (Mon–Fri 09:00–15:45
-//   IST); "back" once it reconnects after a down alert.
+// - Feed down: not connected for `grace` while a market is open (Mon–Fri 09:00–23:55 IST,
+//   the latest MCX close); "back" once it reconnects after a down alert.
 // - Kite session rejected: once per IST day, between 07:00 and 16:00 (the token lapses
 //   around 06:00; nobody needs that at 06:00).
-// - Login reminder: Mon–Fri from 08:45 until the close, when the session file wasn't
+// - Login reminder: Mon–Fri from 07:30 until the close, when the session file wasn't
 //   written today.
 
 #include <chrono>
@@ -36,7 +36,7 @@ public:
     struct Options {
         std::chrono::seconds grace{60};
         int market_open = 9 * 60;         ///< IST minute of day: feed alerts from here …
-        int market_close = 15 * 60 + 45;  ///< … until here
+        int market_close = 23 * 60 + 55;  ///< … until here (the latest MCX close, ADR-0031)
         int session_from = 7 * 60;        ///< session alerts from here …
         int session_until = 16 * 60;      ///< … until here
     };

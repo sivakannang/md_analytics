@@ -228,6 +228,15 @@ Underlyings and expiries come from `feed.chains` in `config/mda.yaml` (ADR-0020)
 values arrive on the stream: quotes for the rows' instruments (with IV, Greeks, OI change
 and buildup) and `mode: "chain"` for the summary.
 
+MCX chains (ADR-0031) have no spot. Each expiry is priced on its own underlying future, and
+`spot_id` is that future's id: in `GET /chains`, the nearest expiry's future; in strike rows,
+the requested expiry's. Chain summaries for an MCX expiry are keyed by that future's id. The
+OI views' minutes count from the MCX open at 09:00 (`session_open`).
+
+Instruments carry `exchange` `"MCX"` for commodities. MCX quantities, including `lot_size`,
+are in the units the price is quoted in (barrels, 10 g of gold). MCX volume, OI and depth
+are in lots, as Kite sends them.
+
 ### Chains — `GET /chains` 🔒
 
 ```json
@@ -308,6 +317,218 @@ latest minute; the session is the one `latest` falls in.
 - OI is in shares, summed over the ticked expiries; a side with no data has `[]`, and a side
   that gets its first value later in the day starts at that `m`.
 - Errors as for `oi-change` (no `from`/`to`/`minutes`).
+
+## Market signals
+
+Direction signals for the indices from mda-signald (ADR-0028, `docs/design/signals.md`):
+one per index, strategy and minute, with the factors behind it and, once its horizon has
+passed, what the index did. Indices and strategies come from `signals` in
+`config/mda.yaml`. Live signals arrive on the stream with `mode: "signals"`.
+
+### Indices and strategies — `GET /signals` 🔒
+
+```json
+{"status": "success", "data": {
+  "indices": [{"underlying": "NIFTY", "spot": "NSE|CASH|IDX|NIFTY 50", "spot_id": 18274,
+               "latest": [{"minute": 1792749540, "strategy": "oi-bias-v1", "score": 10,
+                           "label": "neutral", "…": "as in a day's signals"}]}],
+  "strategies": [{"id": "oi-bias-v1", "horizon_min": 30, "bullish": 25, "bearish": -25}],
+  "factors": ["futures_buildup", "atm_oi_shift", "pcr_change", "future_vs_vwap",
+              "atm_iv_change", "max_pain_pull", "sector_breadth", "vix_change",
+              "volume_delta"]
+}}
+```
+
+`latest`: the newest minute's signals (one per strategy; empty when there are none), so a
+page has a value before the stream sends one.
+
+### A day's signals — `GET /signals/{underlying}?date=YYYY-MM-DD` 🔒
+
+One IST day, oldest first, every strategy; without `date`, the latest day that has
+signals (`date` is `null` and `signals` empty when there are none). 404 for an underlying
+without signals.
+
+```json
+{"status": "success", "data": {"underlying": "NIFTY", "date": "2026-10-23", "signals": [
+  {"minute": 1792727160, "strategy": "oi-bias-v1", "horizon_min": 30, "score": -32,
+   "label": "bearish", "prob": null, "spot": 22479.55,
+   "factors": [{"factor": "futures_buildup", "status": "present", "value": 0.0, "points": 0.0},
+               {"factor": "max_pain_pull", "status": "not_applicable", "value": 0.0, "points": 0.0}],
+   "outcome": {"spot_after": 22451.2, "return_bp": -13, "hit": true}}
+]}}
+```
+
+- `minute`: the minute's start (Unix seconds); the signal uses bars closed by its end.
+- `score` −100…+100; `label` `bullish` / `neutral` / `bearish` by the strategy's thresholds.
+- `prob`: calibrated P(up), `null` until the strategy is calibrated.
+- `factors[].status`: `present`, `absent` (no data yet) or `not_applicable`; `points` is
+  the factor's share of the score.
+- `outcome`: `null` until the horizon has passed (or the session closed). `hit` is `null`
+  for neutral signals and for moves within ±`signals.flat_bp` (flat).
+
+### Track record — `GET /signals/{underlying}/record?days=30` 🔒
+
+Each strategy's record over the last `days` calendar days (1–365, today included), on
+signals with an outcome.
+
+```json
+{"status": "success", "data": {"underlying": "NIFTY", "from": "2026-09-25", "days": 30,
+  "strategies": [{"strategy": "oi-bias-v1", "horizon_min": 30, "settled": 374,
+    "bullish": 0, "bearish": 240, "neutral": 134, "hits": 87, "misses": 97, "flats": 56,
+    "hit_rate": 0.473, "always_up_rate": 0.462, "momentum_rate": 0.522,
+    "momentum_calls": 184}]}}
+```
+
+- `hit_rate` = hits / (hits + misses); `null` with no decided calls.
+- Baselines, on the same minutes: `always_up_rate` (share of those moves that were up)
+  and `momentum_rate` (the previous horizon's direction was right; over `momentum_calls`).
+  A strategy that doesn't beat both has no edge.
+
+## Paper trading
+
+Simulated orders against the live market (ADR-0029, `docs/design/paper-trading.md`): the
+gateway sends them to mda-broker, which checks risk, fills them from the live order book and
+charges them like Zerodha. Nothing reaches a real broker. Each user has one paper account,
+created with ₹10 lakh (`paper.opening_cash`) on their first order. F&O only: index futures
+and buying options. Live updates arrive on the stream with `mode: "orders"`.
+
+**Another user's paper (admins):** the reads below (`/paper/orders`, `/paper/trades`,
+`/paper/positions`, `/paper/funds`, `/paper/auto`) take `user=<user_id>` (from
+`GET /admin/users`) to show that user's account instead of one's own. Only an admin may pass
+it: anyone else gets 403 `PermissionException`; a non-numeric id gets 400. Placing,
+modifying and cancelling orders and the kill switch ignore `user`, so they always act on the
+caller's own account: an admin can look but can't trade for someone else.
+
+### Place an order — `POST /paper/orders` 🔒
+
+```json
+{"instrument_id": 18486, "side": "BUY", "quantity": 65, "type": "LIMIT", "price": 22650,
+ "trigger_price": null, "product": "NRML", "tag": "breakout", "client_order_id": 1792856203937001}
+```
+
+- `type`: `MARKET` (default), `LIMIT` (`price`), `SL` (`price` and `trigger_price`), `SL-M`
+  (`trigger_price`). `product`: `MIS` (default in the API; intraday) or `NRML` (the web
+  ticket's default). `quantity` in units, a multiple of the lot size.
+- `client_order_id` (optional, a positive integer): makes retries safe. Sending the same id
+  again returns that order, never a second one. Without it the gateway picks one.
+- Answers once mda-broker has accepted or rejected the order (it resends meanwhile):
+  - `200` `{"order": {…an execution report…}}` with `event` `accepted` (or `status` for a
+    repeat);
+  - `400` `OrderException` with the risk check's reason, e.g. "insufficient funds: needs
+    ₹202500.45, available ₹200000.00";
+  - `202` `{"client_order_id": …, "status": "PENDING"}` if mda-broker didn't answer within
+    2 s; send again with the same `client_order_id` to learn the outcome.
+
+An execution report:
+
+```json
+{"order_id": 12, "client_order_id": 1792856203937001, "instrument_id": 18486, "event": "fill",
+ "status": "COMPLETE", "side": "BUY", "type": "LIMIT", "product": "NRML", "source": "ui",
+ "quantity": 65, "filled": 65, "last_quantity": 65, "last_price": 22650.0, "average_price": 22650.0,
+ "price": 22650.0, "trigger_price": null, "charges": 86.12, "reason": "", "reject_code": null,
+ "at": 1792728733000}
+```
+
+`event`: `accepted`, `rejected`, `triggered`, `fill`, `cancelled`, `modified`, `status`,
+`kill_switch_on`, `kill_switch_off`, `settled`, `converted`. `status`: `TRIGGER_PENDING`, `OPEN`, `COMPLETE`,
+`CANCELLED`, `REJECTED`. `charges` are this fill's, in rupees. `reject_code` names the
+risk check (`bad_quantity`, `funds`, `price_band`, `kill_switch`, …).
+
+### Modify — `PUT /paper/orders/{order_id}` 🔒 and cancel — `DELETE /paper/orders/{order_id}` 🔒
+
+`PUT` takes `{"quantity": 130, "price": 22640, "trigger_price": null}`: the order is checked
+by risk again and looks at the book afresh. Both answer like a placement (`event`
+`modified` / `cancelled`); `400` when the order is no longer open or the change is rejected.
+
+### Kill switch — `POST /paper/kill-switch` 🔒
+
+`{"on": true}` cancels the account's open orders; until `{"on": false}` only orders that
+reduce a position are accepted. Answers `{"kill_switch": true}`.
+
+### Convert a position — `POST /paper/positions/convert` 🔒
+
+`{"instrument_id": 73371, "quantity": 100, "to": "NRML"}` moves that much of the position from
+the other product (MIS ↔ NRML), as Zerodha's position conversion. It keeps the average price
+and has no charges; margin is the same for both products. Allowed while the market is open,
+into MIS only until the square-off (15:25, MCX 5 minutes before its close). Answers like a
+placement: `{"order": {…}}` with `event` `converted`, `order_id` 0, `product` the new one,
+`side` the position's (`BUY` long), `last_quantity`, and `last_price` the average. `400`
+`OrderException` when the other product holds less than `quantity`, or outside those hours.
+
+### Orders and trades — `GET /paper/orders?date=` 🔒, `GET /paper/trades?date=` 🔒
+
+One IST day (`YYYY-MM-DD`, default today), oldest first.
+
+```json
+{"order_id": 12, "client_order_id": 1792856203937001, "instrument_id": 18486, "side": "BUY",
+ "type": "LIMIT", "placed_type": "LIMIT", "product": "NRML", "quantity": 65, "filled": 65,
+ "price": 22650.0, "trigger_price": null, "average_price": 22650.0, "status": "COMPLETE",
+ "reason": "", "tag": "breakout", "source": "ui", "charges": 86.12,
+ "created_at": 1792728710000, "updated_at": 1792728733000}
+```
+
+A trade: `{"order_id", "instrument_id", "side", "product", "quantity", "price", "charges":
+{"brokerage", "stt", "exchange", "sebi", "stamp", "gst", "total"}, "realised", "at"}` (rupees).
+
+### Positions — `GET /paper/positions` 🔒
+
+```json
+[{"instrument_id": 18486, "product": "NRML", "quantity": 65, "average_price": 22650.0,
+  "entry_price": 22650.0, "last_price": 22633.6, "realised": 0.0, "closed_pnl": 0.0,
+  "unrealised": -1066.0}]
+```
+
+As Kite shows them: open positions (whenever opened), and those traded or settled at expiry
+today. `realised` is today's: the sum of today's trades, today's expiry settlement and today's
+daily MTM. After the MTM, a carried future's `average_price` is the last close it was marked
+to, and `unrealised` counts from it. `entry_price` is the average of the fills behind the open
+quantity, which marks don't change; `null` when flat. `closed_pnl` is today's closing fills
+measured from their entry price, plus today's expiry settlement. The web's P&L is
+`closed_pnl + (LTP − entry_price) × quantity`.
+Positions closed on an earlier day are left out (they stay in `paper.db`; their orders and
+trades are under `?date=`). `last_price` and `unrealised` are `null` when the gateway has
+no live quote.
+
+### Funds — `GET /paper/funds` 🔒
+
+```json
+{"opening_cash": 1000000.0, "cash": 999913.88, "blocked": 176670.0, "available": 822177.88,
+ "realised_today": 0.0, "charges_today": 86.12, "unrealised": -1066.0, "kill_switch": false}
+```
+
+`blocked`: margin of open positions (futures 12% of notional, bought options their premium)
+and open orders. `available` = cash − blocked + unrealised losses (gains don't count).
+
+### Auto-trader runs — `GET /paper/auto?days=30` 🔒
+
+The signed-in user's runs of mda-autotrader (ADR-0030, `autotrader.runs` in config; enabled
+or not), measured over the last `days` (1–365, today included) from their tagged orders.
+
+```json
+{"status": "success", "data": {"from": "2026-09-25", "days": 30, "runs": [
+  {"id": "nifty-follow", "strategy": "follow-signal", "signal": "oi-bias-v1", "underlying": "NIFTY",
+   "enabled": true, "settings": {"lots": 1, "product": "MIS", "stop_points": 40, "target_points": 80,
+   "max_hold_min": 45, "max_trades_per_day": 6, "cooldown_min": 10, "exit_score": 10, "daily_loss_stop": 5000},
+   "position": 0, "held": [], "entries_today": 3,
+   "metrics": {"round_trips": 3, "wins": 2, "losses": 1, "win_rate": 0.667, "gross": 3321.5,
+     "charges": 2631.09, "net": 690.41, "average_win": 2098.37, "average_loss": -3506.33,
+     "largest_loss": -3506.33, "max_drawdown": 3506.33, "exits": {"signal": 1, "stop": 1, "target": 1}},
+   "decisions_today": [{"at": 1792731717000, "state": "flat", "action": "enter short",
+     "reason": "Bearish -73", "price": 22489.5}]}
+]}}
+```
+
+- `metrics` (rupees): round trips are flat → position → flat; a trip with net ≤ 0 (after
+  charges) is a loss. `gross`, `charges` and `net` cover every fill, an open trip included;
+  `max_drawdown` is the largest fall of cumulative net P&L over closed trips. `exits`
+  counts the run's exits by reason: `signal`, `target`, `index stop` (options), `max hold`,
+  `end of day`, `stop` (the resting stop filled), `stop lost`, `flatten`.
+- `position` is the net quantity over the run's trades; `held` lists what it holds now per
+  instrument, `[{"instrument_id": 61234, "quantity": 65}]` (empty when flat). An options run
+  (`strategy: follow-signal-options`) has `index_stop_points`, `premium_stop_percent`,
+  `entry_slip_ticks` and `entry_timeout_s` in `settings` instead of `stop_points`.
+- `decisions_today`: newest first, at most 50: every action and blocked entry with its
+  reason (`state` is the run's state before it).
 
 ## Watchlists
 

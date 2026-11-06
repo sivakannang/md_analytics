@@ -28,8 +28,10 @@ instrument at once (if the gateway has seen it today), then updates as they chan
 most 200 instruments per connection. Unknown ids are accepted and simply never tick.
 
 `mode` is `quote` (the default), `depth`, `bars` (live 1-minute bars for charts; at most
-10 instruments per connection), or `chain` (option-chain summaries; `v` holds the chain's
-spot `instrument_id`, the `spot_id` from `GET /chains`). Depth is the 5-level order book and is a
+10 instruments per connection), `chain` (option-chain summaries; `v` holds the chain's
+spot `instrument_id`, the `spot_id` from `GET /chains`), `signals` (market signals;
+`v` holds index `spot_id`s from `GET /signals`; at most 10), or `orders` (the user's own paper
+order updates; `v` is `[]`). Depth is the 5-level order book and is a
 separate subscription, because only an expanded row needs it. At most 10 depth
 instruments per connection. Unsubscribe with the same `mode`. Any other `mode` closes the
 connection (1008).
@@ -110,9 +112,38 @@ REST bars when a minute closes ([OI buildup chart](../design/oi-buildup-chart.md
 ]}
 ```
 
-One summary per expiry of the subscribed chain, about once a second while it changes.
+One summary per expiry of the subscribed chain, about once a second while it changes. An MCX
+chain (ADR-0031) has a spot per expiry, that expiry's future: subscribe the `spot_id` that
+`GET /chains/{underlying}/{expiry}` returns.
 `forward` (parity-implied), `atm_strike` and `atm_iv` (percent) are `null` until known.
 `pcr` and `max_pain` are over the strikes the feed subscribes (ATM ± `feed.chains[].strikes`).
+
+### `signals`
+
+```json
+{"type": "signals", "data": [
+  {"spot_id": 18274, "minute": 1792727160, "strategy": "oi-bias-v1", "horizon_min": 30,
+   "score": -32, "label": "bearish", "prob": null,
+   "top": [{"factor": "atm_oi_shift", "points": -20}, {"factor": "future_vs_vwap", "points": -15}]}
+]}
+```
+
+The latest signal per strategy of each subscribed index: at once on subscribing (if
+mda-signald has published one since the gateway started), then once a minute as each
+minute closes. `top` holds up to four factors with the largest share of the score; the
+full list and outcomes are in `GET /signals/{underlying}`.
+
+### `orders`
+
+```json
+{"type": "orders", "data": [
+  {"order_id": 12, "event": "fill", "status": "COMPLETE", "filled": 65, "last_quantity": 65,
+   "last_price": 22650.0, "charges": 86.12, "…": "as in POST /paper/orders"}
+]}
+```
+
+The signed-in user's execution reports from the moment of subscribing (read
+`GET /paper/orders` first, then apply these). Other users' orders are never sent.
 
 ### `status`
 

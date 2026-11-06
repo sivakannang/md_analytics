@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runs tools/watchdog.sh every 2 minutes while you're logged in (a locked screen is fine). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.mda.watchdog</string>
+    <key>ProgramArguments</key><array><string>/Users/sivakannan/Developer/md_analytics/tools/watchdog.sh</string></array>
+    <key>WorkingDirectory</key><string>/Users/sivakannan/Developer/md_analytics</string>
+    <key>EnvironmentVariables</key>
+    <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+    <key>StartInterval</key><integer>120</integer>
+    <key>RunAtLoad</key><true/>
+    <!-- The processes it starts must outlive the script: launchd kills them otherwise. -->
+    <key>AbandonProcessGroup</key><true/>
+    <key>StandardOutPath</key><string>/Users/sivakannan/Developer/md_analytics/data/logs/watchdog.log</string>
+    <key>StandardErrorPath</key><string>/Users/sivakannan/Developer/md_analytics/data/logs/watchdog.log</string>
+</dict>
+</plist>

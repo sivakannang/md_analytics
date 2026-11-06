@@ -34,6 +34,10 @@ struct OptionContract {
 struct ExpiryChain {
     std::chrono::year_month_day expiry;
     std::vector<OptionContract> options;
+    /// MCX (ADR-0031): the future these options are written on. It is the forward (no parity
+    /// needed) and the summary's spot. Invalid = the chain's spot, forward from parity.
+    core::InstrumentId future;
+    int close_minute = 15 * 60 + 30;  ///< IST minute the options expire on the expiry day
 };
 
 struct ChainDefinition {
@@ -94,8 +98,10 @@ private:
     std::unordered_map<std::uint32_t, std::int64_t> prev_oi_;
 };
 
-/// Years from `now` to 15:30 IST on `expiry`, at least one hour.
-[[nodiscard]] double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry);
+/// Years from `now` to `close_minute` IST (15:30, MCX 23:30 / 23:55) on `expiry`, at least
+/// one hour.
+[[nodiscard]] double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry,
+                                     int close_minute = 15 * 60 + 30);
 
 /// The strike minimising option writers' payout if the underlying settled there.
 [[nodiscard]] double max_pain(const std::vector<double>& strikes,
@@ -120,10 +126,12 @@ inline constexpr std::uint8_t kHasIv = 1;
 inline constexpr std::uint8_t kHasPrevOi = 2;
 
 /// Per chain expiry. header.instrument_id = the spot. 104 bytes.
+/// Published once a second (live views), and once per minute as a *closing* summary: the
+/// chain as the minute ended, sent after that minute's bars (signals, docs/design/signals.md §14).
 struct ChainSummaryMessage {
     messages::EventHeader header;
     std::int32_t expiry_days = 0;  ///< days since 1970-01-01
-    std::uint32_t reserved = 0;
+    std::uint32_t minute = 0;      ///< closing summary: the minute it closes (Unix s); else 0
     char underlying[16] = {};
     double forward = 0, atm_strike = 0, atm_iv = 0, pcr = 0, max_pain = 0, years = 0;
     std::int64_t call_oi = 0, put_oi = 0;

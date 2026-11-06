@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <system_error>
 #include <set>
 #include <span>
 #include <sstream>
@@ -40,6 +41,7 @@
 #include <mda/bus/bus.hpp>
 #include <mda/catalog/catalog.hpp>
 #include <mda/instruments/registry.hpp>
+#include <mda/instruments/session.hpp>
 #include <mda/kite/instrument_import.hpp>
 #include <mda/kite/rest_client.hpp>
 #include <mda/kite/run_sync.hpp>
@@ -108,6 +110,42 @@ std::vector<std::uint32_t> watchlist_tokens(std::span<const std::int64_t> ids,
     }
     return out;
 }
+
+/// Instruments with a live paper order or an open paper position (ADR-0029): kept
+/// subscribed so mda-broker always has their prices. Read-only; none until paper.db exists.
+class PaperInstruments {
+public:
+    explicit PaperInstruments(std::filesystem::path path) : path_(std::move(path)) {}
+
+    std::vector<std::int64_t> ids() {
+        if (!db_) {
+            std::error_code ec;
+            if (!std::filesystem::exists(path_, ec)) {
+                return {};
+            }
+            auto opened = storage::Database::open(path_);
+            if (!opened) {
+                return {};
+            }
+            db_.emplace(std::move(*opened));
+        }
+        auto statement = db_->prepare(
+            "SELECT instrument_id FROM orders WHERE status IN (1, 2) "
+            "UNION SELECT instrument_id FROM positions WHERE quantity <> 0");
+        std::vector<std::int64_t> out;
+        if (!statement) {
+            return out;  // not created yet
+        }
+        while (statement->step().value_or(storage::StepResult::Done) == storage::StepResult::Row) {
+            out.push_back(statement->column_int64(0));
+        }
+        return out;
+    }
+
+private:
+    std::filesystem::path path_;
+    std::optional<storage::Database> db_;
+};
 
 /// Sorted union of the static and watchlist tokens, capped at Kite's per-connection limit.
 std::vector<std::uint32_t> merge_tokens(std::vector<std::uint32_t> base,
@@ -321,7 +359,12 @@ asio::awaitable<void> auto_backfill_loop(
     const auto unix_now = [] { return core::Timestamp::now().ns() / 1'000'000'000; };
     asio::steady_timer timer(co_await asio::this_coro::executor);
     std::unordered_set<std::uint32_t> checked;  // tokens, this phase
-    bool market = apps::in_market_hours(unix_now());
+    // The phase changes when either NSE/BSE or MCX opens or closes (ADR-0031).
+    const auto phase = [](std::int64_t now) {
+        return std::pair{apps::in_market_hours(now),
+                         apps::in_market_hours(now, instruments::Exchange::Mcx)};
+    };
+    auto market = phase(unix_now());
     bool paused = false;  // the session was rejected: wait for the next phase
     auto next_request = Clock::now();
     timer.expires_after(std::chrono::seconds(5));  // let the watchlists load first
@@ -329,7 +372,7 @@ asio::awaitable<void> auto_backfill_loop(
 
     while (true) {
         const std::int64_t now = unix_now();
-        if (const bool in_hours = apps::in_market_hours(now); in_hours != market) {
+        if (const auto in_hours = phase(now); in_hours != market) {
             market = in_hours;
             checked.clear();
             paused = false;
@@ -352,7 +395,10 @@ asio::awaitable<void> auto_backfill_loop(
                     spdlog::warn("backfill: bars.db: {}", coverage.error().message);
                     break;
                 }
-                if (const auto window = apps::auto_backfill_window(now, *coverage, days)) {
+                const auto* instrument = registry.get(id);
+                const auto exchange =
+                    instrument ? instrument->key.exchange : instruments::Exchange::Nse;
+                if (const auto window = apps::auto_backfill_window(now, *coverage, days, exchange)) {
                     out.emplace_back(token, id, *window);
                 }
             }
@@ -506,14 +552,25 @@ int run(const runtime::Config& config) {
                      std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - start)
                          .count());
+        // Contracts that expired before today leave every watchlist, as on Kite.
+        const std::string today = instruments::to_string(
+            instruments::ist_day(core::Timestamp::now().ns() / 1'000'000'000));
+        if (const auto removed = watchlists::remove_expired(*db, today); !removed) {
+            spdlog::warn("watchlists: removing expired contracts failed: {}", removed.error().message);
+        } else if (*removed > 0) {
+            spdlog::info("watchlists: {} expired contracts removed", *removed);
+        }
     }
 
     // Subscriptions: the static list plus every watchlist instrument (re-read while running).
     const auto static_tokens = resolve_subscriptions(config.feed, registry, tokens);
     watchlists::WatchlistService lists(*db);
-    std::vector<std::uint32_t> on_watchlists;
+    PaperInstruments paper(config.paper.db);
+    std::vector<std::uint32_t> on_watchlists;  // watchlists and paper trading
     if (config.feed.watchlists_refresh.count() > 0) {
         if (auto ids = lists.all_instrument_ids()) {
+            const auto traded = paper.ids();
+            ids->insert(ids->end(), traded.begin(), traded.end());
             on_watchlists = watchlist_tokens(*ids, tokens);
         } else {
             spdlog::warn("watchlists: cannot read: {}", ids.error().message);
@@ -525,7 +582,7 @@ int run(const runtime::Config& config) {
     for (const auto& chain : config.feed.chains) {
         const auto key = instruments::parse_contract_key(chain.spot);
         const core::InstrumentId spot = key ? registry.find(*key) : core::InstrumentId{};
-        if (!spot.valid()) {
+        if (!spot.valid() && !chain.spot.empty()) {
             spdlog::warn("chains: spot '{}' of {} is not a known instrument; chain skipped",
                          chain.spot, chain.underlying);
             continue;
@@ -769,6 +826,8 @@ int run(const runtime::Config& config) {
                                                       ids.error().message);
                                          return;
                                      }
+                                     const auto traded = paper.ids();
+                                     ids->insert(ids->end(), traded.begin(), traded.end());
                                      auto wanted = watchlist_tokens(*ids, tokens);
                                      asio::post(io, [&, wanted = std::move(wanted)]() mutable {
                                          on_watchlists = std::move(wanted);

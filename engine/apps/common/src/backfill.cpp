@@ -2,14 +2,13 @@
 #include <format>
 
 #include <mda/apps/backfill.hpp>
+#include <mda/instruments/session.hpp>
 
 namespace mda::apps {
 namespace {
 
 constexpr std::int64_t kIst = 5 * 3600 + 30 * 60;
 constexpr std::int64_t kDay = 86'400;
-constexpr std::int64_t kSessionOpen = 9 * 3600 + 15 * 60;    // after IST midnight
-constexpr std::int64_t kSessionClose = 15 * 3600 + 40 * 60;  // F&O close
 
 std::int64_t ist_midnight(std::int64_t unix_seconds) {
     const std::int64_t local = unix_seconds + kIst;
@@ -56,15 +55,17 @@ std::vector<bars::Bar> to_bars(core::InstrumentId id, const std::vector<kite::Ca
     return out;
 }
 
-bool in_market_hours(std::int64_t now) {
+bool in_market_hours(std::int64_t now, instruments::Exchange exchange) {
     const std::int64_t midnight = ist_midnight(now);
     const std::chrono::weekday weekday{
         std::chrono::sys_days{std::chrono::days{(midnight + kIst) / kDay}}};
     if (weekday == std::chrono::Saturday || weekday == std::chrono::Sunday) {
         return false;
     }
+    const instruments::Session session =
+        instruments::trading_session(exchange, instruments::Market::Fo, instruments::ist_day(now));
     const std::int64_t time_of_day = now - midnight;
-    return time_of_day >= kSessionOpen && time_of_day < kSessionClose;
+    return time_of_day >= session.open * 60 && time_of_day < session.last * 60;
 }
 
 std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store,
@@ -86,19 +87,23 @@ std::expected<BarCoverage, storage::DbError> bar_coverage(bars::BarStore& store,
 }
 
 std::optional<BackfillWindow> auto_backfill_window(std::int64_t now, BarCoverage coverage,
-                                                   int days) {
+                                                   int days, instruments::Exchange exchange) {
     const std::int64_t today = ist_midnight(now);
-    if (in_market_hours(now)) {
+    if (in_market_hours(now, exchange)) {
         if (coverage.today) {
             return std::nullopt;
         }
-        return BackfillWindow{.from = today + kSessionOpen, .to = now};
+        const int open = instruments::trading_session(exchange, instruments::Market::Fo,
+                                                      instruments::ist_day(now)).open;
+        return BackfillWindow{.from = today + open * 60, .to = now};
     }
     if (coverage.past) {
         return std::nullopt;
     }
     // The last `days` days including today, as mda-backfill --days.
-    return BackfillWindow{.from = today - static_cast<std::int64_t>(days - 1) * kDay + kSessionOpen,
+    const int open =
+        instruments::trading_session(exchange, instruments::Market::Fo, instruments::ist_day(now)).open;
+    return BackfillWindow{.from = today - static_cast<std::int64_t>(days - 1) * kDay + open * 60,
                           .to = now};
 }
 

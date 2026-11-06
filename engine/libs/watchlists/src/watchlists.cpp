@@ -457,4 +457,18 @@ std::expected<std::vector<std::int64_t>, WatchlistError> WatchlistService::all_i
     }
 }
 
+std::expected<std::size_t, WatchlistError> remove_expired(storage::Database& db, std::string_view today) {
+    auto statement = db.prepare(
+        "DELETE FROM watchlist_items WHERE instrument_id IN "
+        "(SELECT id FROM instruments WHERE expiry IS NOT NULL AND expiry < ?1)");
+    if (!statement) {
+        return std::unexpected(internal(statement.error()));
+    }
+    statement->bind(1, today);
+    if (const auto done = statement->step(); !done) {
+        return std::unexpected(internal(done.error()));
+    }
+    return static_cast<std::size_t>(db.changes());
+}
+
 }  // namespace mda::watchlists

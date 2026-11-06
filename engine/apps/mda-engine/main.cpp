@@ -5,7 +5,10 @@
 // Reads every snapshot on bus "md" and, once a second, publishes on bus "an" (for the gateway):
 // - 1-minute bars (BarBuilder): closed bars also go to bars.db (ADR-0021);
 // - option analytics for the configured chains (ADR-0022): IV, Greeks, OI change, buildup per
-//   option, and forward / ATM IV / PCR / max pain per expiry.
+//   option, and forward / ATM IV / PCR / max pain per expiry;
+// - per minute, closing chain summaries for mda-signald: computed when the ticks cross into the
+//   next minute and sent after that minute's bars, so a replay scores the same at any speed
+//   (docs/design/signals.md §14).
 // It also saves the latest quote, depth and circuit limits per instrument every 5 s
 // (ADR-0024), and starts the analytics from them.
 //
@@ -18,6 +21,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <map>
 #include <optional>
@@ -36,6 +40,7 @@
 #include <mda/bus/wait_strategy.hpp>
 #include <mda/core/timestamp.hpp>
 #include <mda/instruments/registry.hpp>
+#include <mda/instruments/session.hpp>
 #include <mda/messages/circuit_limits.hpp>
 #include <mda/messages/depth_snapshot.hpp>
 #include <mda/messages/market_snapshot.hpp>
@@ -74,13 +79,20 @@ std::vector<options::ChainDefinition> chain_definitions(
     for (const auto& chain : config.feed.chains) {
         const auto key = instruments::parse_contract_key(chain.spot);
         const core::InstrumentId spot = key ? registry.find(*key) : core::InstrumentId{};
-        if (!spot.valid()) {
+        if (!spot.valid() && !chain.spot.empty()) {
             spdlog::warn("chains: spot '{}' unknown; {} skipped", chain.spot, chain.underlying);
             continue;
         }
+        // No spot: MCX (ADR-0031), each expiry's options are on the nearest future expiring on
+        // or after them.
         std::map<std::chrono::year_month_day, std::vector<options::OptionContract>> by_expiry;
+        std::map<std::chrono::year_month_day, core::InstrumentId> futures;
         for (const auto& instrument : registry.all()) {
             const auto& k = instrument.key;
+            if (k.kind == instruments::Kind::Future && k.underlying == chain.underlying &&
+                k.expiry >= today) {
+                futures[k.expiry] = instrument.id;
+            }
             if (k.kind == instruments::Kind::Option && k.underlying == chain.underlying &&
                 k.expiry >= today) {
                 by_expiry[k.expiry].push_back(
@@ -94,7 +106,21 @@ std::vector<options::ChainDefinition> chain_definitions(
             if (static_cast<int>(definition.expiries.size()) >= chain.expiries) {
                 break;
             }
-            definition.expiries.push_back({.expiry = expiry, .options = std::move(contracts)});
+            options::ExpiryChain chain_expiry{.expiry = expiry, .options = std::move(contracts)};
+            if (!spot.valid()) {
+                const auto future = futures.lower_bound(expiry);
+                if (future == futures.end()) {
+                    spdlog::warn("chains: no future under {} {}", chain.underlying,
+                                 instruments::to_string(expiry));
+                    continue;
+                }
+                chain_expiry.future = future->second;
+                chain_expiry.close_minute =
+                    instruments::trading_session(instruments::Exchange::Mcx,
+                                                 instruments::Market::Fo, expiry)
+                        .close;
+            }
+            definition.expiries.push_back(std::move(chain_expiry));
         }
         spdlog::info("chains: {} analytics for {} expiries", chain.underlying,
                      definition.expiries.size());
@@ -149,7 +175,7 @@ int run(const runtime::Config& config) {
         (void)an->publish(messages::to_wire(messages::MessageType::Bar),
                           messages::as_bytes(message));
     };
-    // The permanent registry: which instruments are derivatives (bar session to 15:40), and
+    // The permanent registry: each instrument's session (per exchange, ADR-0031), and
     // the option chains.
     auto loaded = instruments::InstrumentRegistry::load(config.kite.registry_file);
     if (!loaded) {
@@ -158,9 +184,15 @@ int run(const runtime::Config& config) {
     }
     const auto& registry = loaded->registry;
     bars::BuilderOptions builder_options;
-    builder_options.is_derivative = [&registry](core::InstrumentId id) {
+    builder_options.feed_gap = std::chrono::seconds(120);  // a feed outage: rebaseline volume
+    const std::int64_t close_delay = builder_options.close_delay.count();
+    builder_options.session = [&registry](core::InstrumentId id, std::int64_t minute) {
         const auto* instrument = registry.get(id);
-        return instrument != nullptr && instrument->key.market == instruments::Market::Fo;
+        const instruments::Session session =
+            instruments::trading_session(instrument ? instrument->key.exchange : instruments::Exchange::Nse,
+                                         instrument ? instrument->key.market : instruments::Market::Cash,
+                                         instruments::ist_day(minute));
+        return std::pair{session.open, session.last};
     };
     bars::BarBuilder builder(std::move(builder_options), [&](const bars::Bar& bar) {
         if (bar.start < first_full_minute) {
@@ -275,6 +307,21 @@ int run(const runtime::Config& config) {
     auto next_summary = Clock::now() + std::chrono::seconds(60);
     std::uint64_t snapshots = 0;
     bars::EventClock event_clock;  // "now" from the ticks: a replay closes bars by session time
+    // Closing summaries: the chain as each minute ended (from the ticks' own time, so the state
+    // doesn't depend on when the 1 s loop runs), held until that minute's bars have closed.
+    struct Closing {
+        std::int64_t minute = 0;
+        std::vector<options::ChainSummary> summaries;
+    };
+    std::deque<Closing> closing;
+    std::int64_t tick_minute = 0;  ///< the latest minute the ticks reached
+    std::vector<options::OptionResult> closing_options;  // scratch
+    const auto close_minute = [&] {
+        Closing done{.minute = tick_minute, .summaries = {}};
+        closing_options.clear();
+        analytics.compute(tick_minute + 59, closing_options, done.summaries);
+        closing.push_back(std::move(done));
+    };
     std::uint64_t written = 0;
     std::uint64_t written_at_summary = 0;
     while (!g_stop.load()) {
@@ -282,6 +329,18 @@ int run(const runtime::Config& config) {
                                              std::span<const std::byte> payload) {
             if (auto snapshot = messages::decode<messages::MarketSnapshot>(type, payload)) {
                 event_clock.on_event(snapshot->receive_ts.ns());
+                {  // the bar builder's minute rule; before this tick is applied
+                    const bool exchange = (snapshot->fields & messages::kFieldExchangeTime) != 0 &&
+                                          snapshot->exchange_ts.is_set();
+                    const std::int64_t at =
+                        (exchange ? snapshot->exchange_ts : snapshot->receive_ts).ns() /
+                        1'000'000'000;
+                    const std::int64_t minute = at - at % 60;
+                    if (tick_minute > 0 && minute > tick_minute) {
+                        close_minute();
+                    }
+                    tick_minute = std::max(tick_minute, minute);
+                }
                 if (first_full_minute == std::numeric_limits<std::int64_t>::max()) {
                     const bool exchange = (snapshot->fields & messages::kFieldExchangeTime) != 0 &&
                                           snapshot->exchange_ts.is_set();
@@ -316,7 +375,12 @@ int run(const runtime::Config& config) {
 
         if (const auto now = Clock::now(); now >= next_second) {
             next_second = now + std::chrono::seconds(1);
-            builder.close_due(event_clock.now_seconds(core::Timestamp::now().ns()));
+            const std::int64_t event_now = event_clock.now_seconds(core::Timestamp::now().ns());
+            if (tick_minute > 0 && event_now >= tick_minute + 60) {  // no tick crossed it (quiet feed)
+                close_minute();
+                tick_minute = event_now - event_now % 60;
+            }
+            builder.close_due(event_now);
             if (!closed.empty()) {
                 if (auto done = store->write(closed); !done) {
                     spdlog::error("bars: writing {} bars failed: {}", closed.size(),
@@ -325,6 +389,17 @@ int run(const runtime::Config& config) {
                     written += closed.size();
                 }
                 closed.clear();
+            }
+            // Every bar of a closing minute is out (closed by a later tick or by close_due above).
+            while (!closing.empty() && event_now >= closing.front().minute + 60 + close_delay) {
+                for (const auto& summary : closing.front().summaries) {
+                    auto message = options::to_message(summary);
+                    message.minute = static_cast<std::uint32_t>(closing.front().minute);
+                    message.header.sequence = ++sequence;
+                    (void)an->publish(messages::to_wire(messages::MessageType::ChainSummary),
+                                      messages::as_bytes(message));
+                }
+                closing.pop_front();
             }
             for (const auto& bar : builder.forming()) {
                 publish(bar);

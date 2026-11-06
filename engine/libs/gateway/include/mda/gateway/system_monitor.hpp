@@ -55,8 +55,11 @@ public:
     /// The latest sample with its history and checks (empty before the first sample).
     [[nodiscard]] boost::json::object report() const;
 
-    /// IST weekday 09:15–15:30 (holidays are not known here).
+    /// IST weekday 09:00 to the MCX close (ADR-0031): the market processes should run.
+    /// Holidays are not known here.
     [[nodiscard]] static bool market_hours(std::int64_t unix_seconds);
+    /// IST weekday 09:15–15:30: NSE and BSE are open (signals).
+    [[nodiscard]] static bool nse_hours(std::int64_t unix_seconds);
 
 private:
     struct Point {

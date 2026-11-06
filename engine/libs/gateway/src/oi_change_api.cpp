@@ -25,7 +25,6 @@ using detail::run_on;
 using detail::token_of;
 
 constexpr std::int64_t kIst = 19'800;
-constexpr std::int64_t kSessionOpen = 9 * 3600 + 15 * 60;  // IST, from midnight
 /// How far back "OI as of T" looks: a week covers weekends and holidays.
 constexpr std::int64_t kLookback = 7 * 86'400;
 constexpr int kMaxStrikes = 20;  // the feed subscribes ATM ± 20
@@ -62,6 +61,7 @@ struct Option {
 struct Catalog {
     std::vector<std::string> expiries;
     std::uint32_t spot = 0;
+    std::int64_t session_open = 9 * 3600 + 15 * 60;  ///< seconds after IST midnight
     std::vector<Option> options;
 };
 
@@ -110,7 +110,10 @@ std::expected<Catalog, std::string> load_catalog(storage::Database& db, const Ch
                                    .call = options->column_text(2) == "CE"});
         }
     }
-    out.spot = static_cast<std::uint32_t>(chain_spot_id(db, chain.spot));
+    // MCX: the nearest ticked expiry's future (ADR-0031).
+    out.spot = static_cast<std::uint32_t>(
+        chain_spot_id(db, chain, out.expiries.empty() ? std::string_view{} : out.expiries.front()));
+    out.session_open = chain_session_open(chain);
     return out;
 }
 
@@ -297,7 +300,7 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                 }
                 const std::int64_t latest = last->begin()->second.start + 60;
                 const std::int64_t to = to_param ? floor_minute(*to_param) : latest;
-                const std::int64_t session_open = ist_midnight(to - 1) + kSessionOpen;
+                const std::int64_t session_open = ist_midnight(to - 1) + catalog->session_open;
                 // "Last N minutes" counts back from `to`, never before the open.
                 const std::int64_t from = from_param ? floor_minute(*from_param)
                                           : minutes_param
@@ -461,7 +464,7 @@ void register_oi_change_routes(Router& router, auth::AuthService& auth, storage:
                                    "no bars for this chain yet");
                 }
                 const std::int64_t latest = last->begin()->second.start + 60;
-                const std::int64_t session_open = ist_midnight(latest - 1) + kSessionOpen;
+                const std::int64_t session_open = ist_midnight(latest - 1) + catalog->session_open;
                 const auto minute_of = [&](const bars::Bar& bar) {
                     return (bar.start + 60 - session_open) / 60;
                 };

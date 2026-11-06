@@ -5,7 +5,7 @@
 // The strike rows come from GET /chains/{underlying}/{expiry}; values stream as quotes for the
 // rows' instruments, and the summary through the stream's "chain" mode.
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { api, errorMessage, isSessionLost } from '../api/client';
@@ -38,6 +38,16 @@ function fixed(value: number | undefined, digits: number): string {
 function directionOf(value: number | undefined): string {
   return value === undefined || value === 0 ? '' : value > 0 ? 'up' : 'down';
 }
+
+// Phones show OI · LTP · Strike · LTP · OI (as Sensibull's app): the change columns are
+// hidden by CSS (.chain-extra), and the side headers must span only what is shown.
+const PHONE = '(max-width: 560px)';
+const subscribePhone = (change: () => void) => {
+  const query = window.matchMedia(PHONE);
+  query.addEventListener('change', change);
+  return () => query.removeEventListener('change', change);
+};
+const isPhone = () => window.matchMedia(PHONE).matches;
 
 export function OptionChain() {
   const { sessionEnded } = useAuth();
@@ -94,13 +104,17 @@ export function OptionChain() {
   const summary = useChainSummary(spotId, expiry ?? '') ?? shown?.summary ?? undefined;
   const maxOi = useMaxOi(ids);
 
-  // Bring the ATM row to the middle of the table when a chain loads.
+  // Bring the ATM row to the middle of the table when a chain loads, and the strike column
+  // to the middle when the table is wider than the screen (Greeks on a phone).
   const card = useRef<HTMLElement>(null);
+  const phone = useSyncExternalStore(subscribePhone, isPhone);
   useEffect(() => {
     const box = card.current;
     const row = box?.querySelector<HTMLElement>('tr.atm');
     if (box && row) box.scrollTop = row.offsetTop - box.clientHeight / 2 + row.clientHeight / 2;
-  }, [shown]);
+    const strike = box?.querySelector<HTMLElement>('th.chain-strike');
+    if (box && strike) box.scrollLeft = strike.offsetLeft - box.clientWidth / 2 + strike.clientWidth / 2;
+  }, [shown, view, phone]);
 
   // Re-centre when the engine's ATM drifts away from the middle of the loaded rows.
   const atm = summary?.atm_strike ?? shown?.atm_strike;
@@ -219,21 +233,21 @@ export function OptionChain() {
               <table className={`chain-table ${view}`}>
                 <thead>
                   <tr className="chain-sides">
-                    <th colSpan={view === 'oi' ? 4 : 6}>Calls</th>
+                    <th colSpan={view === 'oi' ? (phone ? 2 : 4) : 6}>Calls</th>
                     <th />
-                    <th colSpan={view === 'oi' ? 4 : 6}>Puts</th>
+                    <th colSpan={view === 'oi' ? (phone ? 2 : 4) : 6}>Puts</th>
                   </tr>
                   <tr>
                     {view === 'oi' ? (
                       <>
                         <th>OI</th>
-                        <th>OI chg</th>
-                        <th>Chg %</th>
+                        <th className="chain-extra">OI chg</th>
+                        <th className="chain-extra">Chg %</th>
                         <th>LTP</th>
                         <th className="chain-strike">Strike</th>
                         <th>LTP</th>
-                        <th>Chg %</th>
-                        <th>OI chg</th>
+                        <th className="chain-extra">Chg %</th>
+                        <th className="chain-extra">OI chg</th>
                         <th>OI</th>
                       </>
                     ) : (
@@ -341,10 +355,10 @@ const StrikeRow = memo(function StrikeRow({ row, view, atm, callItm, putItm, max
           <span className={`chain-oi-bar ${mirror ? 'put' : 'call'}`} style={{ width: `${width}%` }} />
           <span className="chain-oi-value">{formatLakhs(quote?.oi)}</span>
         </td>,
-        <td key="oichg" className={`${cls} ${directionOf(quote?.oi_change)}`}>
+        <td key="oichg" className={`${cls} chain-extra ${directionOf(quote?.oi_change)}`}>
           {signed(formatLakhs(quote?.oi_change), quote?.oi_change)}
         </td>,
-        <td key="chg" className={`${cls} ${directionOf(quote?.change_pct)}`}>
+        <td key="chg" className={`${cls} chain-extra ${directionOf(quote?.change_pct)}`}>
           {quote?.change_pct === undefined ? '—' : signed(quote.change_pct.toFixed(2), quote.change_pct)}
         </td>,
         ltp,

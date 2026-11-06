@@ -1,5 +1,6 @@
 // One instrument in the watchlist: symbol, change, % and LTP (Kite's row), hover actions
-// (depth, open, remove), drag handle, and the inline depth panel when expanded.
+// (paper buy / sell for F&O, depth, open, remove), drag handle, and the inline depth panel
+// when expanded.
 // The row is a drop target for the panel's pointer drag (data-drop / data-group / data-id).
 
 import type { PointerEvent } from 'react';
@@ -9,6 +10,7 @@ import { useQuote } from '../stream/useQuotes';
 import { formatPrice, instrumentTitle } from '../watchlists/format';
 import { changeOf, useDisplaySettings } from '../watchlists/settings';
 import { MarketDepth } from './MarketDepth';
+import { useOrderTicket } from '../paper/OrderTicket';
 
 const KIND_TAG: Record<WatchlistItem['kind'], string> = { IDX: 'INDEX', EQ: '', FUT: '', OPT: '' };
 
@@ -28,6 +30,9 @@ export function WatchlistRow(props: Props) {
   const { item, open, expanded, dragging } = props;
   const quote = useQuote(item.instrument_id);
   const settings = useDisplaySettings();
+  const openTicket = useOrderTicket();
+  // Paper trading v1: futures and options (ADR-0029).
+  const tradable = (item.kind === 'FUT' || item.kind === 'OPT') && item.listed;
   const change = changeOf(quote, settings.changeFrom);
   const direction = change === undefined || change.change === 0 ? '' : change.change > 0 ? 'up' : 'down';
   const title = instrumentTitle(item);
@@ -87,6 +92,28 @@ export function WatchlistRow(props: Props) {
           </span>
         </span>
         <span className="wl-actions" onClick={(e) => e.stopPropagation()}>
+          {tradable && (
+            <>
+              <button
+                type="button"
+                className="trade-btn buy"
+                title="Buy (paper)"
+                aria-label={`Buy ${title} (paper)`}
+                onClick={() => openTicket({ instrument: item, side: 'BUY' })}
+              >
+                B
+              </button>
+              <button
+                type="button"
+                className="trade-btn sell"
+                title="Sell (paper)"
+                aria-label={`Sell ${title} (paper)`}
+                onClick={() => openTicket({ instrument: item, side: 'SELL' })}
+              >
+                S
+              </button>
+            </>
+          )}
           <button
             type="button"
             className={`icon-btn ${expanded ? 'active' : ''}`}

@@ -1,5 +1,5 @@
 // Admin: one user — summary, sessions (with force sign-out), live streams, the sign-in /
-// sign-out timeline and 30 days of traffic (ADR-0019).
+// sign-out timeline and 30 days of traffic (ADR-0019), and a link to their paper trading.
 
 import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -50,6 +50,7 @@ export function AdminUserDetail() {
         <span className="muted">
           {user.email || '—'} · {user.phone || '—'} · member since {istTime(user.created_at)}
         </span>
+        <Link to={`/admin/users/${id}/paper`}>Paper trading →</Link>
       </header>
 
       <section className="admin-cards">
@@ -81,32 +82,34 @@ export function AdminUserDetail() {
         {sessions.length === 0 ? (
           <p className="muted">No active sessions.</p>
         ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Device</th>
-                <th>IP</th>
-                <th>Signed in</th>
-                <th>Last seen</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => (
-                <tr key={s.id}>
-                  <td title={s.user_agent}>{device(s.user_agent)}</td>
-                  <td>{s.ip || '—'}</td>
-                  <td>{istTime(s.created_at)}</td>
-                  <td title={istTime(s.last_seen_at)}>{ago(s.last_seen_at)}</td>
-                  <td className="num">
-                    <button type="button" className="secondary small" onClick={() => void revoke(s.id, device(s.user_agent))}>
-                      Sign out
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>IP</th>
+                  <th>Signed in</th>
+                  <th>Last seen</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr key={s.id}>
+                    <td title={s.user_agent}>{device(s.user_agent)}</td>
+                    <td>{s.ip || '—'}</td>
+                    <td>{istTime(s.created_at)}</td>
+                    <td title={istTime(s.last_seen_at)}>{ago(s.last_seen_at)}</td>
+                    <td className="num">
+                      <button type="button" className="secondary small" onClick={() => void revoke(s.id, device(s.user_agent))}>
+                        Sign out
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {connections.length > 0 && (
           <p className="muted small">

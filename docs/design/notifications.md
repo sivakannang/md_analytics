@@ -77,7 +77,7 @@ signal a no-op instead of a second message.
 | Type | Source | Available |
 |---|---|---|
 | Kite session rejected (`system.session_expired`) | `mda-feedd` (WebSocket or auto-backfill) | N6: once per IST day, 07:00–16:00 |
-| Morning login reminder (`system.login_reminder`) | `mda-notifier`, from the session file's date | N6: Mon–Fri 08:45–15:30 if `mda-login` hasn't run today |
+| Morning login reminder (`system.login_reminder`) | `mda-notifier`, from the session file's date | N6: Mon–Fri 07:30–15:30 if `mda-login` hasn't run today |
 | Feed down / back (`system.feed_down`, `feed_restored`) | `mda-feedd` WebSocket state | N6: not connected for 60 s, Mon–Fri 09:00–15:45; "back" once after a down alert |
 | Verification codes, password changed | `mda-gateway` | With N1/N2 |
 | OI buildup change on a watchlist instrument | `mda-engine` | After engine + watchlists |

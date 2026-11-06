@@ -28,7 +28,7 @@ namespace mda::gateway {
 /// A chain the feed keeps subscribed (from config feed.chains).
 struct ChainInfo {
     std::string underlying;  ///< e.g. NIFTY
-    std::string spot;        ///< contract key, e.g. NSE|CASH|IDX|NIFTY 50
+    std::string spot;        ///< contract key, e.g. NSE|CASH|IDX|NIFTY 50; "" = each expiry's future (MCX)
     int expiries = 1;
 };
 
@@ -58,6 +58,15 @@ private:
 
 /// The catalog id of a chain's spot (contract key "NSE|CASH|IDX|NIFTY 50"); 0 if unknown.
 [[nodiscard]] std::int64_t chain_spot_id(storage::Database& db, std::string_view key_text);
+
+/// The id an expiry's chain is priced on: the configured spot, or for a chain without one
+/// (MCX, ADR-0031) the nearest listed future of the underlying expiring on or after `expiry`
+/// (YYYY-MM-DD). 0 if unknown.
+[[nodiscard]] std::int64_t chain_spot_id(storage::Database& db, const ChainInfo& chain,
+                                         std::string_view expiry);
+
+/// Seconds after IST midnight that the chain's session opens: 09:15, MCX 09:00.
+[[nodiscard]] std::int64_t chain_session_open(const ChainInfo& chain);
 
 [[nodiscard]] boost::json::object chain_summary_json(const options::ChainSummary& summary);
 

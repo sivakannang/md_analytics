@@ -25,7 +25,8 @@ first, then small tested units.
 
 **Markets**
 - Past-day backfills only after market hours: NSE/BSE cash 09:15–15:30, F&O until
-  15:40 IST.
+  15:40 IST; MCX 09:00 to 23:30, or 23:55 while the US is off daylight saving (ADR-0031).
+  The market processes run until 00:05.
 - Don't restart `mda-engine` during market hours without saying so: its first minute is
   skipped and its analytics state is rebuilt.
 
@@ -40,8 +41,8 @@ first, then small tested units.
 
 | Path | What |
 |---|---|
-| `engine/libs/*` | C++ libraries: core, messages, bus, kite, instruments, catalog, storage, appdb, auth, admin, watchlists, subscriptions, bars, options, quotestore, notify, journal, sysmon, gateway, runtime |
-| `engine/apps/*` | Processes: mda-feedd (Kite WS → `md` bus), mda-engine (bars + option analytics → `an` bus, `data/bars.db`), mda-gateway (REST + WS stream, :8090), mda-notifier (email + Telegram), mda-recorder (tick journal), mda-login, mda-backfill; `tools/` holds mda-tail, mda-busctl, mda-useradm and mda-kite-check |
+| `engine/libs/*` | C++ libraries: core, messages, bus, kite, instruments, catalog, storage, appdb, auth, admin, watchlists, subscriptions, bars, options, signals, quotestore, notify, journal, sysmon, gateway, runtime |
+| `engine/apps/*` | Processes: mda-feedd (Kite WS → `md` bus), mda-engine (bars + option analytics → `an` bus, `data/bars.db`), mda-signald (index signals → `sig` bus, `data/signals.db`), mda-broker (paper trading: `ord-*` → `exec` buses, `data/paper.db`), mda-autotrader (paper trading on signals → `ord-auto`, `data/autotrader.db`), mda-gateway (REST + WS stream, :8090), mda-notifier (email + Telegram), mda-recorder (tick journal), mda-login, mda-backfill; `tools/` holds mda-tail, mda-busctl, mda-useradm, mda-kite-check, mda-backtest and mda-paperctl |
 | `web/` | React 19 + Vite + TS. `src/api/client.ts` (REST), `src/stream/quoteStream.ts` (one WS; modes quote, depth, bars, chain), `src/pages`, `src/components`, `src/chart` (lightweight-charts 5.1) |
 | `config/mda.yaml` | All runtime config (buses, feed chains, engine, gateway) |
 | `data/` | Git-ignored: `app.db`, `bars.db`, `last_quotes.db` (ADR-0024), `journal/` (ADR-0026), `instruments/`, `research/` |
@@ -74,9 +75,9 @@ npm --prefix web run typecheck
 - Fixed-point `core::Price` (`from_raw`, `kScale`) and nanosecond `core::Timestamp`.
 - Bus messages are fixed-layout with `static_assert` sizes, registered in
   `MessageTraits` (ADR-0010).
-- `md` has a single writer (mda-feedd); `an` is written by mda-engine. Message types:
+- `md` has a single writer (mda-feedd); `an` is written by mda-engine; `sig` by mda-signald; `exec` by mda-broker; `ord-gw` by mda-gateway; `ord-auto` by mda-autotrader. Message types:
   RawFrame 1, MarketSnapshot 2, DepthSnapshot 3, FeedStatus 4, CircuitLimits 5, Bar 6,
-  OptionAnalytics 7, ChainSummary 8.
+  OptionAnalytics 7, ChainSummary 8, MarketSignal 9, OrderRequest 10, ExecutionReport 11.
 
 **Time and SQLite**
 - Exchange time is UTC on the wire. IST is +19800 s.
@@ -123,7 +124,7 @@ npm --prefix web run typecheck
 **Done**
 - **Accounts and watchlists:** auth, watchlists with groups and drag reorder, live quotes
   with depth and circuits.
-- **Admin:** dashboard.
+- **Admin:** dashboard; each user's paper trading, read-only (Admin → Users → user → Paper trading).
 - **Market data:** dynamic option subscriptions; 1-minute bars (live + backfill); charts
   (price, volume, OI).
 - **Options:** analytics (IV, Greeks, OI change, buildup, PCR, max pain); the option chain
@@ -145,9 +146,42 @@ npm --prefix web run typecheck
   (ADR-0016, `docs/design/notifications.md`).
 
 **Next**
+- **Market signals** (ADR-0028, `docs/design/signals.md`): direction bias for the indices
+  in a new process, mda-signald; units SG1–SG6; SG1 (`libs/signals`) and SG2 (mda-signald, `sig` bus,
+  `signals.db`), SG3 (outcomes, track record) and SG4 (REST `/signals`, stream mode
+  `signals`) and SG5 (dashboard badges, instrument page Signals tab) done, checked by
+  replaying 2026-10-23. A 10-day `mda-backtest` (§12) found
+  no broken factor and no edge yet. Candidate factors at weight 0 (`signals.md` §13): F8 India VIX change
+  done (SG7; 20-day backtest corr +0.12 NIFTY, +0.11 SENSEX) and F9 signed volume of the
+  future (SG8; signald reads `md`; 23 Oct replay corr +0.16 NIFTY) done. SG6 (calibration, a second strategy) after ≥ 20 live
+  trading days; the recorder is on (30 days kept, ~2.3 GB a day).
 - **OI views:** past days (OC4), several days in OI over time (MS2); Sensibull's other OI
   tabs and other OI chart ideas are in memory (not started).
 - **Notifications N7:** alert rules (OI buildup, price/OI thresholds), quiet hours.
-- **Trading terminal:** ADR first (read-only account views, then paper trading).
+- **Paper trading** (ADR-0029, `docs/design/paper-trading.md`): mda-broker (OMS, pre-trade
+  risk, paper venue on the live book), `paper.db`, order ticket and positions; units PT1–PT7;
+  PT1 (`libs/oms`: orders, positions, ledger, Zerodha's charges) and PT2 (paper
+  venue fill model, `libs/rms`) and PT3 (`libs/broker`, mda-broker, `paper.db`, buses
+  `ord-gw`/`ord-auto`/`exec`, mda-paperctl) and PT4 (REST `/paper/*`, stream mode `orders`) and PT5 (web: order ticket from B / S,
+  Paper page with positions, orders, trades, funds, kill switch) done; PT6 (close of day: MIS
+  square-off 15:25, DAY orders expire 15:30, expiry settlement, daily P&L summary 15:35)
+  done. 
+- **Auto trader** (ADR-0030, `docs/design/auto-trader.md`): mda-autotrader, strategy
+  follow-signal on the near-month future, resting stop at the broker, decisions in
+  `data/autotrader.db`; units AT1–AT4; AT1 (`libs/autotrade`) and AT2 (mda-autotrader, `autotrader.db`, recovery; replayed
+  with a restart) done.
+  AT3 (run metrics,
+  `GET /paper/auto`) and AT4 (Auto tab, AUTO / SYSTEM order labels, summary section) done:
+  the auto trader is complete. Option buying beside it (`follow-signal-options`, design §10):
+  AT5 (`OptionsRun`, `choose_atm`) and AT6 (process wiring, `held` on `/paper/auto`, Auto tab)
+  done, replayed on 2026-10-23. Live runs (user 1, all on since 2026-10-25):
+  `nifty-follow`, `nifty-options`, `sensex-follow`, `sensex-options` (SENSEX stops and
+  targets scaled ×3.2); the auto order rate is 30 a minute. Hardening done 2026-10-27: SQLite's busy timeout is set before WAL (fresh files opened together no
+  longer fail), and replays score the same at any speed (closing chain summaries, `signals.md` §14).
+- **MCX commodities** (ADR-0031): MX1 (import, quantities in units, contract keys,
+  watchlists and charts), MX2 (hours per exchange in `instruments/session.hpp`; watchdog to
+  00:05), MX3 (chains on each expiry's future: CRUDEOIL, NATURALGAS, GOLD, SILVER) and MX4
+  (paper trading: per-commodity margins, MCX charges, depth in units, close of day at the
+  MCX close) done 2026-10-27.
 - **Session phases S1–S3** (ADR-0023). Run `tools/research/phase_capture.py` on a trading
   day first.

@@ -17,6 +17,18 @@ bus:
   an:                      # analytics bus: mda-engine -> gateway (bars, option analytics)
     name: an
     capacity_mb: 64
+  sig:                     # signals bus: mda-signald -> gateway (ADR-0028)
+    name: sig
+    capacity_mb: 4
+  ord_gw:                  # orders: mda-gateway -> mda-broker (ADR-0029)
+    name: ord-gw
+    capacity_mb: 4
+  ord_auto:                # orders: auto trader -> mda-broker
+    name: ord-auto
+    capacity_mb: 4
+  exec:                    # execution reports: mda-broker -> gateway, auto trader
+    name: exec
+    capacity_mb: 8
 
 kite:
   session_file: secrets/kite_session.json        # written daily by mda-login
@@ -38,12 +50,28 @@ feed:                      # mda-feedd
     - NSE|CASH|IDX|NIFTY 50
     - NSE|CASH|IDX|NIFTY BANK
     - BSE|CASH|IDX|SENSEX
+    - NSE|CASH|IDX|NIFTY FIN SERVICE   # sector indices on the dashboard
+    - NSE|CASH|IDX|NIFTY AUTO
+    - NSE|CASH|IDX|NIFTY IT
+    - NSE|CASH|IDX|NIFTY PHARMA
+    - NSE|CASH|IDX|NIFTY FMCG
+    - NSE|CASH|IDX|NIFTY CAPITAL MKT
+    - NSE|CASH|IDX|INDIA VIX           # signal factor F8 (docs/design/signals.md §13)
+    - MCX|CASH|IDX|MCXCOMDEX           # MCX's composite commodity index
     - NSE|CASH|EQ|RELIANCE
     - NSE|CASH|EQ|HDFCBANK
     - NSE|CASH|EQ|INFY
   futures_of:              # all listed futures of these F&O underlyings
     - NIFTY
     - BANKNIFTY
+    - SENSEX               # near-month futures feed the market signals (docs/design/signals.md)
+    - BANKEX
+    - CRUDEOIL             # MCX (ADR-0031): quantities in units, 09:00 to 23:30 / 23:55
+    - CRUDEOILM
+    - GOLD
+    - GOLDM
+    - SILVER
+    - SILVERM
   # Option chains kept subscribed around ATM (ADR-0020): nearest `expiries`, ATM ± `strikes`
   # (+5 buffer strikes; re-centred when ATM moves more than 5 strikes).
   chains:
@@ -51,6 +79,10 @@ feed:                      # mda-feedd
     - { underlying: BANKNIFTY, spot: "NSE|CASH|IDX|NIFTY BANK", expiries: 1, strikes: 20 }
     - { underlying: SENSEX,    spot: "BSE|CASH|IDX|SENSEX",     expiries: 2, strikes: 20 }
     - { underlying: BANKEX,    spot: "BSE|CASH|IDX|BANKEX",     expiries: 1, strikes: 20 }
+    # MCX (ADR-0031): no spot, each expiry's options are on their own future.
+    - { underlying: CRUDEOIL,   expiries: 2, strikes: 20 }
+    - { underlying: GOLD,       expiries: 1, strikes: 15 }
+    - { underlying: SILVER,     expiries: 1, strikes: 15 }
 
 engine:                    # mda-engine
   bars_db: data/bars.db    # 1-minute bars (ADR-0021)
@@ -68,6 +100,113 @@ notifier:                  # mda-notifier (ADR-0016, docs/design/notifications.m
   interval_seconds: 2      # how often the outbox is checked
 
 recorder:                  # mda-recorder: the tick journal (ADR-0026)
-  enabled: false           # false: mda-recorder exits at once and nothing is recorded
+  enabled: true            # false: mda-recorder exits at once and nothing is recorded
   journal_dir: data/journal  # <IST date>/<HH>.mdj raw frames + that day's instruments.csv
-  keep_days: 90            # older day folders are deleted
+  keep_days: 30            # older day folders are deleted; ~2.3 GB per trading day (uncompressed)
+
+signals:                   # mda-signald: index direction signals (ADR-0028, docs/design/signals.md)
+  db: data/signals.db
+  underlyings: [NIFTY, SENSEX, BANKNIFTY, BANKEX]   # each needs a feed.chains entry
+  sectors:                 # breadth: share of these up on the day
+    - NSE|CASH|IDX|NIFTY FIN SERVICE
+    - NSE|CASH|IDX|NIFTY AUTO
+    - NSE|CASH|IDX|NIFTY IT
+    - NSE|CASH|IDX|NIFTY PHARMA
+    - NSE|CASH|IDX|NIFTY FMCG
+    - NSE|CASH|IDX|NIFTY CAPITAL MKT
+    - NSE|CASH|IDX|NIFTY BANK
+  vix: NSE|CASH|IDX|INDIA VIX  # F8, scored at weight 0 until calibration
+  flat_bp: 5               # outcomes within ±5 bp are flat: neither hit nor miss
+  strategies:
+    - { id: oi-bias-v1, horizon_min: 30, bullish: 25, bearish: -25 }
+
+paper:                     # mda-broker: paper trading (ADR-0029, docs/design/paper-trading.md)
+  db: data/paper.db
+  opening_cash: 5000000    # rupees per new account (₹50 L)
+  latency_ms: 100          # an order may act this long after it is accepted
+  overflow_ticks: 2        # a MARKET remainder beyond the 5 visible levels fills this many ticks worse
+  stale_after_ms: 5000     # no quote for this long: nothing fills, MARKET orders are rejected
+  futures_margin_percent: 12         # index futures
+  stock_futures_margin_percent: 20   # stock futures (Zerodha's SPAN + exposure is ~15-40%)
+  mis_square_off: "15:25"  # IST: MIS orders cancelled and MIS positions closed at market
+  daily_summary: "15:35"   # IST: each trader's paper P&L by Telegram / email (mda-notifier)
+  # Units per order (NSE/FAOP/76693 from 2026-10-05; BSE as of 2025-11-03). Check on revisions.
+  # MCX (ADR-0031), in units, not lots: an unofficial table of MCX's maximum lots per order
+  # (crude 100, gold 10, silver 10, natural gas 16, ...). Check against MCX's circulars.
+  freeze_quantity: { NIFTY: 3510, BANKNIFTY: 1440, FINNIFTY: 3240, MIDCPNIFTY: 5760, NIFTYNXT50: 1125, SENSEX: 1000, BANKEX: 900,
+                     CRUDEOIL: 10000, CRUDEOILM: 10000, GOLD: 1000, GOLDM: 1000, SILVER: 300, SILVERM: 250, NATURALGAS: 20000 }
+  # MCX futures margin, % of a lot's value: Kite's margin calculator on 2026-10-27, rounded up
+  # (tools/research/mcx_margin_probe.py). Rerun it when margins move.
+  mcx_margin_percent: { default: 10, CRUDEOIL: 32, CRUDEOILM: 32, NATURALGAS: 16, NATGASMINI: 16,
+                        SILVER: 14, SILVERM: 14, SILVERMIC: 14, CARDAMOM: 14, MENTHAOIL: 12 }
+
+autotrader:                # mda-autotrader: paper trading on signals (ADR-0030, docs/design/auto-trader.md)
+  db: data/autotrader.db
+  runs:
+    - id: nifty-follow     # tags its orders "auto:nifty-follow"
+      user: 1              # whose paper account (app.db user id)
+      strategy: follow-signal
+      signal: oi-bias-v1
+      underlying: NIFTY    # trades the near-month future
+      lots: 1
+      product: MIS
+      stop_points: 40      # a resting SL-M at the broker after each entry
+      target_points: 80
+      max_hold_min: 45
+      max_trades_per_day: 6
+      cooldown_min: 10
+      exit_score: 10
+      daily_loss_stop: 5000  # rupees after charges: no new entries below
+      enabled: true    # turned on by the owner on 2026-10-25
+    - id: nifty-options    # tags its orders "auto:nifty-opti" (the tag holds 15 characters)
+      user: 1
+      strategy: follow-signal-options  # buys the ATM call (Bullish) or put (Bearish), design §10
+      signal: oi-bias-v1
+      underlying: NIFTY    # nearest expiry after today, strike nearest the index
+      lots: 1
+      product: MIS
+      index_stop_points: 25     # NIFTY moves this far against: exit
+      premium_stop_percent: 30  # a resting SL at the broker this far below the entry premium
+      entry_slip_ticks: 2       # BUY LIMIT at the ask + 2 ticks; exits at the bid − 2, re-priced
+      entry_timeout_s: 10       # an entry not filled by then is cancelled
+      target_points: 40         # index points in favour
+      max_hold_min: 45
+      max_trades_per_day: 6
+      cooldown_min: 10
+      exit_score: 10
+      daily_loss_stop: 3000
+      enabled: true    # turned on by the owner on 2026-10-25
+    # SENSEX moves about 3.2x NIFTY's points: the point-based stops and targets scale with it.
+    - id: sensex-follow    # tags its orders "auto:sensex-fol"
+      user: 1
+      strategy: follow-signal
+      signal: oi-bias-v1
+      underlying: SENSEX   # trades the near-month future (BSE, lot 20)
+      lots: 1
+      product: MIS
+      stop_points: 130     # a resting SL-M at the broker after each entry
+      target_points: 260
+      max_hold_min: 45
+      max_trades_per_day: 6
+      cooldown_min: 10
+      exit_score: 10
+      daily_loss_stop: 5000
+      enabled: true        # turned on by the owner on 2026-10-25
+    - id: sensex-options   # tags its orders "auto:sensex-opt"
+      user: 1
+      strategy: follow-signal-options  # ATM call (Bullish) or put (Bearish), design §10
+      signal: oi-bias-v1
+      underlying: SENSEX   # nearest expiry after today, strike nearest the index
+      lots: 1
+      product: MIS
+      index_stop_points: 80     # SENSEX points against: exit
+      premium_stop_percent: 30
+      entry_slip_ticks: 2
+      entry_timeout_s: 10
+      target_points: 130        # SENSEX points in favour
+      max_hold_min: 45
+      max_trades_per_day: 6
+      cooldown_min: 10
+      exit_score: 10
+      daily_loss_stop: 3000
+      enabled: true        # turned on by the owner on 2026-10-25

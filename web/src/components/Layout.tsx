@@ -10,9 +10,11 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { currentTheme, setTheme } from '../theme';
 import { IndexStrip } from './IndexStrip';
 import { FeedBadge } from './FeedBadge';
 import { WatchlistPanel } from './WatchlistPanel';
+import { OrderTicketProvider } from '../paper/OrderTicket';
 
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 640;
@@ -44,6 +46,7 @@ export function Layout() {
   const { state, signOut } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [theme, setThemeState] = useState(currentTheme);
   const [width, setWidth] = useState(() => clampWidth(Number(load(WIDTH_KEY)) || DEFAULT_WIDTH));
   const [collapsed, setCollapsed] = useState(() => load(COLLAPSED_KEY) === '1');
   const dragging = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -99,6 +102,7 @@ export function Layout() {
   };
 
   return (
+    <OrderTicketProvider>
     <div className="app">
       <header className="appbar">
         <Link to="/" className="brand">
@@ -110,6 +114,9 @@ export function Layout() {
             Dashboard
           </NavLink>
           <NavLink to="/chain">Option chain</NavLink>
+          <NavLink to="/paper" title="Paper trading: simulated orders against the live market">
+            Paper
+          </NavLink>
           {state.status === 'signed-in' && state.user.role === 'admin' && (
             <NavLink to="/admin">Admin</NavLink>
           )}
@@ -118,6 +125,18 @@ export function Layout() {
         <FeedBadge />
         <div className="topbar-user">
           {state.status === 'signed-in' && <span>{state.user.username}</span>}
+          <button
+            type="button"
+            className="secondary"
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            onClick={() => {
+              const next = theme === 'dark' ? 'light' : 'dark';
+              setTheme(next);
+              setThemeState(next);
+            }}
+          >
+            {theme === 'dark' ? 'Light' : 'Dark'}
+          </button>
           <button type="button" className="secondary" onClick={handleSignOut}>
             Sign out
           </button>
@@ -170,10 +189,12 @@ export function Layout() {
             }}
           />
         )}
-        <main className="pane">
+        {/* Charts read the theme's colours when they mount, so remount the page on a switch. */}
+        <main className="pane" key={theme}>
           <Outlet />
         </main>
       </div>
     </div>
+    </OrderTicketProvider>
   );
 }

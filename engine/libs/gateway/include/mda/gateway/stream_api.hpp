@@ -12,8 +12,10 @@
 #include <mda/auth/auth_service.hpp>
 #include <mda/gateway/chain_api.hpp>
 #include <mda/gateway/live_bars.hpp>
+#include <mda/gateway/paper_api.hpp>
 #include <mda/gateway/quote_cache.hpp>
 #include <mda/gateway/server.hpp>
+#include <mda/gateway/signals_api.hpp>
 #include <mda/gateway/usage_tracker.hpp>
 
 namespace mda::gateway {
@@ -34,6 +36,11 @@ struct StreamOptions {
     /// Option-chain summaries ("chain" mode, by spot instrument); optional.
     const ChainSummaries* chains = nullptr;
     std::size_t max_bars = 10;  ///< bar subscriptions per connection
+    /// Market signals ("signals" mode, by spot instrument; ADR-0028); optional.
+    const LiveSignals* signals = nullptr;
+    std::size_t max_signals = 10;  ///< signal subscriptions per connection
+    /// The user's paper order updates ("orders" mode, ADR-0029); optional.
+    const OrderUpdates* orders = nullptr;
 };
 
 /// Serves the stream on `server`. Authentication runs on `db_executor` like the REST

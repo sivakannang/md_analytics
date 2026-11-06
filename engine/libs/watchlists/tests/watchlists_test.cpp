@@ -182,5 +182,43 @@ TEST_F(WatchlistsTest, SetOrderRearrangesGroupsAndItems) {
               Code::NotFound);  // not hers
 }
 
+// Expired contracts leave every list the day after expiry (as on Kite); equities stay.
+TEST(WatchlistsExpiry, ContractsExpiredBeforeTodayAreRemoved) {
+    auto db = storage::Database::open_in_memory().value();
+    ASSERT_TRUE(db.migrate(appdb::migrations()).has_value());
+    ASSERT_TRUE(db.exec("INSERT INTO users (username, password_hash, created_at, password_changed_at) "
+                        "VALUES ('asha', 'x', 0, 0)"));
+    instruments::InstrumentRegistry registry;
+    const auto add = [&](instruments::ContractKey key, const char* symbol) {
+        const auto id = registry.assign(key);
+        auto* instrument = registry.get(id);
+        instrument->trading_symbol = symbol;
+        instrument->name = symbol;
+        instrument->lot_size = core::Quantity(1);
+        instrument->listed_today = true;
+        return id;
+    };
+    const auto future = [](std::chrono::year_month_day expiry) {
+        return instruments::ContractKey{.exchange = instruments::Exchange::Nse,
+                                        .market = instruments::Market::Fo,
+                                        .kind = instruments::Kind::Future,
+                                        .underlying = "NIFTY",
+                                        .expiry = expiry};
+    };
+    add({.exchange = instruments::Exchange::Nse, .market = instruments::Market::Cash,
+         .kind = instruments::Kind::Equity, .underlying = "INFY"}, "INFY");
+    add(future(2026y / 10 / 27), "NIFTY26OCTFUT");
+    add(future(2026y / 10 / 28), "NIFTY26OCT28FUT");
+    ASSERT_TRUE(catalog::sync(db, registry, 0).has_value());
+    WatchlistService lists(db);
+    const auto list = lists.list(1, 0).value().at(0);
+    for (const std::int64_t id : {1, 2, 3}) {
+        ASSERT_TRUE(lists.add_item(1, list.id, id, 0).has_value());
+    }
+    EXPECT_EQ(remove_expired(db, "2026-10-28"), 1u);  // the 27 Oct future; today's stays
+    EXPECT_EQ(lists.list(1, 0).value().at(0).items.size(), 2u);
+    EXPECT_EQ(remove_expired(db, "2026-10-28"), 0u);
+}
+
 }  // namespace
 }  // namespace mda::watchlists

@@ -7,6 +7,7 @@
 // all SQLite access) and one bus reader (market data -> quote cache).
 // Stops cleanly on Ctrl+C / SIGTERM.
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
 #include <string>
@@ -35,8 +36,10 @@
 #include <mda/gateway/live_bars.hpp>
 #include <mda/gateway/notifications_api.hpp>
 #include <mda/gateway/oi_change_api.hpp>
+#include <mda/gateway/paper_api.hpp>
 #include <mda/gateway/quote_cache.hpp>
 #include <mda/gateway/server.hpp>
+#include <mda/gateway/signals_api.hpp>
 #include <mda/gateway/static_site.hpp>
 #include <mda/gateway/stream_api.hpp>
 #include <mda/gateway/system_api.hpp>
@@ -46,6 +49,7 @@
 #include <mda/gateway/watchlist_api.hpp>
 #include <mda/runtime/config.hpp>
 #include <mda/runtime/logging.hpp>
+#include <mda/signals/signal_store.hpp>
 #include <mda/storage/database.hpp>
 
 namespace {
@@ -87,6 +91,7 @@ asio::awaitable<void> every(std::chrono::steady_clock::duration period,
         work();
     }
 }
+
 
 int run(const runtime::Config& config) {
     const auto& settings = config.gateway;
@@ -168,7 +173,8 @@ int run(const runtime::Config& config) {
                                            .last_quotes_db = config.engine.last_quotes_db,
                                            .journal_dir = config.recorder.journal_dir,
                                            .recorder_enabled = config.recorder.enabled,
-                                           .buses = {config.md_bus.name, config.an_bus.name}});
+                                           .buses = {config.md_bus.name, config.an_bus.name,
+                                                     config.sig_bus.name, config.exec_bus.name}});
     gateway::register_system_routes(router, auth, *db, auth_worker.get_executor(), system_monitor);
     // The built website on the same origin (ADR-0027): any non-/api path no route matches.
     std::optional<gateway::StaticSite> site;
@@ -195,11 +201,95 @@ int run(const runtime::Config& config) {
                                        bars_worker.get_executor(), chain_info);
     gateway::register_chain_routes(router, auth, *db, auth_worker.get_executor(), quotes,
                                    chain_summaries, std::move(chain_info));
+    // Market signals (ADR-0028): mda-signald's signals.db, read on the bars thread.
+    auto signal_store = signals::SignalStore::open(config.signals.db);
+    if (!signal_store) {
+        spdlog::error("signals: cannot open {}: {}", config.signals.db.string(),
+                      signal_store.error().message);
+        return 1;
+    }
+    std::vector<gateway::SignalIndex> signal_indices;
+    for (const auto& underlying : config.signals.underlyings) {
+        const auto chain = std::ranges::find(config.feed.chains, underlying,
+                                             &runtime::ChainConfig::underlying);
+        if (chain != config.feed.chains.end()) {
+            signal_indices.push_back({.underlying = underlying, .spot = chain->spot});
+        }
+    }
+    std::vector<gateway::SignalStrategy> signal_strategies;
+    for (const auto& strategy : config.signals.strategies) {
+        signal_strategies.push_back({.id = strategy.id,
+                                     .horizon_min = strategy.horizon_min,
+                                     .bullish = strategy.bullish,
+                                     .bearish = strategy.bearish});
+    }
+    gateway::register_signal_routes(router, auth, *db, auth_worker.get_executor(), *signal_store,
+                                    bars_worker.get_executor(), std::move(signal_indices),
+                                    std::move(signal_strategies));
+    gateway::LiveSignals live_signals;
+    // Paper trading (ADR-0029): orders out on ord-gw, reports in from exec, paper.db read on
+    // the bars thread.
+    auto paper_store = broker::PaperStore::open(config.paper.db);
+    if (!paper_store) {
+        spdlog::error("paper: cannot open {}: {}", config.paper.db.string(), paper_store.error().message);
+        return 1;
+    }
+    const auto order_sender = gateway::OrderSender::open(config.ord_gw_bus.name,
+                                                         config.ord_gw_bus.capacity_mb * 1024 * 1024);
+    if (!order_sender) {
+        return 1;
+    }
+    gateway::OrderUpdates order_updates;
+    // The auto trader's record (ADR-0030), for GET /paper/auto.
+    auto auto_decisions = autotrade::DecisionStore::open(config.autotrader.db);
+    if (!auto_decisions) {
+        spdlog::error("autotrader: cannot open {}: {}", config.autotrader.db.string(), auto_decisions.error().message);
+        return 1;
+    }
+    std::vector<gateway::AutoRunInfo> auto_runs;
+    for (const auto& r : config.autotrader.runs) {
+        boost::json::object run_settings{{"lots", r.lots},
+                              {"product", r.product},
+                              {"stop_points", r.stop_points},
+                              {"target_points", r.target_points},
+                              {"max_hold_min", r.max_hold_min},
+                              {"max_trades_per_day", r.max_trades_per_day},
+                              {"cooldown_min", r.cooldown_min},
+                              {"exit_score", r.exit_score},
+                              {"daily_loss_stop", r.daily_loss_stop}};
+        if (r.strategy == "follow-signal-options") {
+            run_settings.erase("stop_points");  // options exits use the index stop and the premium SL
+            run_settings["index_stop_points"] = r.index_stop_points;
+            run_settings["premium_stop_percent"] = r.premium_stop_percent;
+            run_settings["entry_slip_ticks"] = r.entry_slip_ticks;
+            run_settings["entry_timeout_s"] = r.entry_timeout_s;
+        }
+        auto_runs.push_back({.id = r.id,
+                             .user = r.user,
+                             .strategy = r.strategy,
+                             .signal = r.signal,
+                             .underlying = r.underlying,
+                             .enabled = r.enabled,
+                             .settings = std::move(run_settings)});
+    }
+    gateway::register_auto_routes(router, auth, auth_worker.get_executor(), *paper_store, *auto_decisions,
+                                  bars_worker.get_executor(), std::move(auto_runs));
+    gateway::register_paper_routes(
+        router, auth, *db, auth_worker.get_executor(), *paper_store, bars_worker.get_executor(), *order_sender,
+        order_updates, quotes,
+        {.opening_cash = config.paper.opening_cash * 100,
+         .futures_margin = static_cast<oms::Ppb>(config.paper.futures_margin_percent * 10'000'000.0),
+         .stock_futures_margin = static_cast<oms::Ppb>(config.paper.stock_futures_margin_percent * 10'000'000.0),
+         .freeze_quantity = config.paper.freeze_quantity,
+         .mcx_margins = broker::McxMargins::from_percent(config.paper.mcx_margin_percent,
+                                                         config.paper.mcx_default_margin_percent)});
     gateway::register_stream(server, auth, auth_worker.get_executor(), quotes,
                              {.publish_interval = settings.publish_interval,
                               .usage = &usage,
                               .bars = &live_bars,
-                              .chains = &chain_summaries});
+                              .chains = &chain_summaries,
+                              .signals = &live_signals,
+                              .orders = &order_updates});
     server.on_response([&usage](const gateway::Request& request, std::size_t bytes) {
         usage.meter_http(request, bytes);
     });
@@ -215,6 +305,8 @@ int run(const runtime::Config& config) {
     gateway::BusFeed bus_feed(quotes, {.bus_name = config.md_bus.name, .metrics = &feed_metrics});
     gateway::AnalyticsFeed analytics_feed(live_bars, quotes, chain_summaries, config.an_bus.name,
                                           &feed_metrics);
+    gateway::SignalFeed signal_feed(live_signals, config.sig_bus.name);
+    gateway::ExecFeed exec_feed(order_updates, config.exec_bus.name);
 
     boost::system::error_code ec;
     const auto address = asio::ip::make_address(host, ec);

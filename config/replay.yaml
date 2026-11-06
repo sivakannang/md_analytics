@@ -3,6 +3,7 @@
 #   build/release/engine/apps/mda-replayer --config config/replay.yaml --date 2026-10-23 --speed 10
 #   build/release/engine/apps/mda-engine   --config config/replay.yaml
 #   build/release/engine/apps/mda-gateway  --config config/replay.yaml
+#   build/release/engine/apps/mda-signald  --config config/replay.yaml
 # The website for it: .claude/launch.json "web-replay" (http://localhost:5175).
 
 logging:
@@ -20,6 +21,18 @@ bus:
   an:
     name: an-replay
     capacity_mb: 64
+  sig:
+    name: sig-replay
+    capacity_mb: 4
+  ord_gw:
+    name: ord-gw-replay
+    capacity_mb: 4
+  ord_auto:
+    name: ord-auto-replay
+    capacity_mb: 4
+  exec:
+    name: exec-replay
+    capacity_mb: 8
 
 feed:                      # used by the engine's chain analytics
   chains:
@@ -39,3 +52,50 @@ gateway:
 recorder:
   enabled: false           # never record a replay
   journal_dir: data/journal  # read by the replayer
+
+signals:                   # mda-signald: index direction signals (ADR-0028, docs/design/signals.md)
+  db: data/replay/signals.db
+  underlyings: [NIFTY, SENSEX, BANKNIFTY, BANKEX]   # each needs a feed.chains entry
+  sectors:                 # breadth: share of these up on the day
+    - NSE|CASH|IDX|NIFTY FIN SERVICE
+    - NSE|CASH|IDX|NIFTY AUTO
+    - NSE|CASH|IDX|NIFTY IT
+    - NSE|CASH|IDX|NIFTY PHARMA
+    - NSE|CASH|IDX|NIFTY FMCG
+    - NSE|CASH|IDX|NIFTY CAPITAL MKT
+    - NSE|CASH|IDX|NIFTY BANK
+  vix: NSE|CASH|IDX|INDIA VIX
+  flat_bp: 5               # outcomes within ±5 bp are flat: neither hit nor miss
+  strategies:
+    - { id: oi-bias-v1, horizon_min: 30, bullish: 25, bearish: -25 }
+
+paper:                     # mda-broker: paper trading (ADR-0029, docs/design/paper-trading.md)
+  db: data/replay/paper.db
+  opening_cash: 1000000    # rupees per new account
+  latency_ms: 100          # an order may act this long after it is accepted
+  overflow_ticks: 2        # a MARKET remainder beyond the 5 visible levels fills this many ticks worse
+  stale_after_ms: 5000     # no quote for this long: nothing fills, MARKET orders are rejected
+  futures_margin_percent: 12
+  stock_futures_margin_percent: 20
+  mis_square_off: "15:25"  # IST: MIS orders cancelled and MIS positions closed at market
+  daily_summary: "15:35"   # IST: each trader's paper P&L by Telegram / email (mda-notifier)
+  freeze_quantity: { NIFTY: 3510, BANKNIFTY: 1440, FINNIFTY: 3240, MIDCPNIFTY: 5760, NIFTYNXT50: 1125, SENSEX: 1000, BANKEX: 900 }   # as config/mda.yaml
+
+autotrader:                # mda-autotrader: paper trading on signals (ADR-0030, docs/design/auto-trader.md)
+  db: data/replay/autotrader.db
+  runs:
+    - id: nifty-follow     # tags its orders "auto:nifty-follow"
+      user: 1              # whose paper account (app.db user id)
+      strategy: follow-signal
+      signal: oi-bias-v1
+      underlying: NIFTY    # trades the near-month future
+      lots: 1
+      product: MIS
+      stop_points: 40      # a resting SL-M at the broker after each entry
+      target_points: 80
+      max_hold_min: 45
+      max_trades_per_day: 6
+      cooldown_min: 10
+      exit_score: 10
+      daily_loss_stop: 5000  # rupees after charges: no new entries below
+      enabled: true

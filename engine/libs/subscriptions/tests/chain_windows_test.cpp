@@ -177,3 +177,56 @@ TEST_F(ChainWindowsTest, DescribesEachChain) {
 
 }  // namespace
 }  // namespace mda::subscriptions
+
+namespace mda::subscriptions {
+namespace {
+
+// MCX (ADR-0031): no spot; each expiry's options are on their own future.
+TEST(ChainWindowsMcx, EachExpiryCentresOnItsOwnFuture) {
+    instruments::InstrumentRegistry registry;
+    const auto add = [&](ContractKey key, core::InstrumentId underlying = {}) {
+        const auto id = registry.assign(key);
+        registry.get(id)->listed_today = true;
+        registry.get(id)->underlying = underlying;
+        return id;
+    };
+    const auto future = [&](std::chrono::year_month_day expiry) {
+        return add({.exchange = Exchange::Mcx,
+                    .market = Market::Fo,
+                    .kind = Kind::Future,
+                    .underlying = "CRUDEOIL",
+                    .expiry = expiry});
+    };
+    const auto nov = future(2026y / 11 / 19);
+    const auto dec = future(2026y / 12 / 18);
+    for (const auto& [expiry, on] : {std::pair{2026y / 11 / 17, nov}, std::pair{2026y / 12 / 16, dec}}) {
+        for (std::int64_t strike = 9'000; strike <= 10'000; strike += 100) {
+            add({.exchange = Exchange::Mcx,
+                 .market = Market::Fo,
+                 .kind = Kind::Option,
+                 .underlying = "CRUDEOIL",
+                 .expiry = expiry,
+                 .strike = rupees(strike),
+                 .option_type = OptionType::Call},
+                on);
+        }
+    }
+    ChainWindows windows(registry, {{.underlying = "CRUDEOIL", .expiries = 2, .strikes = 1}},
+                         {.buffer = 0, .grace = 600s});
+    EXPECT_TRUE(windows.is_spot(nov));
+    EXPECT_TRUE(windows.is_spot(dec));
+    EXPECT_EQ(windows.spots().size(), 2u);
+
+    EXPECT_TRUE(windows.on_spot(nov, rupees(9'510)));  // only November centres
+    std::set<std::int64_t> strikes;
+    for (const auto id : windows.wanted(0)) {
+        if (const auto& key = registry.get(id)->key; key.kind == Kind::Option) {
+            EXPECT_EQ(key.expiry, 2026y / 11 / 17);
+            strikes.insert(key.strike.raw() / core::Price::kScale);
+        }
+    }
+    EXPECT_EQ(strikes, (std::set<std::int64_t>{9'400, 9'500, 9'600}));
+}
+
+}  // namespace
+}  // namespace mda::subscriptions

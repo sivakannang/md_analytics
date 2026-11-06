@@ -6,7 +6,7 @@
 #   tools/stack.sh restart name...    stop, then start
 #   tools/stack.sh status             what runs, since when, and each log's last line
 #
-# Names: feedd engine gateway notifier recorder web. Each process runs in its own session,
+# Names: feedd engine signald broker autotrader gateway notifier recorder web. Each process runs in its own session,
 # detached from the terminal, so closing a terminal or the Claude app doesn't stop it;
 # its pid is in data/run/<name>.pid and its log in data/logs/. While mda-feedd runs, the
 # Mac is kept awake (caffeinate): sleep would stop the feed. Prints statuses only, never
@@ -15,7 +15,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-ALL=(feedd engine gateway notifier recorder web)
+ALL=(feedd engine signald broker autotrader gateway notifier recorder web)
 RUN=data/run
 LOGS=data/logs
 APPS=build/release/engine/apps
@@ -68,7 +68,7 @@ check_name() {
 # data/logs/web-build.log.
 build_web_if_needed() {
     local built=web/dist/index.html
-    if [[ -f $built ]] && [[ -z $(find web/src web/index.html web/package.json web/vite.config.ts -newer "$built" -print -quit 2>/dev/null) ]]; then
+    if [[ -f $built ]] && [[ -z $(find web/src web/public web/index.html web/package.json web/vite.config.ts -newer "$built" -print -quit 2>/dev/null) ]]; then
         return 0
     fi
     echo "web: building the site (npm --prefix web run build)"

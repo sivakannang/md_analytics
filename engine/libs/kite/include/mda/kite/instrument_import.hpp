@@ -22,7 +22,7 @@ struct ImportStats {
     std::size_t rows = 0;                 ///< data rows in the file
     std::size_t imported = 0;             ///< rows registered and mapped
     std::size_t new_instruments = 0;      ///< contracts seen for the first time
-    std::size_t skipped_unsupported = 0;  ///< segments we don't handle yet (CDS, MCX, …)
+    std::size_t skipped_unsupported = 0;  ///< segments we don't handle yet (CDS, BCD, NCO, …)
     std::size_t malformed = 0;            ///< rows with unparseable fields
     std::size_t unlinked = 0;             ///< derivatives whose underlying wasn't found
 };

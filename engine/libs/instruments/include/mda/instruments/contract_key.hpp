@@ -7,6 +7,7 @@
 //   NSE|CASH|EQ|RELIANCE
 //   NSE|FO|FUT|NIFTY|2026-10-27
 //   NSE|FO|OPT|NIFTY|2026-10-27|25000.00|CE
+//   MCX|FO|FUT|CRUDEOIL|2026-11-19       (MCX: ADR-0031)
 
 #include <chrono>
 #include <compare>
@@ -22,6 +23,7 @@ namespace mda::instruments {
 enum class Exchange : std::uint8_t {
     Nse = 1,
     Bse = 2,
+    Mcx = 3,
 };
 
 enum class Market : std::uint8_t {
@@ -46,7 +48,7 @@ struct ContractKey {
     Exchange exchange = Exchange::Nse;
     Market market = Market::Cash;
     Kind kind = Kind::Equity;
-    std::string underlying;  ///< "NIFTY 50" for an index, "RELIANCE", or the F&O name "NIFTY"
+    std::string underlying;  ///< "NIFTY 50" for an index, "RELIANCE", or the F&O name "NIFTY" / "CRUDEOIL"
     std::chrono::year_month_day expiry{};  ///< derivatives only; default (invalid) otherwise
     core::Price strike;                    ///< options only
     OptionType option_type = OptionType::None;

@@ -126,3 +126,9 @@ Status: **done** (exists today), **partial**, **new**.
 | 7 | Surveillance, FIX gateway, drop copy, recovery drills | Completeness |
 
 Revisit this order when a phase finishes; record changes here.
+
+**2026-10-24:** the broker's paper half (OMS, pre-trade RMS, paper accounts, terminal order
+screens; ADR-0029, `docs/design/paper-trading.md`) moves ahead of phase 1. It fills against
+the live Kite book through a venue interface, so the matching engine can replace the paper
+venue later without changing the OMS, the UI or the auto trader. The first participant follows: mda-autotrader
+(ADR-0030) trades paper accounts on signals over its own order bus.

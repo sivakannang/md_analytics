@@ -1,3 +1,3 @@
 mda_add_test(mda_storage_tests
     SOURCES database_test.cpp
-    LIBS mda::storage)
+    LIBS mda::storage unofficial::sqlite3::sqlite3)

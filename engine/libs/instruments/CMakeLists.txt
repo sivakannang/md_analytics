@@ -3,6 +3,8 @@
 
 add_library(mda_instruments STATIC
     src/contract_key.cpp
+    src/mcx.cpp
+    src/session.cpp
     src/registry.cpp)
 add_library(mda::instruments ALIAS mda_instruments)
 

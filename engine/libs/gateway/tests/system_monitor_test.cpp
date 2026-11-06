@@ -79,12 +79,17 @@ TEST(FeedMetricsTest, CountsTicksBarsAndLatency) {
 }
 
 TEST(SystemMonitorTest, KnowsMarketHours) {
+    // 09:00 to the MCX close (23:30 on 2026-10-22, US daylight saving); NSE 09:15–15:30.
     constexpr std::int64_t kThursday0915 = 1'792'607'400 + 9 * 3600 + 15 * 60;  // 2026-10-22 IST
-    EXPECT_TRUE(SystemMonitor::market_hours(kThursday0915));
-    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 - 60));
-    EXPECT_TRUE(SystemMonitor::market_hours(kThursday0915 + 6 * 3600 + 14 * 60));   // 15:29
-    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 + 6 * 3600 + 15 * 60));  // 15:30
-    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 + 2 * 86'400));          // Saturday
+    EXPECT_TRUE(SystemMonitor::market_hours(kThursday0915 - 15 * 60));
+    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 - 16 * 60));
+    EXPECT_TRUE(SystemMonitor::market_hours(kThursday0915 + 14 * 3600 + 14 * 60));   // 23:29
+    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 + 14 * 3600 + 15 * 60));  // 23:30
+    EXPECT_FALSE(SystemMonitor::market_hours(kThursday0915 + 2 * 86'400));           // Saturday
+    EXPECT_TRUE(SystemMonitor::nse_hours(kThursday0915));
+    EXPECT_FALSE(SystemMonitor::nse_hours(kThursday0915 - 60));
+    EXPECT_TRUE(SystemMonitor::nse_hours(kThursday0915 + 6 * 3600 + 14 * 60));   // 15:29
+    EXPECT_FALSE(SystemMonitor::nse_hours(kThursday0915 + 6 * 3600 + 15 * 60));  // 15:30
 }
 
 TEST(SystemMonitorTest, ReportsProcessesBusesAndTheRecordersStatus) {

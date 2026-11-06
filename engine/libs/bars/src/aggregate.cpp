@@ -6,7 +6,6 @@ namespace mda::bars {
 namespace {
 
 constexpr std::int64_t kIstOffset = 5 * 3600 + 30 * 60;
-constexpr std::int64_t kSessionStart = 9 * 3600 + 15 * 60;  // seconds after IST midnight
 
 std::int64_t ist_midnight(std::int64_t unix_seconds) {
     const std::int64_t local = unix_seconds + kIstOffset;
@@ -43,26 +42,26 @@ std::optional<Interval> parse_interval(std::string_view text) {
     return std::nullopt;
 }
 
-std::int64_t bucket_start(std::int64_t unix_seconds, Interval interval) {
+std::int64_t bucket_start(std::int64_t unix_seconds, Interval interval, std::int64_t session_open) {
     const std::int64_t midnight = ist_midnight(unix_seconds);
     if (interval.daily) {
         return midnight;
     }
-    const std::int64_t session = midnight + kSessionStart;
+    const std::int64_t session = midnight + session_open;
     const std::int64_t length = static_cast<std::int64_t>(interval.minutes) * 60;
     const std::int64_t offset = unix_seconds - session;
     const std::int64_t floored = offset >= 0 ? offset / length : -((-offset + length - 1) / length);
     return session + floored * length;
 }
 
-std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval) {
+std::vector<Bar> aggregate(std::span<const Bar> minutes, Interval interval, std::int64_t session_open) {
     std::vector<Bar> out;
     if (interval == Interval{.minutes = 1}) {
         out.assign(minutes.begin(), minutes.end());
         return out;
     }
     for (const Bar& bar : minutes) {
-        const std::int64_t start = bucket_start(bar.start, interval);
+        const std::int64_t start = bucket_start(bar.start, interval, session_open);
         if (out.empty() || out.back().start != start) {
             Bar merged = bar;
             merged.start = start;

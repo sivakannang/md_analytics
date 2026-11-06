@@ -39,7 +39,8 @@ TEST(ContractKeyTest, CanonicalTextRoundTrips) {
 
     for (const char* text :
          {"NSE|CASH|IDX|NIFTY 50", "BSE|CASH|EQ|RELIANCE", "NSE|FO|FUT|BANKNIFTY|2026-11-25",
-          "BSE|FO|OPT|SENSEX|2026-10-30|82000.50|PE"}) {
+          "BSE|FO|OPT|SENSEX|2026-10-30|82000.50|PE", "MCX|FO|FUT|CRUDEOIL|2026-11-19",
+          "MCX|FO|OPT|GOLD|2026-10-30|140000.00|CE", "MCX|CASH|IDX|MCXCOMDEX"}) {
         const auto parsed = parse_contract_key(text);
         ASSERT_TRUE(parsed.has_value()) << text;
         EXPECT_EQ(to_string(*parsed), text);

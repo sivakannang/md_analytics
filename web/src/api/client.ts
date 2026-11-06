@@ -60,6 +60,250 @@ export interface ChainSummary {
   days_to_expiry: number;
 }
 
+// ---------- market signals (ADR-0028, docs/api/rest.md "Market signals")
+export type SignalLabel = 'bullish' | 'neutral' | 'bearish';
+export type FactorStatus = 'present' | 'absent' | 'not_applicable';
+
+export interface SignalFactor {
+  factor: string;
+  status: FactorStatus;
+  value: number; // -1..1
+  points: number; // share of the score
+}
+
+export interface SignalOutcome {
+  spot_after: number | null;
+  return_bp: number | null;
+  hit: boolean | null; // null: neutral or flat
+}
+
+/** One stored signal (GET /signals/{underlying}). */
+export interface SignalRow {
+  minute: number; // Unix seconds, the minute's start
+  strategy: string;
+  horizon_min: number;
+  score: number; // -100..100
+  label: SignalLabel;
+  prob: number | null;
+  spot: number | null;
+  factors: SignalFactor[];
+  outcome: SignalOutcome | null; // null until the horizon has passed
+}
+
+export interface SignalIndex {
+  underlying: string;
+  spot: string;
+  spot_id: number;
+  latest: SignalRow[]; // the newest minute's, one per strategy
+}
+
+export interface SignalsInfo {
+  indices: SignalIndex[];
+  strategies: { id: string; horizon_min: number; bullish: number; bearish: number }[];
+  factors: string[];
+}
+
+export interface SignalDay {
+  underlying: string;
+  date: string | null; // null: no signals yet
+  signals: SignalRow[];
+}
+
+export interface TrackRecord {
+  strategy: string;
+  horizon_min: number;
+  settled: number;
+  bullish: number;
+  bearish: number;
+  neutral: number;
+  hits: number;
+  misses: number;
+  flats: number;
+  hit_rate: number | null;
+  always_up_rate: number | null;
+  momentum_rate: number | null;
+  momentum_calls: number;
+}
+
+export interface SignalRecord {
+  underlying: string;
+  from: string;
+  days: number;
+  strategies: TrackRecord[];
+}
+
+/** A live signal from the stream (mode "signals"): the four largest factors only. */
+export interface LiveSignal {
+  spot_id: number;
+  minute: number;
+  strategy: string;
+  horizon_min: number;
+  score: number;
+  label: SignalLabel;
+  prob: number | null;
+  top: { factor: string; points: number }[];
+}
+
+// ---------- paper trading (ADR-0029, docs/api/rest.md "Paper trading")
+
+/** "?a=1&b=x" from the defined values; "" when there are none. */
+function query(params: Record<string, string | number | undefined>): string {
+  const pairs = Object.entries(params).filter((e): e is [string, string | number] => e[1] !== undefined);
+  return pairs.length === 0 ? '' : `?${new URLSearchParams(pairs.map(([k, v]) => [k, String(v)])).toString()}`;
+}
+export type OrderSide = 'BUY' | 'SELL';
+export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
+export type OrderProduct = 'MIS' | 'NRML';
+export type OrderStatus = 'TRIGGER_PENDING' | 'OPEN' | 'COMPLETE' | 'CANCELLED' | 'REJECTED';
+
+export interface PlaceOrder {
+  instrument_id: number;
+  side: OrderSide;
+  quantity: number; // units, a multiple of the lot size
+  type: OrderType;
+  product: OrderProduct;
+  price?: number;
+  trigger_price?: number;
+  tag?: string;
+  client_order_id?: number; // the same id again returns the same order (safe retries)
+}
+
+/** An execution report (POST answers and the stream's "orders" mode). */
+export interface OrderReport {
+  order_id: number;
+  client_order_id: number;
+  instrument_id: number;
+  event:
+    | 'accepted' | 'rejected' | 'triggered' | 'fill' | 'cancelled' | 'modified' | 'status'
+    | 'kill_switch_on' | 'kill_switch_off' | 'settled' | 'converted';
+  status: OrderStatus;
+  side: OrderSide;
+  type: OrderType;
+  product: OrderProduct;
+  source: 'ui' | 'auto' | 'system';
+  quantity: number;
+  filled: number;
+  last_quantity: number;
+  last_price: number | null;
+  average_price: number | null;
+  price: number | null;
+  trigger_price: number | null;
+  charges: number; // this fill's, rupees
+  reason: string;
+  reject_code: string | null;
+  at: number; // Unix ms
+}
+
+export interface PaperOrder {
+  order_id: number;
+  client_order_id: number;
+  instrument_id: number;
+  side: OrderSide;
+  type: OrderType; // now (an SL becomes LIMIT once triggered)
+  placed_type: OrderType;
+  product: OrderProduct;
+  quantity: number;
+  filled: number;
+  price: number | null;
+  trigger_price: number | null;
+  average_price: number | null;
+  status: OrderStatus;
+  reason: string;
+  tag: string;
+  source: 'ui' | 'auto' | 'system';
+  charges: number;
+  created_at: number; // Unix ms
+  updated_at: number;
+}
+
+export interface PaperTrade {
+  order_id: number;
+  instrument_id: number;
+  side: OrderSide;
+  product: OrderProduct;
+  quantity: number;
+  price: number;
+  charges: { brokerage: number; stt: number; exchange: number; sebi: number; stamp: number; gst: number; total: number };
+  realised: number;
+  at: number;
+}
+
+export interface PaperPosition {
+  instrument_id: number;
+  product: OrderProduct;
+  quantity: number; // + long, - short, 0 closed
+  average_price: number | null; // the last daily mark for a carried future
+  entry_price: number | null; // what the fills paid, untouched by the marks
+  last_price: number | null;
+  realised: number;
+  closed_pnl?: number; // today's closing fills from their entry price
+  unrealised: number | null;
+}
+
+export interface PaperFunds {
+  opening_cash: number;
+  cash: number;
+  blocked: number;
+  available: number;
+  realised_today: number;
+  charges_today: number;
+  unrealised: number;
+  kill_switch: boolean;
+}
+
+/** One auto-trader run (GET /paper/auto, ADR-0030). Money in rupees. */
+export interface AutoRun {
+  id: string;
+  strategy: string;
+  signal: string;
+  underlying: string;
+  enabled: boolean;
+  settings: {
+    lots: number;
+    product: OrderProduct;
+    stop_points?: number;
+    target_points: number;
+    max_hold_min: number;
+    max_trades_per_day: number;
+    cooldown_min: number;
+    exit_score?: number;
+    daily_loss_stop: number;
+    // follow-signal-options only (no stop_points there)
+    index_stop_points?: number;
+    premium_stop_percent?: number;
+    entry_slip_ticks?: number;
+    entry_timeout_s?: number;
+  };
+  position: number;
+  /** What the run holds now, per instrument (an options run trades many contracts). */
+  held: { instrument_id: number; quantity: number }[];
+  entries_today: number;
+  metrics: {
+    round_trips: number;
+    wins: number;
+    losses: number;
+    win_rate: number | null;
+    gross: number;
+    charges: number;
+    net: number;
+    average_win: number;
+    average_loss: number;
+    largest_loss: number;
+    max_drawdown: number;
+    exits: Record<string, number>;
+  };
+  decisions_today: { at: number; state: string; action: string; reason: string; price: number | null }[];
+}
+
+export interface AutoRuns {
+  from: string;
+  days: number;
+  runs: AutoRun[];
+}
+
+/** POST answers: the order, or PENDING when mda-broker didn't answer in time. */
+export type OrderAnswer = { order: OrderReport } | { client_order_id: number; status: 'PENDING' };
+
 export interface ChainRow {
   strike: number;
   call: number | null; // instrument ids
@@ -102,7 +346,7 @@ export interface OiChange {
   rows: OiChangeRow[];
 }
 
-/** A step series: [m, value] = from 09:15 + m minutes the value is this (rest.md "OI timeline"). */
+/** A step series: [m, value] = from the session open + m minutes the value is this (rest.md "OI timeline"). */
 export type StepSeries = [number, number][];
 
 /** The session's OI per strike as step series (design oi-change-by-strike.md §8). */
@@ -281,8 +525,8 @@ export interface SignupRequest {
 /** A tradable or index instrument (GET /instruments/...). */
 export interface Instrument {
   instrument_id: number; // md_analytics' permanent id
-  exchange: string; // NSE, BSE
-  market: string; // CASH, FO, CDS, MCX
+  exchange: string; // NSE, BSE, MCX
+  market: string; // CASH, FO (MCX futures and options are FO)
   kind: 'IDX' | 'EQ' | 'FUT' | 'OPT';
   underlying: string;
   trading_symbol: string;
@@ -432,6 +676,40 @@ export const api = {
     ),
 
   chains: () => request<ChainInfo[]>('GET', '/chains'),
+
+  placeOrder: (order: PlaceOrder) => request<OrderAnswer>('POST', '/paper/orders', order),
+
+  modifyOrder: (orderId: number, change: { quantity: number; price?: number; trigger_price?: number }) =>
+    request<OrderAnswer>('PUT', `/paper/orders/${orderId}`, change),
+
+  cancelOrder: (orderId: number) => request<OrderAnswer>('DELETE', `/paper/orders/${orderId}`),
+
+  killSwitch: (on: boolean) => request<{ kill_switch: boolean }>('POST', '/paper/kill-switch', { on }),
+  /** Moves `quantity` (units) of a position into `to` from the other product, as Zerodha's conversion. */
+  convertPosition: (instrument_id: number, quantity: number, to: OrderProduct) =>
+    request<{ order: OrderReport }>('POST', '/paper/positions/convert', { instrument_id, quantity, to }),
+
+  // `user`: an admin reading another user's paper account (rest.md "Paper trading").
+  paperOrders: (date?: string, user?: number) => request<PaperOrder[]>('GET', `/paper/orders${query({ date, user })}`),
+
+  paperTrades: (date?: string, user?: number) => request<PaperTrade[]>('GET', `/paper/trades${query({ date, user })}`),
+
+  paperPositions: (user?: number) => request<PaperPosition[]>('GET', `/paper/positions${query({ user })}`),
+
+  paperFunds: (user?: number) => request<PaperFunds>('GET', `/paper/funds${query({ user })}`),
+
+  paperAuto: (days: number, user?: number) => request<AutoRuns>('GET', `/paper/auto${query({ days, user })}`),
+
+  signals: () => request<SignalsInfo>('GET', '/signals'),
+
+  signalDay: (underlying: string, date?: string) =>
+    request<SignalDay>(
+      'GET',
+      `/signals/${encodeURIComponent(underlying)}${date ? `?date=${date}` : ''}`,
+    ),
+
+  signalRecord: (underlying: string, days: number) =>
+    request<SignalRecord>('GET', `/signals/${encodeURIComponent(underlying)}/record?days=${days}`),
 
   chain: (underlying: string, expiry: string, strikes: number) =>
     request<Chain>(

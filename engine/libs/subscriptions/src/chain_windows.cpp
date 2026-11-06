@@ -28,6 +28,7 @@ ChainWindows::ChainWindows(const instruments::InstrumentRegistry& registry,
         std::map<std::chrono::year_month_day,
                  std::map<std::int64_t, std::pair<core::InstrumentId, core::InstrumentId>>>
             options_by_expiry;
+        std::map<std::chrono::year_month_day, core::InstrumentId> underlying_of;
         for (const auto& instrument : registry.all()) {
             const auto& key = instrument.key;
             if (!instrument.listed_today || key.underlying != chain.spec.underlying) {
@@ -37,6 +38,7 @@ ChainWindows::ChainWindows(const instruments::InstrumentRegistry& registry,
                 chain.futures.push_back(instrument.id);
             } else if (key.kind == Kind::Option) {
                 auto& pair = options_by_expiry[key.expiry][key.strike.raw()];
+                underlying_of[key.expiry] = instrument.underlying;
                 (key.option_type == OptionType::Call ? pair.first : pair.second) = instrument.id;
             }
         }
@@ -44,7 +46,8 @@ ChainWindows::ChainWindows(const instruments::InstrumentRegistry& registry,
             if (static_cast<int>(chain.expiries.size()) >= chain.spec.expiries) {
                 break;  // map order: nearest expiries first
             }
-            Expiry expiry{.date = date};
+            Expiry expiry{.date = date,
+                          .spot = chain.spec.spot.valid() ? chain.spec.spot : underlying_of[date]};
             for (const auto& [strike, pair] : strikes) {
                 expiry.strikes.push_back(core::Price::from_raw(strike));
                 expiry.calls.push_back(pair.first);
@@ -62,11 +65,8 @@ bool ChainWindows::on_spot(core::InstrumentId spot, core::Price price) {
     }
     bool moved = false;
     for (Chain& chain : chains_) {
-        if (chain.spec.spot != spot) {
-            continue;
-        }
         for (Expiry& expiry : chain.expiries) {
-            if (expiry.strikes.empty()) {
+            if (expiry.spot != spot || expiry.strikes.empty()) {
                 continue;
             }
             // ATM: the listed strike nearest the spot.
@@ -98,6 +98,11 @@ std::vector<core::InstrumentId> ChainWindows::wanted(std::int64_t now) {
     for (const Chain& chain : chains_) {
         if (chain.spec.spot.valid()) {
             window.insert(chain.spec.spot.value());
+        }
+        for (const Expiry& expiry : chain.expiries) {
+            if (expiry.spot.valid()) {
+                window.insert(expiry.spot.value());
+            }
         }
         for (const auto id : chain.futures) {
             window.insert(id.value());
@@ -143,15 +148,26 @@ std::vector<core::InstrumentId> ChainWindows::wanted(std::int64_t now) {
 }
 
 bool ChainWindows::is_spot(core::InstrumentId id) const {
-    return std::ranges::any_of(chains_, [&](const Chain& chain) { return chain.spec.spot == id; });
+    return std::ranges::any_of(chains_, [&](const Chain& chain) {
+        return std::ranges::any_of(chain.expiries, [&](const Expiry& e) { return e.spot == id; });
+    });
 }
 
 std::vector<core::InstrumentId> ChainWindows::spots() const {
-    std::vector<core::InstrumentId> out;
+    std::set<std::uint32_t> ids;
     for (const Chain& chain : chains_) {
         if (chain.spec.spot.valid()) {
-            out.push_back(chain.spec.spot);
+            ids.insert(chain.spec.spot.value());
         }
+        for (const Expiry& expiry : chain.expiries) {
+            if (expiry.spot.valid()) {
+                ids.insert(expiry.spot.value());
+            }
+        }
+    }
+    std::vector<core::InstrumentId> out;
+    for (const std::uint32_t id : ids) {
+        out.emplace_back(id);
     }
     return out;
 }

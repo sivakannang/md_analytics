@@ -110,6 +110,52 @@ TEST(InstrumentImportTest, LinksDerivativesToTheirUnderlying) {
 }
 
 // ADR-0008's reason to exist: NSE reuses F&O tokens after expiry.
+// Kite's MCX rows of 2026-10-27 (lot size 1, quantities in lots; ADR-0031).
+const std::string kMcx =
+    std::string(kHeader) +
+    "293129,1145,MCXBULLDEX,MCXBULLDEX,0,,0,0,0,EQ,INDICES,MCX\n"
+    "146796039,573422,CRUDEOIL26NOVFUT,\"CRUDEOIL\",0,2026-11-19,0,1,1,FUT,MCX-FUT,MCX\n"
+    "147000000,574218,CRUDEOIL26DECFUT,\"CRUDEOIL\",0,2026-12-18,0,1,1,FUT,MCX-FUT,MCX\n"
+    "149233671,582944,CRUDEOIL26NOV9700CE,\"CRUDEOIL\",0,2026-11-17,9700,0.1,1,CE,MCX-OPT,MCX\n"
+    "149300000,583203,CRUDEOIL26DEC9700PE,\"CRUDEOIL\",0,2026-12-16,9700,0.1,1,PE,MCX-OPT,MCX\n"
+    "148542983,580246,MCXBULLDEX26OCTFUT,\"MCXBULLDEX\",0,2026-10-28,0,1,1,FUT,MCX-FUT,MCX\n"
+    "124843271,487669,KAPAS26NOVFUT,\"KAPAS\",0,2026-11-30,0,0.5,1,FUT,MCX-FUT,MCX\n";
+
+TEST(InstrumentImportTest, ImportsMcxInUnitsWithOptionsOnTheirFuture) {
+    InstrumentRegistry registry;
+    const auto result = import_instruments(kMcx, registry);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->stats.imported, 7u);
+    EXPECT_EQ(result->stats.unlinked, 0u);  // MCX futures without an index aren't "unlinked"
+
+    const auto future = [&](std::string name, std::chrono::year_month_day expiry) {
+        return registry.find({.exchange = Exchange::Mcx,
+                              .market = Market::Fo,
+                              .kind = Kind::Future,
+                              .underlying = std::move(name),
+                              .expiry = expiry});
+    };
+    const auto mcx_option = [&](std::chrono::year_month_day expiry, OptionType type) {
+        return registry.find({.exchange = Exchange::Mcx,
+                              .market = Market::Fo,
+                              .kind = Kind::Option,
+                              .underlying = "CRUDEOIL",
+                              .expiry = expiry,
+                              .strike = Price::from_raw(9'700 * Price::kScale),
+                              .option_type = type});
+    };
+    const InstrumentId nov = future("CRUDEOIL", 2026y / 11 / 19);
+    const InstrumentId dec = future("CRUDEOIL", 2026y / 12 / 18);
+    ASSERT_TRUE(nov.valid());
+    EXPECT_EQ(registry.get(nov)->lot_size, Quantity(100));  // barrels, not Kite's 1 lot
+    EXPECT_FALSE(registry.get(nov)->underlying.valid());
+    EXPECT_EQ(registry.get(mcx_option(2026y / 11 / 17, OptionType::Call))->underlying, nov);
+    EXPECT_EQ(registry.get(mcx_option(2026y / 12 / 16, OptionType::Put))->underlying, dec);
+    EXPECT_EQ(registry.get(future("MCXBULLDEX", 2026y / 10 / 28))->underlying,
+              registry.find(cash(Exchange::Mcx, Kind::Index, "MCXBULLDEX")));
+    EXPECT_EQ(registry.get(future("KAPAS", 2026y / 11 / 30))->lot_size, Quantity(1));  // unknown
+}
+
 TEST(InstrumentImportTest, ReusedTokenMapsToTheNewContractWithoutDisturbingHistory) {
     InstrumentRegistry registry;
     const auto day_one = import_instruments(kDayOne, registry);

@@ -12,6 +12,7 @@
 #include <mda/bus/bus.hpp>
 #include <mda/core/timestamp.hpp>
 #include <mda/gateway/system_monitor.hpp>
+#include <mda/instruments/session.hpp>
 #include <mda/sysmon/sysmon.hpp>
 
 namespace mda::gateway {
@@ -32,9 +33,10 @@ struct Expected {
     const char* name;
     const char* signature;
 };
-constexpr Expected kProcesses[] = {{"feedd", "mda-feedd"},       {"engine", "mda-engine"},
-                                   {"gateway", "mda-gateway"},   {"notifier", "mda-notifier"},
-                                   {"recorder", "mda-recorder"}, {"web", "npm"}};
+constexpr Expected kProcesses[] = {
+    {"feedd", "mda-feedd"},       {"engine", "mda-engine"},     {"signald", "mda-signald"},
+    {"broker", "mda-broker"},     {"autotrader", "mda-autotrader"}, {"gateway", "mda-gateway"},
+    {"notifier", "mda-notifier"}, {"recorder", "mda-recorder"},     {"web", "npm"}};
 
 std::int64_t unix_now() {
     return static_cast<std::int64_t>(std::time(nullptr));
@@ -109,7 +111,13 @@ bool SystemMonitor::market_hours(std::int64_t unix_seconds) {
     const std::int64_t days = local / 86'400;
     const std::int64_t weekday = (days + 4) % 7;  // 1970-01-01 was a Thursday; 0 = Sunday
     const std::int64_t minute = (local % 86'400) / 60;
-    return weekday >= 1 && weekday <= 5 && minute >= 9 * 60 + 15 && minute < 15 * 60 + 30;
+    return weekday >= 1 && weekday <= 5 && minute >= 9 * 60 &&
+           minute < instruments::last_close(instruments::ist_day(unix_seconds));
+}
+
+bool SystemMonitor::nse_hours(std::int64_t unix_seconds) {
+    const std::int64_t minute = ((unix_seconds + kIst) % 86'400) / 60;
+    return market_hours(unix_seconds) && minute >= 9 * 60 + 15 && minute < 15 * 60 + 30;
 }
 
 SystemMonitor::SystemMonitor(FeedMetrics& metrics, SystemMonitorOptions options)
@@ -218,6 +226,12 @@ void SystemMonitor::sample() {
     }
     if (!running["notifier"]) {
         check("processes", "warn", "notifier is not running");
+    }
+    if (nse_hours(now) && !running["signald"]) {
+        check("processes", "warn", "signald is not running (no market signals)");
+    }
+    if (market && !running["broker"]) {
+        check("processes", "warn", "broker is not running (no paper trading)");
     }
     if (options_.recorder_enabled && market && !running["recorder"]) {
         check("processes", "warn", "recorder is enabled but not running");

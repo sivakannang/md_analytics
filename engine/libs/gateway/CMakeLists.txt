@@ -15,8 +15,10 @@ add_library(mda_gateway STATIC
     src/live_bars.cpp
     src/notifications_api.cpp
     src/oi_change_api.cpp
+    src/paper_api.cpp
     src/quote_cache.cpp
     src/server.cpp
+    src/signals_api.cpp
     src/static_site.cpp
     src/system_api.cpp
     src/system_monitor.cpp
@@ -29,7 +31,7 @@ add_library(mda::gateway ALIAS mda_gateway)
 
 target_include_directories(mda_gateway PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-target_link_libraries(mda_gateway PUBLIC mda::admin mda::auth mda::bars mda::bus mda::notify mda::options mda::quotestore mda::sysmon mda::catalog mda::messages mda::watchlists Boost::asio Boost::beast Boost::json
+target_link_libraries(mda_gateway PUBLIC mda::admin mda::auth mda::autotrade mda::bars mda::broker mda::bus mda::notify mda::options mda::quotestore mda::signals mda::sysmon mda::catalog mda::messages mda::watchlists Boost::asio Boost::beast Boost::json
                       PRIVATE spdlog::spdlog)
 mda_target_defaults(mda_gateway)
 

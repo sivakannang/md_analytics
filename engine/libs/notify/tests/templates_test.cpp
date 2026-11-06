@@ -30,4 +30,18 @@ TEST(TemplatesTest, UnknownTypesAndBadPayloadsStillRender) {
 }
 
 }  // namespace
+TEST(Templates, PaperDailySummary) {
+    const auto m = render("paper.daily_summary",
+                          R"({"username":"asha","date":"2026-10-23","fills":4,"realised":"₹-994.50",)"
+                          R"("charges":"₹172.19","net":"₹-1166.69","open_positions":0,"cash":"₹998833.31"})");
+    EXPECT_EQ(m.subject, "Paper P&L 2026-10-23: net ₹-1166.69");
+    EXPECT_NE(m.text.find("Hi asha"), std::string::npos);
+    EXPECT_NE(m.text.find("4 fills, realised ₹-994.50, charges ₹172.19"), std::string::npos);
+    EXPECT_NE(m.text.find("no real orders"), std::string::npos);
+    EXPECT_EQ(m.text.find("Auto trader"), std::string::npos);  // no auto section without auto fills
+    const auto with_auto = render("paper.daily_summary",
+                                  R"({"username":"asha","date":"2026-10-23","auto":"nifty-foll: 6 fills, net ₹690.41"})");
+    EXPECT_NE(with_auto.text.find("Auto trader: nifty-foll: 6 fills, net ₹690.41."), std::string::npos);
+}
+
 }  // namespace mda::notify

@@ -197,6 +197,25 @@ TEST(BarBuilderSessions, DerivativesTradeUntil1540AndCashUntil1530) {
     EXPECT_EQ(closed[2].volume.value(), 10);
 }
 
+TEST(BarBuilderSessions, ASessionPerInstrumentCoversMcxEvenings) {
+    std::vector<Bar> closed;
+    BuilderOptions options;
+    options.session = [](core::InstrumentId id, std::int64_t) {
+        return id.value() == 9 ? std::pair{9 * 60, 23 * 60 + 30} : std::pair{9 * 60 + 15, 15 * 60 + 30};
+    };
+    BarBuilder builder(std::move(options), [&](const Bar& bar) { closed.push_back(bar); });
+    for (const std::uint32_t id : {7u, 9u}) {
+        builder.on_snapshot(snap({.id = id, .at = ist(9, 5, 1), .ltp = 100, .volume = 10}));
+        builder.on_snapshot(snap({.id = id, .at = ist(21, 0, 1), .ltp = 101, .volume = 20}));
+        builder.on_snapshot(snap({.id = id, .at = ist(23, 30, 1), .ltp = 102, .volume = 30}));
+    }
+    builder.close_due(ist(23, 35));
+    ASSERT_EQ(closed.size(), 2u);  // MCX: 09:05 and 21:00; nothing for the NSE stock
+    EXPECT_EQ(closed[0].header.instrument_id.value(), 9u);
+    EXPECT_EQ(closed[0].start, ist(9, 5));
+    EXPECT_EQ(closed[1].start, ist(21, 0));
+}
+
 TEST_F(BarBuilderTest, ClosingAuctionVolumeDropIsNotVolume) {
     // Continuous trading to 15:15; during the auction Kite's volume field shows the matched
     // quantity, then the day total (+ the auction's 300) after the match.
@@ -235,6 +254,48 @@ TEST_F(BarBuilderTest, SeededDayVolumeIsTheBaselineAfterARestart) {
     builder_.on_snapshot(snap({.id = 9, .at = ist(15, 25, 9), .ltp = 101, .volume = 7'100}));
     builder_.close_due(ist(15, 31));
     EXPECT_EQ(closed_.back().volume.value(), 100);
+}
+
+// The Wi-Fi was down 10:00–10:30: the volume traded meanwhile must not land in 10:30's bar.
+TEST(BarBuilderGapTest, VolumeRestartsFromABaselineAfterAFeedOutage) {
+    std::vector<Bar> closed;
+    BarBuilder builder({.feed_gap = std::chrono::seconds(120)},
+                       [&closed](const Bar& bar) { closed.push_back(bar); });
+    builder.on_snapshot(snap({.at = ist(10, 0, 5), .ltp = 100, .volume = 1'000}));
+    builder.on_snapshot(snap({.at = ist(10, 0, 50), .ltp = 101, .volume = 1'200}));
+    builder.on_snapshot(snap({.id = 8, .at = ist(10, 0, 55), .ltp = 50, .volume = 300}));
+    builder.on_snapshot(snap({.at = ist(10, 30, 10), .ltp = 104, .volume = 9'000}));  // back
+    builder.on_snapshot(snap({.at = ist(10, 30, 40), .ltp = 105, .volume = 9'150}));
+    builder.on_snapshot(snap({.id = 8, .at = ist(10, 30, 45), .ltp = 51, .volume = 2'000}));
+    builder.on_snapshot(snap({.id = 8, .at = ist(10, 30, 50), .ltp = 52, .volume = 2'040}));
+    builder.close_due(ist(10, 32));
+    ASSERT_EQ(closed.size(), 4u);
+    const auto volume = [&closed](std::uint32_t id, std::int64_t start) {
+        for (const auto& bar : closed) {
+            if (bar.header.instrument_id.value() == id && bar.start == start) {
+                return bar.volume.value();
+            }
+        }
+        return std::int64_t{-1};
+    };
+    EXPECT_EQ(volume(7, ist(10, 0)), 200);
+    EXPECT_EQ(volume(7, ist(10, 30)), 150);  // not 7,950
+    EXPECT_EQ(volume(8, ist(10, 30)), 40);   // its first tick is a baseline too
+}
+
+// Thin instruments go minutes without a tick while others trade: that is no outage.
+TEST(BarBuilderGapTest, OneQuietInstrumentKeepsItsBaseline) {
+    std::vector<Bar> closed;
+    BarBuilder builder({.feed_gap = std::chrono::seconds(120)},
+                       [&closed](const Bar& bar) { closed.push_back(bar); });
+    builder.on_snapshot(snap({.id = 8, .at = ist(10, 0, 5), .ltp = 50, .volume = 300}));
+    for (int m = 0; m <= 10; ++m) {
+        builder.on_snapshot(snap({.at = ist(10, m, 30), .ltp = 100, .volume = 1'000 + m}));
+    }
+    builder.on_snapshot(snap({.id = 8, .at = ist(10, 10, 40), .ltp = 51, .volume = 360}));
+    builder.close_due(ist(10, 12));
+    EXPECT_EQ(closed.back().header.instrument_id.value(), 8u);
+    EXPECT_EQ(closed.back().volume.value(), 60);
 }
 
 TEST(IstMinuteTest, ConvertsToIndianTime) {

@@ -18,10 +18,10 @@ double rupees(core::Price price) {
 
 }  // namespace
 
-double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry) {
+double years_to_expiry(std::int64_t now, std::chrono::year_month_day expiry, int close_minute) {
     const auto day = std::chrono::sys_days{expiry}.time_since_epoch();
     const std::int64_t close =
-        std::chrono::duration_cast<std::chrono::seconds>(day).count() + 15 * 3600 + 30 * 60 - kIst;
+        std::chrono::duration_cast<std::chrono::seconds>(day).count() + close_minute * 60 - kIst;
     return static_cast<double>(std::max<std::int64_t>(close - now, 3600)) / kYear;
 }
 
@@ -57,6 +57,7 @@ ChainAnalytics::ChainAnalytics(std::vector<ChainDefinition> chains) : chains_(st
     for (const auto& chain : chains_) {
         quotes_[chain.spot.value()];
         for (const auto& expiry : chain.expiries) {
+            quotes_[expiry.future.value()];
             for (const auto& option : expiry.options) {
                 quotes_[option.id.value()];
             }
@@ -107,9 +108,10 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
         return found == quotes_.end() ? nullptr : &found->second;
     };
     for (const auto& chain : chains_) {
-        const Quote* spot = quote_of(chain.spot);
-        const double spot_price = spot != nullptr ? spot->ltp : 0;
         for (const auto& expiry : chain.expiries) {
+            const core::InstrumentId spot_id = expiry.future.valid() ? expiry.future : chain.spot;
+            const Quote* spot = quote_of(spot_id);
+            const double spot_price = spot != nullptr ? spot->ltp : 0;
             // Strike rows of what we have quotes for: strike -> (call, put)
             std::map<double, std::pair<const OptionContract*, const OptionContract*>> rows;
             bool any = false;
@@ -125,7 +127,7 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
             if (!any) {
                 continue;
             }
-            const double years = years_to_expiry(now, expiry.expiry);
+            const double years = years_to_expiry(now, expiry.expiry, expiry.close_minute);
 
             // Forward from put-call parity at the 3 strikes nearest spot where both sides traded
             // today.
@@ -141,7 +143,7 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
                 }
             }
             double forward = spot_price;
-            if (!parity.empty()) {
+            if (!parity.empty() && !(expiry.future.valid() && spot_price > 0)) {
                 std::ranges::sort(parity);
                 std::vector<double> nearest;
                 for (std::size_t i = 0; i < std::min<std::size_t>(3, parity.size()); ++i) {
@@ -152,7 +154,7 @@ void ChainAnalytics::compute(std::int64_t now, std::vector<OptionResult>& result
             }
 
             ChainSummary summary{.underlying = chain.underlying,
-                                 .spot = chain.spot,
+                                 .spot = spot_id,
                                  .expiry = expiry.expiry,
                                  .forward = forward,
                                  .years = years};

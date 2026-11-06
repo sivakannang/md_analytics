@@ -1,14 +1,17 @@
 // Right pane for one instrument, chart first (docs/design/instrument-page.md): live price and
 // change, one line of the day's stats, and the chart filling the height. Market depth lives
-// in the watchlist (UI2), as on Kite. Options and futures link to their option chain.
+// in the watchlist (UI2), as on Kite. Options and futures link to their option chain;
+// indices with market signals get a Signals tab (?view=signals, docs/design/signals.md §8).
 
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { api, errorMessage, isSessionLost } from '../api/client';
-import type { ChainInfo, Instrument } from '../api/client';
+import type { ChainInfo, Instrument, SignalsInfo } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { PriceChart } from '../chart/PriceChart';
+import { SignalsView } from '../components/SignalsView';
+import { useOrderTicket } from '../paper/OrderTicket';
 import type { Quote } from '../stream/quoteStream';
 import { useQuote, useWatch } from '../stream/useQuotes';
 import {
@@ -64,6 +67,9 @@ export function InstrumentPage() {
   const [instrument, setInstrument] = useState<Instrument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chains, setChains] = useState<ChainInfo[] | null>(null);
+  const [signals, setSignals] = useState<SignalsInfo | null>(null);
+  const [search] = useSearchParams();
+  const openTicket = useOrderTicket();
   const quote = useQuote(id);
   useWatch(Number.isInteger(id) && id > 0 ? [id] : []);
 
@@ -90,6 +96,10 @@ export function InstrumentPage() {
       .chains()
       .then((found) => active && setChains(found))
       .catch(() => undefined); // only the Option chain tab depends on it
+    api
+      .signals()
+      .then((found) => active && setSignals(found))
+      .catch(() => undefined); // only the Signals tab depends on it
     return () => {
       active = false;
     };
@@ -107,6 +117,8 @@ export function InstrumentPage() {
   }
 
   const chain = chainLink(instrument, chains);
+  const signalIndex = signals?.indices.find((i) => i.spot_id === instrument.instrument_id);
+  const showSignals = signals !== null && signalIndex !== undefined && search.get('view') === 'signals';
   const pct = quote?.change_pct;
   const direction = pct === undefined || pct === 0 ? '' : pct > 0 ? 'up' : 'down';
 
@@ -128,19 +140,48 @@ export function InstrumentPage() {
             {formatPrice(quote?.ltp)}
           </span>
           <span className={direction}>{formatChange(quote) || ' '}</span>
+          {(instrument.kind === 'FUT' || instrument.kind === 'OPT') && instrument.listed && (
+            <span className="instrument-trade">
+              <button type="button" className="trade-btn buy" onClick={() => openTicket({ instrument, side: 'BUY' })}>
+                Buy
+              </button>
+              <button type="button" className="trade-btn sell" onClick={() => openTicket({ instrument, side: 'SELL' })}>
+                Sell
+              </button>
+              <span className="paper-pill" title="Simulated: no real order is placed">
+                PAPER
+              </span>
+            </span>
+          )}
         </div>
       </header>
 
       <StatsLine instrument={instrument} quote={quote} />
 
       <nav className="instrument-tabs" aria-label="Views">
-        <span className="active" aria-current="page">
-          Chart
-        </span>
+        {showSignals ? (
+          <Link to={`/instrument/${instrument.instrument_id}`}>Chart</Link>
+        ) : (
+          <span className="active" aria-current="page">
+            Chart
+          </span>
+        )}
+        {signalIndex &&
+          (showSignals ? (
+            <span className="active" aria-current="page">
+              Signals
+            </span>
+          ) : (
+            <Link to={`/instrument/${instrument.instrument_id}?view=signals`}>Signals</Link>
+          ))}
         {chain && <Link to={chain}>Option chain</Link>}
       </nav>
 
-      <PriceChart instrument={instrument} />
+      {showSignals && signals && signalIndex ? (
+        <SignalsView index={signalIndex} info={signals} />
+      ) : (
+        <PriceChart instrument={instrument} />
+      )}
 
       {!quote && (
         <p className="muted">

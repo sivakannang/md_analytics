@@ -34,6 +34,10 @@ for the process and [template.md](template.md) to write a new one.
 | [0025](0025-auto-backfill.md) | Automatic bar backfill: mda-feedd fills history for subscribed instruments with none | Accepted |
 | [0026](0026-tick-journal.md) | Tick journal: mda-recorder writes raw frames to hourly files; mda-replayer replays them on separate buses | Accepted |
 | [0027](0027-remote-access-tailscale.md) | Remote access over Tailscale: the gateway serves the built site, `tailscale serve` adds HTTPS inside the tailnet | Accepted |
+| [0028](0028-signal-process.md) | Market signals in a separate process: mda-signald reads `an`, writes the `sig` bus and `data/signals.db` | Accepted |
+| [0029](0029-paper-broker.md) | Paper trading: mda-broker (OMS, pre-trade risk, paper venue) with `ord-*` / `exec` buses and `data/paper.db` | Accepted |
+| [0030](0030-auto-trader.md) | Auto trader: mda-autotrader runs strategies on market signals, trades paper accounts on `ord-auto` through the broker's risk | Accepted |
+| [0031](0031-mcx-commodities.md) | MCX commodities: quantities in units, sessions per exchange, chains on the underlying future, paper trading with per-commodity margins | Accepted |
 
 ## Backlog (decisions to make soon)
 
